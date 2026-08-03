@@ -35,6 +35,7 @@ export default function FarmFreshDairyWebsite() {
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [products, setProducts] = useState([]);
  useEffect(() => {
   if (selectedCategory === "All") return;
 
