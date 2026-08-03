@@ -9,14 +9,16 @@ export default function AdminLogin() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleAdminLogin = async () => {
-  if (!loginId || !password) {
-    alert("Please enter Email and Password");
+const handleAdminLogin = async () => {
+  if (!mobile || !password) {
+    alert("Please enter Mobile Number and Password");
     return;
   }
 
+  setLoading(true);
+
   try {
-    const admin = await adminLogin(loginId, password);
+    const admin = await adminLogin(mobile, password);
 
     setAdminLogin({
       id: admin.id,
@@ -27,10 +29,11 @@ export default function AdminLogin() {
     });
 
     navigate("/admin");
-
   } catch (error) {
     console.error(error);
     alert(error.message || "Invalid admin credentials");
+  } finally {
+    setLoading(false);
   }
 };
 

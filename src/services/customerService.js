@@ -1,6 +1,5 @@
 import { getJSON, postJSON } from "../config/api";
-
-const API_URL = "http://localhost:5000/api";
+const API_URL = "https://farmfreshdairy.onrender.com/api";
 
 let cachedCustomer = null;
 let cachedUid = null;

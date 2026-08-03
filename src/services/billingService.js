@@ -3,7 +3,7 @@ import {
   postJSON,
 } from "../config/api";
 
-const API = "http://localhost:5000/api/billing";
+const API_URL = "https://farmfreshdairy.onrender.com/api";
 
 export async function getAllBills() {
   const res = await getJSON(API);

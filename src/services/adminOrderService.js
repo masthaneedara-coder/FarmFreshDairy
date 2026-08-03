@@ -1,5 +1,5 @@
 import { getJSON, putJSON } from "../config/api";
-const API_URL = "http://localhost:5000/api";
+const API_URL = "https://farmfreshdairy.onrender.com/api";
 
 export async function getAllOrders() {
   const response = await getJSON(
@@ -19,7 +19,7 @@ export async function getOrderById(id) {
 
 export async function updateOrderStatus(id, status) {
   const response = await putJSON(
-    `http://localhost:5000/api/admin/orders/${id}/status`,
+    `const API_URL = "https://farmfreshdairy.onrender.com/api";/admin/orders/${id}/status`,
     {
       status,
     }

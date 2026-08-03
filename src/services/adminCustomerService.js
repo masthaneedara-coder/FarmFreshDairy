@@ -1,6 +1,6 @@
 import { getJSON } from "../config/api";
 
-const API_URL = "http://localhost:5000/api/admin/customers";
+const API_URL = "https://farmfreshdairy.onrender.com/api";
 
 // ===============================
 // Get All Customers

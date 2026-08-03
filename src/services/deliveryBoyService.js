@@ -6,7 +6,7 @@ import {
   patchJSON,
 } from "../config/api";
 
-const API_URL = "http://localhost:5000/api/delivery-boys";
+const API_URL = "https://farmfreshdairy.onrender.com/api"
 
 // Get All
 export async function getDeliveryBoys() {
