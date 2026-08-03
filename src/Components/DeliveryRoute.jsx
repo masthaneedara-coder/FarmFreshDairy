@@ -10,7 +10,7 @@ export default function DeliveryRoute({ children }) {
       location.pathname
     );
 
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/delivery-login" replace />;
   }
 
   return children;
