@@ -15,9 +15,9 @@ import OrderHistory from "./Pages/OrderHistory";
 import TrackOrder from "./Pages/TrackOrder";
 
 /* Customer Protected Route */
-import CustomerRoute from "./components/CustomerRoute";
-import AdminRoute from "./components/AdminRoute";
-import DeliveryRoute from "./components/DeliveryRoute";
+import CustomerRoute from "./Components/CustomerRoute";
+import AdminRoute from "./Components/AdminRoute";
+import DeliveryRoute from "./Components/DeliveryRoute";
 import ForgotPassword from "./Pages/ForgotPassword";
 import ResetPassword from "./Pages/ResetPassword";
 import ManageSubscription from "./Pages/ManageSubscription";
@@ -37,8 +37,8 @@ import AdminBilling from "./Pages/AdminBilling";
 import AdminProtectedRoute from "./Components/AdminProtectedRoute";
 import AdminDeliveryBoys from "./Pages/AdminDeliveryBoys";
 import AdminCustomerDetails from "./Pages/AdminCustomerDetails";
-import AdminSubscriptionDeliveries from "./pages/AdminSubscriptionDeliveries";
-import AdminMonthlyReport from "./pages/AdminMonthlyReport";
+import AdminSubscriptionDeliveries from "./Pages/AdminSubscriptionDeliveries";
+import AdminMonthlyReport from "./Pages/AdminMonthlyReport";
 
 
 /* Delivery */
