@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import DeliveryBoyTable from "../components/admin/DeliveryBoyTable";
-import DeliveryBoyForm from "../components/admin/DeliveryBoyForm";
+import DeliveryBoyTable from "../Components/admin/DeliveryBoyTable";
+import DeliveryBoyForm from "../Components/admin/DeliveryBoyForm";
 import {
   createDeliveryBoy,
   updateDeliveryBoy,

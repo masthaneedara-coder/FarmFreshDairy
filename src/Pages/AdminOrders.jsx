@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { getAllOrders, updatePaymentStatus } from "../services/adminOrderService";
 
-import OrderFilters from "../components/admin/OrderFilters";
-import OrdersTable from "../components/admin/OrdersTable";
+import OrderFilters from "../Components/admin/OrderFilters";
+import OrdersTable from "../Components/admin/OrdersTable";
 import { updateOrderStatus } from "../services/adminOrderService";
-import OrderDetailsDrawer from "../components/admin/OrderDetailsDrawer";
-import AssignDeliveryBoyModal from "../components/admin/AssignDeliveryBoyModal";
-import ReceivePaymentModal from "../components/admin/ReceivePaymentModal";
+import OrderDetailsDrawer from "../Components/admin/OrderDetailsDrawer";
+import AssignDeliveryBoyModal from "../Components/admin/AssignDeliveryBoyModal";
+import ReceivePaymentModal from "../Components/admin/ReceivePaymentModal";
 import { getAdminId } from "../config/auth";
 
 export default function AdminOrders() {

@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 
 import { fetchCustomerAddresses,createAddress, updateAddress,deleteAddress } from "../config/api";
-import AddressForm from "../components/AddressForm";
+import AddressForm from "../Components/AddressForm";
 
 export default function AddressBook() {
   const [addresses, setAddresses] = useState([]);

@@ -16,7 +16,7 @@ import { createOrder } from "../services/orderService";
 import {
   fetchCustomerAddresses,createAddress,
 } from "../config/api";
-import AddressForm from "../components/AddressForm";
+import AddressForm from "../Components/AddressForm";
 import { clearCart } from "../config/cart";
 
 

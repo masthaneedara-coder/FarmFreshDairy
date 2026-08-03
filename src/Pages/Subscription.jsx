@@ -1,18 +1,18 @@
 import { useEffect } from "react";
 
-import SubscriptionHeader from "../components/subscription/SubscriptionHeader";
-import ActiveSubscriptionCard from "../components/subscription/ActiveSubscriptionCard";
-import ProgressCard from "../components/subscription/ProgressCard";
-import BillingCard from "../components/subscription/BillingCard";
-import ProductSelector from "../components/subscription/ProductSelector";
-import DeliveryOptions from "../components/subscription/DeliveryOptions";
-import SubscriptionSummary from "../components/subscription/SubscriptionSummary";
-import UpcomingDelivery from "../components/subscription/UpcomingDelivery";
-import SubscriptionHistory from "../components/subscription/SubscriptionHistory";
-import SubscriptionActions from "../components/subscription/SubscriptionActions";
-import SubscriptionStatistics from "../components/subscription/SubscriptionStatistics";
-import NextDeliveryCard from "../components/subscription/NextDeliveryCard";
-import SubscriptionTimeline from "../components/subscription/SubscriptionTimeline";
+import SubscriptionHeader from "../Components/subscription/SubscriptionHeader";
+import ActiveSubscriptionCard from "../Components/subscription/ActiveSubscriptionCard";
+import ProgressCard from "../Components/subscription/ProgressCard";
+import BillingCard from "../Components/subscription/BillingCard";
+import ProductSelector from "../Components/subscription/ProductSelector";
+import DeliveryOptions from "../Components/subscription/DeliveryOptions";
+import SubscriptionSummary from "../Components/subscription/SubscriptionSummary";
+import UpcomingDelivery from "../Components/subscription/UpcomingDelivery";
+import SubscriptionHistory from "../Components/subscription/SubscriptionHistory";
+import SubscriptionActions from "../Components/subscription/SubscriptionActions";
+import SubscriptionStatistics from "../Components/subscription/SubscriptionStatistics";
+import NextDeliveryCard from "../Components/subscription/NextDeliveryCard";
+import SubscriptionTimeline from "../Components/subscription/SubscriptionTimeline";
 
 
 import { getCustomerId } from "../config/auth";

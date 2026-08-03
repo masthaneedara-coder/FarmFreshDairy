@@ -6,9 +6,9 @@ import {
   updateSubscriptionDeliveryStatus,
 } from "../services/subscriptionDeliveryService";
 
-import AssignDeliveryBoyModal from "../components/admin/AssignDeliveryBoyModal";
+import AssignDeliveryBoyModal from "../Components/admin/AssignDeliveryBoyModal";
 import AssignSubscriptionDeliveryBoyModal
-  from "../components/admin/AssignSubscriptionDeliveryBoyModal";
+  from "../Components/admin/AssignSubscriptionDeliveryBoyModal";
 
 export default function AdminSubscriptionDeliveries() {
   const [deliveries, setDeliveries] = useState([]);

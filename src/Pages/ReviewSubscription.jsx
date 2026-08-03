@@ -2,7 +2,7 @@ import { useLocation } from "react-router-dom";
 import { createSubscription } from "../config/api";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import SubscriptionPaymentModal from "../components/subscription/SubscriptionPaymentModal";
+import SubscriptionPaymentModal from "../Components/subscription/SubscriptionPaymentModal";
 
 
 

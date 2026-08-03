@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../Components/AdminLayout";
 import { fetchBilling, updateBillingStatus } from "../config/api";
-import InvoiceDrawer from "../components/admin/InvoiceDrawer";
+import InvoiceDrawer from "../Components/admin/InvoiceDrawer";
 
 export default function AdminBilling() {
   const [billing, setBilling] = useState([]);

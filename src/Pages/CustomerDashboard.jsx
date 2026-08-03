@@ -8,7 +8,7 @@ import {
   getCustomerOrders,
 } from "../config/api";
 import { fetchCustomerSubscriptions } from "../config/api";
-import PauseSubscriptionModal from "../components/subscription/PauseSubscriptionModal";
+import PauseSubscriptionModal from "../Components/subscription/PauseSubscriptionModal";
 
 
 import { useAuthSession } from "../context/AuthSessionContext";
