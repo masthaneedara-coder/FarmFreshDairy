@@ -20,7 +20,7 @@ export default function AddressForm({
   function handleChange(e) {
     const { name, value, type, checked } = e.target;
 
-    setForm((prev) => ({
+    setForm((prev) => ({ 
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));

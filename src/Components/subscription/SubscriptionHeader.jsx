@@ -13,7 +13,7 @@ export default function SubscriptionHeader() {
         </p>
 
       </div>
-
+ 
     </div>
   );
 }

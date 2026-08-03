@@ -14,7 +14,7 @@ export default function ActiveSubscriptionCard({
       <div className="bg-white rounded-3xl shadow-xl p-8 text-center border border-green-100">
 
         <Package
-          size={60}
+          size={60} 
           className="mx-auto text-green-500 mb-5"
         />
 
