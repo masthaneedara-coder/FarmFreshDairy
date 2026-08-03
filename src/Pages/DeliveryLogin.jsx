@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { deliveryLogin } from "../config/api";
+import { setDeliveryLogin } from "../config/auth";
 
 export default function DeliveryLogin() {
   const navigate = useNavigate();
@@ -28,6 +29,7 @@ export default function DeliveryLogin() {
                 "deliveryBoy",
                 JSON.stringify(res.deliveryBoy)
             );
+            setDeliveryLogin(res.deliveryBoy);
 
             navigate("/delivery");
 
