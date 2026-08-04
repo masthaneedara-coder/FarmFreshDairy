@@ -855,5 +855,19 @@ export async function resumeSubscriptionApi(id) {
     {}
   );
 }
+// ==========================================
+// Customer Delivery Summary
+// ==========================================
+export async function getCustomerDeliverySummary(customerId) {
+  const data = await getJSON(
+    `${API_URL}/subscription-deliveries/customer/${customerId}/summary`
+  );
 
+  return data.summary;
+}
+export async function getSubscriptionDeliverySummary(subscriptionId) {
+  return getJSON(
+    `${API_URL}/subscriptions/${subscriptionId}/delivery-summary`
+  );
+}
 

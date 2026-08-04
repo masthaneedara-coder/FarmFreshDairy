@@ -6,6 +6,7 @@ import {
   assignSubscriptionDelivery,
   updateDeliveryStatus,
   deleteDelivery,
+  getCustomerDeliverySummary
 } from "../controllers/subscriptionDelivery.controller.js";
 
 const router = express.Router();
@@ -13,7 +14,10 @@ const router = express.Router();
 router.post("/generate", generateTodayDeliveries);
 
 router.get("/", getTodayDeliveries);
-
+router.get(
+  "/customer/:customerId/summary",
+  getCustomerDeliverySummary
+);
 router.get("/:id", getDeliveryById);
 
 router.put("/:id/assign", assignSubscriptionDelivery);
@@ -21,5 +25,6 @@ router.put("/:id/assign", assignSubscriptionDelivery);
 router.put("/:id/status", updateDeliveryStatus);
 
 router.delete("/:id", deleteDelivery);
+
 
 export default router;

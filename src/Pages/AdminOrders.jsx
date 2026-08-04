@@ -8,6 +8,7 @@ import OrderDetailsDrawer from "../Components/admin/OrderDetailsDrawer";
 import AssignDeliveryBoyModal from "../Components/admin/AssignDeliveryBoyModal";
 import ReceivePaymentModal from "../Components/admin/ReceivePaymentModal";
 import { getAdminId } from "../config/auth";
+import OrdersCards from "./OrdersCards";
 
 export default function AdminOrders() {
 
@@ -131,7 +132,7 @@ const handlePaymentPaid = async (orderId) => {
   return (
     <div>
 
-      <h1 className="text-3xl font-bold mb-6">
+      <h1 className="text-2xl md:text-3xl font-bold mb-6">
         Order Management
       </h1>
 
@@ -142,13 +143,27 @@ const handlePaymentPaid = async (orderId) => {
         setStatus={setStatus}
       />
 
-     <OrdersTable
-        orders={filtered}
-        onView={handleView}
-        onAssign={handleAssign}
-        onStatusChange={handleStatusChange}
-        onReceivePayment={handleReceivePayment}
-      />
+     {/* Desktop */}
+        <div className="hidden lg:block">
+          <OrdersTable
+            orders={filtered}
+            onView={handleView}
+            onAssign={handleAssign}
+            onStatusChange={handleStatusChange}
+            onReceivePayment={handleReceivePayment}
+          />
+        </div>
+
+        {/* Mobile */}
+        <div className="lg:hidden">
+          <OrdersCards
+            orders={filtered}
+            onView={handleView}
+            onAssign={handleAssign}
+            onStatusChange={handleStatusChange}
+            onReceivePayment={handleReceivePayment}
+          />
+        </div>
       <OrderDetailsDrawer
           open={drawerOpen}
           order={selectedOrder}

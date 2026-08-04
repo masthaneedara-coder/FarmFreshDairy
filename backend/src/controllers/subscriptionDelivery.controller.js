@@ -5,7 +5,8 @@ import {
   assignDeliveryBoyService,
   updateDeliveryStatusService,
   deleteDeliveryService,
-  assignSubscriptionDeliveryService
+  assignSubscriptionDeliveryService,
+  getCustomerDeliverySummaryService
 } from "../services/subscriptionDelivery.service.js";
 
 
@@ -157,5 +158,23 @@ export async function assignSubscriptionDelivery(req, res) {
       message: err.message,
     });
 
+  }
+}
+export async function getCustomerDeliverySummary(req, res) {
+  try {
+    const { customerId } = req.params;
+
+    const summary =
+      await getCustomerDeliverySummaryService(customerId);
+
+    res.json({
+      success: true,
+      summary,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 }

@@ -6,6 +6,7 @@ import {
    pauseSubscriptionApi,
     resumeSubscriptionApi,
   getCustomerOrders,
+  getSubscriptionDeliverySummary
 } from "../config/api";
 import { fetchCustomerSubscriptions } from "../config/api";
 import PauseSubscriptionModal from "../Components/subscription/PauseSubscriptionModal";
@@ -29,6 +30,10 @@ const [selectedSubscription, setSelectedSubscription] = useState(null);
   totalSubscriptions: 0,
   activeSubscriptions: 0,
 };
+const [orders, setOrders] = useState([]);
+const [subscriptions, setSubscriptions] = useState([]);
+  const [deliverySummaries, setDeliverySummaries] = useState({});
+  const [statusUpdatingId, setStatusUpdatingId] = useState("");
 const latestOrders = dashboard?.recentOrders || [];
   const subscriptionScrollRef = useRef(null);
 
@@ -44,18 +49,45 @@ const latestOrders = dashboard?.recentOrders || [];
       });
     };
 
+
+
   useEffect(() => {
   if (customer) {
     loadDashboard();
   }
 }, [customer]);
-   
-    
+useEffect(() => {
+  async function loadDeliverySummaries() {
 
-const [orders, setOrders] = useState([]);
-const [subscriptions, setSubscriptions] = useState([]);
-  
-  const [statusUpdatingId, setStatusUpdatingId] = useState("");
+    if (!subscriptions.length) return;
+
+    const summaries = {};
+
+    for (const sub of subscriptions) {
+      try {
+        const summary =
+          await getSubscriptionDeliverySummary(sub.id);
+
+        summaries[sub.id] = summary;
+
+      } catch (err) {
+        console.error(err);
+
+        summaries[sub.id] = {
+          delivered: 0,
+          skipped: 0,
+          outForDelivery: 0,
+        };
+      }
+    }
+
+    setDeliverySummaries(summaries);
+  }
+
+  loadDeliverySummaries();
+
+}, [subscriptions]);
+   
   const loadDashboard = async () => {
   try {
     setLoading(true);
@@ -323,6 +355,8 @@ const handlePauseConfirm = async (
                   "
                 >
                   {subscriptions.map((sub, index) => {
+                    const deliverySummary =
+                        deliverySummaries[sub.id] || {};
                    const isPaused = sub.is_paused === true;
 
                     const status = isPaused
@@ -413,6 +447,47 @@ const handlePauseConfirm = async (
                             />
                           </div>
                         </div>
+                        <div className="mt-4 rounded-2xl border border-green-100 bg-green-50 p-4">
+
+                            <h3 className="font-bold text-green-700 mb-3">
+                              🚚 Delivery Summary
+                            </h3>
+
+                            <div className="grid grid-cols-3 gap-3">
+
+                              <div className="bg-white rounded-xl p-3 text-center">
+                                <p className="text-xs text-gray-500">
+                                  Delivered
+                                </p>
+
+                                <p className="text-2xl font-bold text-green-600">
+                                  {deliverySummary.delivered || 0}
+                                </p>
+                              </div>
+
+                              <div className="bg-white rounded-xl p-3 text-center">
+                                <p className="text-xs text-gray-500">
+                                  Out For Delivery
+                                </p>
+
+                                <p className="text-2xl font-bold text-blue-600">
+                                  {deliverySummary.outForDelivery || 0}
+                                </p>
+                              </div>
+
+                              <div className="bg-white rounded-xl p-3 text-center">
+                                <p className="text-xs text-gray-500">
+                                  Skipped
+                                </p>
+
+                                <p className="text-2xl font-bold text-red-600">
+                                  {deliverySummary.skipped || 0}
+                                </p>
+                              </div>
+
+                            </div>
+
+                          </div>
 
                         {/* CARD FOOTER */}
                         <div className="px-5 pb-5">

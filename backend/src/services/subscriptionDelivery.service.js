@@ -60,7 +60,7 @@ export async function assignDeliveryBoyService(
   return await supabaseAdmin
     .from("subscription_deliveries")
     .update({
-      elivery_boy_id,
+      delivery_boy_id: deliveryBoyId,
   status: "Assigned",
   assigned_at: new Date().toISOString(),
     })
@@ -275,4 +275,57 @@ export async function assignSubscriptionDeliveryService(
   if (error) throw error;
 
   return data;
+}
+export async function getCustomerDeliverySummaryService(customerId) {
+  const { data, error } = await supabaseAdmin
+    .from("subscription_deliveries")
+    .select("status")
+    .eq("customer_id", customerId);
+
+  if (error) throw error;
+
+  const summary = {
+    total: data.length,
+    delivered: 0,
+    outForDelivery: 0,
+    assigned: 0,
+    pending: 0,
+    skipped: 0,
+    cancelled: 0,
+  };
+
+  data.forEach((item) => {
+    switch ((item.status || "").toLowerCase()) {
+      case "delivered":
+        summary.delivered++;
+        break;
+
+      case "out for delivery":
+        summary.outForDelivery++;
+        break;
+
+      case "assigned":
+        summary.assigned++;
+        break;
+
+      case "pending":
+        summary.pending++;
+        break;
+
+      case "skipped":
+        summary.skipped++;
+        break;
+
+      case "cancelled":
+        summary.cancelled++;
+        break;
+    }
+  });
+
+  summary.remaining =
+    summary.pending +
+    summary.assigned +
+    summary.outForDelivery;
+
+  return summary;
 }
