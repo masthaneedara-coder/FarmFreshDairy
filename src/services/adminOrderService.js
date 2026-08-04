@@ -19,7 +19,7 @@ export async function getOrderById(id) {
 
 export async function updateOrderStatus(id, status) {
   const response = await putJSON(
-    `const API_URL = "https://farmfreshdairy.onrender.com/api";/admin/orders/${id}/status`,
+    `${API_URL}/admin/orders/${id}/status`,
     {
       status,
     }

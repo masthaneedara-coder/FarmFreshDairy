@@ -78,20 +78,16 @@ export async function assignDeliveryBoyService(
   orderId,
   deliveryBoyId
 ) {
-
-  const { data, error } =
-    await supabaseAdmin
-      .from("orders")
-      .update({
-        delivery_boy_id: deliveryBoyId,
-        status: "Assigned",
-        updated_at: new Date(),
-      })
-      .eq("id", orderId)
-      .select()
-      .single();
+  const { error } = await supabaseAdmin
+    .from("orders")
+    .update({
+      delivery_boy_id: deliveryBoyId,
+      status: "Assigned",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", orderId);
 
   if (error) throw error;
 
-  return data;
+  return await getOrderByIdService(orderId);
 }

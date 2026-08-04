@@ -71,9 +71,11 @@ export default function OrdersCards({
               </span>
             </p>
 
-            <p>
+           <p>
               <b>Delivery Boy:</b>{" "}
-              {order.delivery_boy_name || "-"}
+              {order.delivery_boys
+                ? `${order.delivery_boys.full_name} (${order.delivery_boys.phone})`
+                : "-"}
             </p>
 
           </div>

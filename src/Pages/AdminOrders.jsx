@@ -79,12 +79,17 @@ const handleConfirmPayment = async (paymentData) => {
     loadOrders();
   }, []);
 
-  async function loadOrders() {
+ async function loadOrders() {
+  try {
     const data = await getAllOrders();
-    setOrders(data);
+    setOrders(data || []);
+  } catch (err) {
+    console.error(err);
+    setOrders([]);
   }
+}
 
-  const filtered = orders.filter((order) => {
+  const filtered = (orders || []).filter((order) => {
 
     const text = (
       order.order_number +
