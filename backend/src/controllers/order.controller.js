@@ -79,7 +79,21 @@ export const createOrder = async (req, res) => {
       payment_method: order.payment_method,
       payment_status: order.payment_status,
     });
+    // Create Admin Notification
+     try {
+        await createNotification({
+          title: "🛒 New Order",
+          message: `Order ${savedOrder.order_number} placed successfully.`,
+          type: "ORDER",
+          reference_id: savedOrder.id,
+          reference_type: "order",
+        });
 
+        console.log("Notification Created");
+
+      } catch (err) {
+        console.error("Notification Error:", err);
+      }
     return res.status(201).json({
       success: true,
       message: "Order Placed Successfully",
