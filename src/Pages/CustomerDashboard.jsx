@@ -57,26 +57,31 @@ const latestOrders = dashboard?.recentOrders || [];
   }
 }, [customer]);
 useEffect(() => {
+  if (!subscriptions.length) return;
+
   async function loadDeliverySummaries() {
-
-    if (!subscriptions.length) return;
-
     const summaries = {};
 
     for (const sub of subscriptions) {
       try {
-        const summary =
-          await getSubscriptionDeliverySummary(sub.id);
+        const response = await getSubscriptionDeliverySummary(sub.id);
 
-        summaries[sub.id] = summary;
+        console.log("Subscription:", sub.id);
+        console.log("Response:", response);
+
+        summaries[sub.id] = response.summary || {
+          delivered: 0,
+          outForDelivery: 0,
+          skipped: 0,
+        };
 
       } catch (err) {
         console.error(err);
 
         summaries[sub.id] = {
           delivered: 0,
-          skipped: 0,
           outForDelivery: 0,
+          skipped: 0,
         };
       }
     }
@@ -87,6 +92,7 @@ useEffect(() => {
   loadDeliverySummaries();
 
 }, [subscriptions]);
+
    
   const loadDashboard = async () => {
   try {
@@ -355,9 +361,13 @@ const handlePauseConfirm = async (
                   "
                 >
                   {subscriptions.map((sub, index) => {
-                    const deliverySummary =
-                        deliverySummaries[sub.id] || {};
-                   const isPaused = sub.is_paused === true;
+                   const deliverySummary =
+                      deliverySummaries[sub.id] || {
+                        delivered: 0,
+                        outForDelivery: 0,
+                        skipped: 0,
+                      };
+                            const isPaused = sub.is_paused === true;
 
                     const status = isPaused
                       ? "paused"
