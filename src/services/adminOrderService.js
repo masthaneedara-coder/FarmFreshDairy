@@ -23,7 +23,7 @@ export async function updateOrderStatus(id, status) {
     {
       status,
     }
-  );
+  ); 
 
   return response.order;
 }
