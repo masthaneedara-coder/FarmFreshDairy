@@ -225,7 +225,7 @@ const filteredDeliveries = deliveries.filter((d) => {
           </h2>
           
 
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
 
             {loading ? (
 
@@ -345,23 +345,33 @@ const filteredDeliveries = deliveries.filter((d) => {
             Products
             </p>
 
-           <div className="grid grid-cols-3 gap-3 mt-3">
+           <div className="grid grid-cols-3 gap-2 mt-3">
             {delivery.items.map((item) => (
               <div
                 key={item.id}
-                className="bg-white border rounded-xl p-2 text-center shadow-sm"
+                className="
+                bg-slate-50
+                rounded-xl
+                border
+                p-2
+                flex
+                flex-col
+                items-center
+                justify-center
+                min-h-[110px]
+                "
               >
                 <img
                   src={item.products?.image}
                   alt={item.products?.name}
-                  className="w-14 h-14 mx-auto rounded-lg object-cover"
+                  className="w-12 h-12 mx-auto rounded-lg object-cover"
                 />
 
-                <h4 className="font-semibold text-sm mt-2 truncate">
+                <p className="mt-2 text-sm font-semibold truncate">
                   {item.products?.name}
-                </h4>
+                </p>
 
-                <p className="text-xs text-gray-500">
+                <p className="text-[11px] text-gray-500 text-center">
                   {item.quantity} × {item.size}
                 </p>
               </div>
