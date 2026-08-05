@@ -37,13 +37,20 @@ export default function OrderDetailsDrawer({
 
             <div className="bg-gray-50 rounded-xl p-4">
 
-                <h3 className="font-bold text-lg mb-3">
-                Customer
-                </h3>
+                                <p>
+                <strong>Name:</strong>{" "}
+                {order.customers?.full_name || order.customer_name}
+                </p>
 
-                <p><strong>Name:</strong> {order.customer_name}</p>
+                <p>
+                <strong>Phone:</strong>{" "}
+                {order.customers?.phone || order.phone}
+                </p>
 
-                <p><strong>Phone:</strong> {order.phone}</p>
+                <p>
+                <strong>Email:</strong>{" "}
+                {order.customers?.email || "-"}
+                </p>
 
             </div>
 
@@ -55,11 +62,57 @@ export default function OrderDetailsDrawer({
                 Delivery Address
                 </h3>
 
-                <p>{order.address || "-"}</p>
-
-                <p>{order.area || "-"}</p>
+               <p>{order.addresses?.address_line1}</p>
+                <p>{order.addresses?.area}</p>
+                <p>{order.addresses?.city}</p>
+                <p>{order.addresses?.pincode}</p>
 
             </div>
+            {/* Ordered Products */}
+
+               {order.order_items.map((item) => {
+
+                const unitPrice = Number(item.unit_price || 0);
+                const qty = Number(item.quantity || 0);
+                const total = Number(item.total_price || unitPrice * qty);
+
+                return (
+                    <div
+                    key={item.id}
+                    className="flex gap-4 border rounded-xl bg-white p-3"
+                    >
+                    <img
+                        src={item.products?.image}
+                        alt={item.products?.name}
+                        className="w-16 h-16 rounded-lg object-cover"
+                    />
+
+                    <div className="flex-1">
+
+                        <h4 className="font-semibold text-lg">
+                        {item.products?.name}
+                        </h4>
+
+                        <p className="text-gray-500">
+                        {item.size?.toLowerCase().includes("pcs")
+                            ? `Quantity: ${item.size}`
+                            : `Size: ${item.size}`}
+                        </p>
+
+                        <div className="flex justify-between mt-2 text-sm">
+                        <span>Qty: {qty}</span>
+                        <span>₹{unitPrice}</span>
+                        </div>
+
+                        <div className="text-right font-bold text-green-700 mt-1">
+                        ₹{total}
+                        </div>
+
+                    </div>
+                    </div>
+                );
+
+                })}
 
             {/* Payment */}
 

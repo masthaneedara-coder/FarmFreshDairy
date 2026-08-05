@@ -37,14 +37,12 @@ const loadCart = async () => {
   }
 }, [customer]);
 
-  const total = useMemo(() => {
-  return cart.reduce(
-    (sum, item) =>
-      sum +
-      Number(item.price || item.products?.price || 0) *
-      Number(item.quantity || item.qty || 0),
-    0
-  );
+ const total = useMemo(() => {
+  return cart.reduce((sum, item) => {
+    const price = Number(item.price ?? item.products?.price ?? 0);
+    const qty = Number(item.quantity ?? 0);
+    return sum + price * qty;
+  }, 0);
 }, [cart]);
 
   const totalItems = useMemo(
@@ -138,9 +136,13 @@ const loadCart = async () => {
                           {item.products?.name}
                         </h2>
 
-                        <p className="text-gray-500 mt-1">
-                          Size: {item.size || "1L"}
-                        </p>
+                       <p className="text-gray-500 mt-1">
+                            {item.size
+                              ? item.size.toLowerCase().includes("pcs")
+                                ? `Quantity: ${item.size}`
+                                : `Size: ${item.size}`
+                              : "Size: Not Available"}
+                          </p>
 
                         <p className="text-green-600 font-bold text-lg mt-1">
                           ₹{item.price || item.products?.price}

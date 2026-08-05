@@ -21,7 +21,10 @@ export const getCartService = async (customerId) => {
         id,
         name,
         image,
-        price
+        price,
+        size,
+        unit,
+        weight
       )
     `)
     .eq("customer_id", customerId);

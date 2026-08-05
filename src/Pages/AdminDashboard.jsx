@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../config/supabase";
 
 import { isAdminLoggedIn, logoutAdmin } from "../config/auth";
 import { fetchProducts } from "../config/api";
+import AdminNotifications from "../Components/admin/AdminNotifications";
+import { playNotification } from "../utils/playNotification";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState([]);
+const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
     const loadAdminData = async () => {
@@ -37,7 +42,41 @@ export default function AdminDashboard() {
     };
 
     loadAdminData();
+    loadNotifications();
   }, [navigate]);
+  useEffect(() => {
+
+  const channel = supabase
+    .channel("notifications-channel")
+
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "notifications",
+      },
+      (payload) => {
+
+        console.log("Realtime Notification:", payload);
+
+        playNotification();
+
+        loadNotifications();
+
+      }
+    )
+
+    .subscribe();
+
+  return () => {
+
+    supabase.removeChannel(channel);
+
+  };
+
+}, []);
+
 
   const totalProducts = useMemo(() => products.length, [products]);
 
@@ -110,7 +149,25 @@ export default function AdminDashboard() {
       className: "bg-green-100 text-green-700 border border-green-200",
     };
   };
+async function loadNotifications() {
+  try {
+    const res = await fetch(
+      "https://farmfreshdairy.onrender.com/api/notifications"
+    );
 
+    const data = await res.json();
+
+    if (data.success) {
+      setNotifications(data.notifications);
+      setNotificationCount(
+        data.notifications.filter(n => !n.is_read).length
+      );
+    }
+
+  } catch (err) {
+    console.error(err);
+  }
+}
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
       <div className="max-w-7xl mx-auto">
@@ -137,6 +194,7 @@ export default function AdminDashboard() {
               >
                 Manage Products
               </button>
+              
 
               <button
                 onClick={() => navigate("/products")}
@@ -156,6 +214,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* STATS */}
+        <AdminNotifications />
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mt-6">
           <StatCard
             title="Total Products"

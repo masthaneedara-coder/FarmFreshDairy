@@ -247,40 +247,54 @@ const loadProducts = async () => {
   /* ----------------------------------
      ADD TO CART
   ---------------------------------- */
- const getCalculatedPrice = (product) => {
-
+const getCalculatedPrice = (product) => {
   const sizes = product.product_sizes || [];
 
-  // If no sizes exist, use the product price
   if (sizes.length === 0) {
     return Number(product.price || 0);
   }
 
-  // Selected size label
   const selectedLabel =
-    selectedSizes[product.id] ||
-    sizes[0].label;
+    selectedSizes[product.id] || sizes[0].label;
 
-  // Find selected size object
   const selectedSize = sizes.find(
     (size) => size.label === selectedLabel
   );
-  if (selectedSize && !selectedSize.available) {
 
-  setToast("Selected size is out of stock.");
+  if (!selectedSize) {
+    return Number(product.price || 0);
+  }
 
-  return;
+  if (!selectedSize.available) {
+    return Number(product.price || 0);
+  }
 
-}
-
-  return Number(
-    selectedSize?.price || product.price || 0
-  );
+  return Number(selectedSize.price || product.price || 0);
 };
 const handleAddToCart = async (product) => {
   const qty = quantities[product.id] || 1;
-  const size = selectedSizes[product.id] || "1 L";
+  const sizes = product.product_sizes || [];
+
+const size =
+  selectedSizes[product.id] ||
+  sizes[0]?.label ||
+  "";
   const price = getCalculatedPrice(product);
+  //const sizes = product.product_sizes || [];
+
+const selectedSize = sizes.find(
+  (s) => s.label === size
+);
+
+if (selectedSize && !selectedSize.available) {
+  setToast("Selected size is out of stock.");
+
+  setTimeout(() => {
+    setToast("");
+  }, 2000);
+
+  return;
+}
 
   if (!customer) {
     navigate("/auth");
@@ -459,6 +473,7 @@ const handleAddToCart = async (product) => {
 
                         <p className="text-xl font-bold text-green-600 mt-1">
                           ₹{getCalculatedPrice(product)}
+                          
                         </p>
                         {/* Size Selection */}
 
