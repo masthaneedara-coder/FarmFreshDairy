@@ -10,49 +10,54 @@ export async function getDeliveryDashboardService(deliveryBoyId) {
   // ===============================
   // Today's One-Time Orders
   // ===============================
-  const {
-    data: orders,
-    error: orderError,
-  } = await supabaseAdmin
-    .from("orders")
-    .select(`
+ const {
+  data: orders,
+  error: orderError,
+} = await supabaseAdmin
+  .from("orders")
+  .select(`
+    id,
+    order_number,
+    total_amount,
+    payment_method,
+    payment_status,
+    status,
+    created_at,
+    customer_id,
+    address_id,
+    delivery_boy_id,
+    customers(
       id,
-      order_number,
-      total_amount,
-      status,
-      created_at,
-      customer_id,
-      address_id,
-      delivery_boy_id,
-      customers(
+      full_name,
+      phone
+    ),
+    addresses(
+      house_no,
+      street,
+      area,
+      city,
+      state,
+      pincode
+    ),
+    order_items(
+      id,
+      quantity,
+      unit_price,
+      total_price,
+      size,
+      products(
         id,
-        full_name,
-        phone
-      ),
-      addresses(
-        house_no,
-        street,
-        area,
-        city,
-        state,
-        pincode
-      ),
-      order_items(
-        id,
-        quantity,
-        unit_price,
-        total_price,
-        size,
-        products(
-          id,
-          name,
-          image
-        )
+        name,
+        image
       )
-    `)
-    .limit(20);
-    // .eq("delivery_boy_id", deliveryBoyId)
-    // .eq("delivery_date", today);
+    )
+  `)
+  .eq("delivery_boy_id", deliveryBoyId)
+  // Uncomment the next line only if the orders table has a delivery_date column
+  // .eq("delivery_date", today)
+  .in("status", ["Assigned", "Out for Delivery"])
+  .not("status", "eq", "Cancelled")
+  .order("created_at", { ascending: false });
 
   if (orderError) throw orderError;
 
@@ -98,8 +103,9 @@ export async function getDeliveryDashboardService(deliveryBoyId) {
         )
       )
     `)
-    //.eq("delivery_boy_id", deliveryBoyId)
-    .eq("delivery_date", today);
+    .eq("delivery_boy_id", deliveryBoyId)
+    .eq("delivery_date", today)
+    .not("status", "eq", "Cancelled");
 
   if (subscriptionError) {
     console.log("Subscription Error:");
@@ -213,4 +219,30 @@ function getDashboardSummary(deliveries) {
 
   };
 
+}
+export async function updateDeliveryStatusService(
+  orderId,
+  status
+) {
+  const update = {
+    status,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (status === "Out for Delivery") {
+    update.out_for_delivery_at =
+      new Date().toISOString();
+  }
+
+  if (status === "Delivered") {
+    update.delivery_completed_at =
+      new Date().toISOString();
+  }
+
+  return await supabaseAdmin
+    .from("orders")
+    .update(update)
+    .eq("id", orderId)
+    .select()
+    .single();
 }

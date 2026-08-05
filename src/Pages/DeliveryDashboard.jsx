@@ -78,6 +78,7 @@ const loadDeliveries = async () => {
   }
 };
 
+
 // addNotification({
 //   title: "Out for Delivery",
 //   message: "Your milk is on the way.",
@@ -122,6 +123,7 @@ async function updateDeliveryStatus(delivery, status) {
     alert("Failed to update delivery status");
   }
 }
+
 
 const filteredDeliveries = deliveries.filter((d) => {
   const q = search.toLowerCase().trim();
@@ -343,48 +345,53 @@ const filteredDeliveries = deliveries.filter((d) => {
             Products
             </p>
 
-            <div className="space-y-3">
+           <div className="grid grid-cols-3 gap-3 mt-3">
+            {delivery.items.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white border rounded-xl p-2 text-center shadow-sm"
+              >
+                <img
+                  src={item.products?.image}
+                  alt={item.products?.name}
+                  className="w-14 h-14 mx-auto rounded-lg object-cover"
+                />
 
-            {delivery.items?.map(item=>(
+                <h4 className="font-semibold text-sm mt-2 truncate">
+                  {item.products?.name}
+                </h4>
 
-            <div
-            key={item.id}
-            className="flex items-center gap-3 border rounded-xl p-3"
-            >
-
-            <img
-            src={item.products?.image}
-            alt=""
-            className="w-12 h-12 rounded-lg object-cover"
-            />
-
-            <div>
-
-            <p className="font-semibold">
-
-            {item.products?.name}
-
-            </p>
-
-            <p className="text-sm text-gray-500">
-
-            {item.quantity} × {item.size}
-
-            </p>
-
-            </div>
-
-            </div>
-
+                <p className="text-xs text-gray-500">
+                  {item.quantity} × {item.size}
+                </p>
+              </div>
             ))}
+          </div>
 
             </div>
-
+            <div className="mt-3 bg-green-50 rounded-xl p-3">
+            <div className="flex justify-between">
+              <span>Total Amount</span>
+              <span className="font-bold text-green-700">
+                ₹{delivery.total_amount}
+              </span>
             </div>
 
-            <div>
+            <div className="flex justify-between mt-1">
+              <span>Payment</span>
+              <span>{delivery.payment_status}</span>
+            </div>
 
-            <span
+            <div className="flex justify-between mt-1">
+              <span>Status</span>
+              <span
+                className={
+                  delivery.payment_status === "Paid"
+                    ? "text-green-600 font-semibold"
+                    : "text-red-600 font-semibold"
+                }
+              >
+                <span
             className={`px-3 py-2 rounded-full text-sm font-bold ${
             delivery.status==="Delivered"
             ? "bg-green-100 text-green-700"
@@ -399,6 +406,12 @@ const filteredDeliveries = deliveries.filter((d) => {
             {delivery.status}
 
             </span>
+              </span>
+            </div>
+          </div>
+
+            <div>
+
 
             </div>
 
@@ -406,7 +419,8 @@ const filteredDeliveries = deliveries.filter((d) => {
 
             <button
             disabled={delivery.status==="Delivered"}
-            onClick={()=>updateDeliveryStatus(delivery,"Out for Delivery")}
+            onClick={()=>{updateDeliveryStatus(delivery,"Out for Delivery");
+                     loadDashboard();}}
             className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 font-semibold disabled:bg-gray-400"
             >
 
@@ -416,7 +430,7 @@ const filteredDeliveries = deliveries.filter((d) => {
 
             <button
             disabled={delivery.status==="Delivered"}
-            onClick={()=>updateDeliveryStatus(delivery,"Delivered")}
+            onClick={()=>{updateDeliveryStatus(delivery,"Delivered"); loadDashboard();}}
             className="bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-semibold disabled:bg-gray-400"
             >
 

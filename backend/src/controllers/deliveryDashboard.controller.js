@@ -48,3 +48,30 @@ export async function getDeliveryDashboard(req, res) {
   }
 
 }
+export async function updateDeliveryStatus(req, res) {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    const { data, error } =
+      await updateDeliveryStatusService(
+        orderId,
+        status
+      );
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      order: data,
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+
+  }
+}
