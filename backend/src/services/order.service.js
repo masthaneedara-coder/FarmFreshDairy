@@ -158,6 +158,7 @@ export const assignDeliveryBoyService = async (
     .from("orders")
     .update({
       delivery_boy_id: deliveryBoyId,
+      status: "Assigned",
       updated_at: new Date().toISOString(),
     })
     .eq("id", orderId)

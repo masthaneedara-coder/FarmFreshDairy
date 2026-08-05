@@ -383,13 +383,14 @@ const filteredDeliveries = deliveries.filter((d) => {
             <div className="flex justify-between">
               <span>Total Amount</span>
               <span className="font-bold text-green-700">
-                ₹{delivery.total_amount}
+                ₹{delivery.total_amount ?? 0}
+               
               </span>
             </div>
 
             <div className="flex justify-between mt-1">
               <span>Payment</span>
-              <span>{delivery.payment_status}</span>
+              <span>{delivery.payment_method || "-"}</span>
             </div>
 
             <div className="flex justify-between mt-1">

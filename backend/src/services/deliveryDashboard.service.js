@@ -53,11 +53,9 @@ export async function getDeliveryDashboardService(deliveryBoyId) {
     )
   `)
   .eq("delivery_boy_id", deliveryBoyId)
-  // Uncomment the next line only if the orders table has a delivery_date column
-  // .eq("delivery_date", today)
-  .in("status", ["Assigned", "Out for Delivery"])
-  .not("status", "eq", "Cancelled")
-  .order("created_at", { ascending: false });
+.not("status", "eq", "Cancelled")
+.not("status", "eq", "Delivered")
+.order("created_at", { ascending: false });
 
   if (orderError) throw orderError;
 
@@ -70,39 +68,39 @@ export async function getDeliveryDashboardService(deliveryBoyId) {
   } = await supabaseAdmin
     .from("subscription_deliveries")
     .select(`
+  id,
+  delivery_number,
+  status,
+  created_at,
+  customer_id,
+  address_id,
+  delivery_boy_id,
+  customers(
+    id,
+    full_name,
+    phone
+  ),
+  addresses(
+    house_no,
+    street,
+    area,
+    city,
+    state,
+    pincode
+  ),
+  subscription_delivery_items(
+    id,
+    quantity,
+    unit_price,
+    total_price,
+    size,
+    products(
       id,
-      delivery_number,
-      status,
-      created_at,
-      customer_id,
-      address_id,
-      delivery_boy_id,
-      customers(
-        id,
-        full_name,
-        phone
-      ),
-      addresses(
-        house_no,
-        street,
-        area,
-        city,
-        state,
-        pincode
-      ),
-      subscription_delivery_items(
-        id,
-        quantity,
-        unit_price,
-        total_price,
-        size,
-        products(
-          id,
-          name,
-          image
-        )
-      )
-    `)
+      name,
+      image
+    )
+  )
+`)
     .eq("delivery_boy_id", deliveryBoyId)
     .eq("delivery_date", today)
     .not("status", "eq", "Cancelled");
@@ -117,51 +115,49 @@ export async function getDeliveryDashboardService(deliveryBoyId) {
   // Convert Orders
   // ===============================
   const orderList = (orders || []).map(order => ({
+  type: "Order",
+  id: order.id,
+  number: order.order_number,
+  status: order.status,
 
-    type: "Order",
+  total_amount: order.total_amount,
+  payment_status: order.payment_status,
+  payment_method: order.payment_method,
 
-    id: order.id,
-
-    number: order.order_number,
-
-    status: order.status,
-
-    created_at: order.created_at,
-
-    total_amount: order.total_amount,
-
-    customer: order.customers,
-
-    address: order.addresses,
-
-    items: order.order_items
-
-  }));
+  created_at: order.created_at,
+  customer: order.customers,
+  address: order.addresses,
+  items: order.order_items,
+}));
 
   // ===============================
   // Convert Subscription Deliveries
   // ===============================
-  const subscriptionList = (subscriptions || []).map(delivery => ({
+ const subscriptionList = (subscriptions || []).map(delivery => {
 
+  const totalAmount =
+    (delivery.subscription_delivery_items || []).reduce(
+      (sum, item) => sum + Number(item.total_price || 0),
+      0
+    );
+
+  return {
     type: "Subscription",
-
     id: delivery.id,
-
     number: delivery.delivery_number,
-
     status: delivery.status,
-
     created_at: delivery.created_at,
 
-    notes: delivery.notes,
+    total_amount: totalAmount,
+
+    payment_method: "Monthly Billing",
+    payment_status: "Pending",
 
     customer: delivery.customers,
-
     address: delivery.addresses,
-
-    items: delivery.subscription_delivery_items
-
-  }));
+    items: delivery.subscription_delivery_items,
+  };
+});
 
   // ===============================
   // Merge Both Lists
