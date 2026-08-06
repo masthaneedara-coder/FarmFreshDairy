@@ -29,6 +29,7 @@ import paymentRoutes from "./routes/payment.routes.js";
 import { startDeliveryGeneratorJob } from "./jobs/deliveryGenerator.job.js";
 import reportRoutes from "./routes/report.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
+import monthlyBillingRoutes from "./routes/monthlyBilling.routes.js";
 
 
 
@@ -116,6 +117,7 @@ app.use("/api/delivery-dashboard", deliveryDashboardRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/monthly-bills", monthlyBillingRoutes);
 
 // WhatsApp
 

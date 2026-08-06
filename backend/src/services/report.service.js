@@ -18,6 +18,7 @@ export async function getMonthlyDeliveryReportService(
     .select(`
       *,
       customers(
+      id,
         full_name,
         phone
       ),
@@ -80,52 +81,38 @@ const dailyRate = Number(item?.unit_price || 0);
 
 const billAmount = deliveredDays * dailyRate;
 
+report.push({
+  customerId: subscription.customer_id,   // <-- ADD THIS
+  subscriptionId: subscription.id,
 
+  customerName: subscription.customers?.full_name,
+  phone: subscription.customers?.phone,
 
+  area: subscription.addresses?.area,
 
+  address: `${subscription.addresses?.house_no || ""}
+${subscription.addresses?.street || ""}
+${subscription.addresses?.city || ""}`,
 
+  product: item?.products?.name,
+  quantity,
+  size: item?.size,
 
-    report.push({
-      subscriptionId: subscription.id,
+  deliveredDays,
+  missedDays,
 
-      customerName:
-        subscription.customers?.full_name,
+  dailyRate,
 
-      phone:
-        subscription.customers?.phone,
+  monthlyAmount: subscription.total_amount,
 
-      area:
-        subscription.addresses?.area,
+  billAmount,
 
-      address:
-        `${subscription.addresses?.house_no || ""}
-         ${subscription.addresses?.street || ""}
-         ${subscription.addresses?.city || ""}`,
+  paymentStatus: subscription.payment_status,
 
-      product: item?.products?.name,
-
-        quantity,
-
-        size: item?.size,
-
-      deliveredDays,
-
-      missedDays,
-
-      dailyRate,
-
-      monthlyAmount:
-        subscription.total_amount,
-
-      billAmount,
-
-      paymentStatus:
-        subscription.payment_status,
-
-      status:
-        subscription.status,
-    });
-  }
-
-  return report;
+  status: subscription.status,
+});
 }
+
+return report;
+}
+  
