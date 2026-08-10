@@ -14,6 +14,14 @@ const REDIRECT_KEY = "redirectAfterLogin";
 
 
 export function setCustomerLogin(customer) {
+  // Clear other roles
+  localStorage.removeItem(ADMIN_KEY);
+  localStorage.removeItem(DELIVERY_KEY);
+
+  // Clear old redirect
+  localStorage.removeItem(REDIRECT_KEY);
+
+  // Save customer
   localStorage.setItem(
     CUSTOMER_KEY,
     JSON.stringify(customer)
@@ -54,9 +62,19 @@ export function logoutCustomer() {
 // ============================================
 
 export function setAdminLogin(admin) {
-  localStorage.setItem(ADMIN_KEY, JSON.stringify(admin));
-}
+  // Clear other roles
+  localStorage.removeItem(CUSTOMER_KEY);
+  localStorage.removeItem(DELIVERY_KEY);
 
+  // Clear old redirect
+  localStorage.removeItem(REDIRECT_KEY);
+
+  // Save admin
+  localStorage.setItem(
+    ADMIN_KEY,
+    JSON.stringify(admin)
+  );
+}
 export function getAdmin() {
   try {
     return JSON.parse(localStorage.getItem(ADMIN_KEY) || "null");
@@ -86,9 +104,19 @@ export function logoutAdmin() {
 // ============================================
 
 export function setDeliveryLogin(delivery) {
-  localStorage.setItem(DELIVERY_KEY, JSON.stringify(delivery));
-}
+  // Clear other roles
+  localStorage.removeItem(CUSTOMER_KEY);
+  localStorage.removeItem(ADMIN_KEY);
 
+  // Clear old redirect
+  localStorage.removeItem(REDIRECT_KEY);
+
+  // Save delivery
+  localStorage.setItem(
+    DELIVERY_KEY,
+    JSON.stringify(delivery)
+  );
+}
 export function getDelivery() {
   try {
     return JSON.parse(localStorage.getItem(DELIVERY_KEY) || "null");
@@ -137,11 +165,17 @@ export function clearRedirectAfterLogin() {
 // ============================================
 
 export function getCurrentRole() {
-  if (getCustomer()) return "customer";
+  if (isCustomerLoggedIn()) {
+    return "customer";
+  }
 
-  if (getAdmin()) return "admin";
+  if (isAdminLoggedIn()) {
+    return "admin";
+  }
 
-  if (getDelivery()) return "delivery";
+  if (isDeliveryLoggedIn()) {
+    return "delivery";
+  }
 
   return null;
 }

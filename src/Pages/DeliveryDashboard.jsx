@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
+  getDelivery,
   getDeliveryName,
   isDeliveryLoggedIn,
   logoutDelivery,
@@ -23,13 +24,16 @@ export default function DeliveryDashboard() {
 useEffect(() => {
   if (!isDeliveryLoggedIn()) {
     navigate("/delivery-login");
+    return;
   }
-   loadDeliveries();
+
+  loadDeliveries();
 }, [navigate]);
 
   const [deliveries, setDeliveries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
 
   const handleLogout = () => {
     logoutDelivery();
@@ -40,9 +44,7 @@ const loadDeliveries = async () => {
   try {
     setLoading(true);
 
-    const deliveryBoy = JSON.parse(
-      localStorage.getItem("deliveryBoy")
-    );
+    const deliveryBoy = getDelivery();
 
     console.log("Logged in Delivery Boy:", deliveryBoy);
 
@@ -51,27 +53,20 @@ const loadDeliveries = async () => {
       return;
     }
 
-    const res =
-    await fetchDeliveryDashboard(
-        deliveryBoy.id
+    const res = await fetchDeliveryDashboard(
+      deliveryBoy.id
     );
 
-    console.log(res);
+    console.log("Delivery Dashboard Response:", res);
 
     if (res.success) {
-
-        setDeliveries(
-            res.deliveries || []
-        );
-
+      setDeliveries(res.deliveries || []);
     } else {
-
-        setDeliveries([]);
-
+      setDeliveries([]);
     }
 
   } catch (err) {
-    console.error(err);
+    console.error("Delivery Dashboard Error:", err);
     setDeliveries([]);
   } finally {
     setLoading(false);
@@ -105,7 +100,10 @@ async function updateDeliveryStatus(delivery, status) {
     let res;
 
     if (delivery.type === "Order") {
-      res = await updateOrderStatus(delivery.id, status);
+      res = await updateOrderStatus(
+        delivery.id,
+        status
+      );
     } else {
       res = await updateSubscriptionDeliveryStatus(
         delivery.id,
@@ -114,13 +112,28 @@ async function updateDeliveryStatus(delivery, status) {
     }
 
     if (res.success) {
+      // Refresh delivery data
       await loadDeliveries();
+
+      // Show success message
+      alert(
+        `Delivery status updated successfully to "${status}"`
+      );
     } else {
-      alert(res.message);
+      alert(
+        res.message || "Failed to update delivery status"
+      );
     }
+
   } catch (err) {
-    console.error(err);
-    alert("Failed to update delivery status");
+    console.error(
+      "Update Delivery Status Error:",
+      err
+    );
+
+    alert(
+      "Failed to update delivery status"
+    );
   }
 }
 
@@ -128,7 +141,7 @@ async function updateDeliveryStatus(delivery, status) {
 const filteredDeliveries = deliveries.filter((d) => {
   const q = search.toLowerCase().trim();
 
-  return (
+  const matchesSearch =
     String(d.customer?.full_name || "")
       .toLowerCase()
       .includes(q) ||
@@ -138,7 +151,15 @@ const filteredDeliveries = deliveries.filter((d) => {
 
     String(d.address?.area || "")
       .toLowerCase()
-      .includes(q)
+      .includes(q);
+
+  const matchesStatus =
+    statusFilter === "All" ||
+    d.status === statusFilter;
+
+  return (
+    matchesSearch &&
+    matchesStatus
   );
 });
 
@@ -170,52 +191,139 @@ const filteredDeliveries = deliveries.filter((d) => {
         </div>
         {/* STATS */}
         
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-          <div className="bg-white rounded-3xl p-5 shadow-lg border border-orange-100">
-            <p className="text-gray-500 text-sm">Today Deliveries</p>
-            <p className="text-3xl font-black text-orange-600 mt-2">
-              {deliveries.length}
-            </p>
-          </div>
+    {/* STATS */}
 
-          <div className="bg-white rounded-3xl p-5 shadow-lg border border-green-100">
-            <p className="text-gray-500 text-sm">Delivered</p>
-            <p className="text-3xl font-black text-green-700 mt-2">
-              {deliveries.filter((d) => d.status === "Delivered").length}
-            </p>
-          </div>
+<div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
 
-          <div className="bg-white rounded-3xl p-5 shadow-lg border border-blue-100">
-            <p className="text-gray-500 text-sm">Pending</p>
-            <p className="text-3xl font-black text-blue-700 mt-2">
-              {deliveries.filter((d) => d.status !== "Delivered").length}
-            </p>
-          </div>
-        </div>
+  {/* TODAY DELIVERIES */}
+  <div className="bg-white rounded-3xl p-5 shadow-lg border border-orange-100">
+    <p className="text-gray-500 text-sm">
+      Today Deliveries
+    </p>
+
+    <p className="text-3xl font-black text-orange-600 mt-2">
+      {deliveries.length}
+    </p>
+  </div>
+
+
+  {/* DELIVERED */}
+  <div className="bg-white rounded-3xl p-5 shadow-lg border border-green-100">
+    <p className="text-gray-500 text-sm">
+      Delivered
+    </p>
+
+    <p className="text-3xl font-black text-green-700 mt-2">
+      {deliveries.filter(
+        (d) => d.status === "Delivered"
+      ).length}
+    </p>
+  </div>
+
+
+  {/* PENDING */}
+  <div className="bg-white rounded-3xl p-5 shadow-lg border border-blue-100">
+    <p className="text-gray-500 text-sm">
+      Pending
+    </p>
+
+    <p className="text-3xl font-black text-blue-700 mt-2">
+      {deliveries.filter(
+        (d) =>
+          d.status !== "Delivered" &&
+          d.status !== "Missed"
+      ).length}
+    </p>
+  </div>
+
+
+  {/* MISSED */}
+  <div className="bg-white rounded-3xl p-5 shadow-lg border border-red-100">
+    <p className="text-gray-500 text-sm">
+      Missed
+    </p>
+
+    <p className="text-3xl font-black text-red-700 mt-2">
+      {deliveries.filter(
+        (d) => d.status === "Missed"
+      ).length}
+    </p>
+  </div>
+
+</div>
         <div className="bg-white rounded-3xl p-5 shadow-lg border border-red-100">
             <p className="text-gray-500 text-sm">
               Missed
             </p>
 
             <p className="text-3xl font-black text-red-700 mt-2">
-              {
-                deliveries.filter(
-                  (d) => d.status === "Missed"
-                ).length
-              }
+              
+               {deliveries.filter(
+                  (d) =>
+                    d.status !== "Delivered" &&
+                    d.status !== "Missed"
+                ).length}
+              
             </p>
           </div>
         
-        
-       <div className="mt-6">
-        <input
-          type="text"
-          placeholder="Search customer..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full border rounded-xl p-4"
-        />
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+
+  {/* SEARCH */}
+  <div>
+    <label className="block text-sm font-bold text-gray-600 mb-2">
+      Search Delivery
+    </label>
+
+    <input
+      type="text"
+      placeholder="Search customer / phone / area..."
+      value={search}
+      onChange={(e) =>
+        setSearch(e.target.value)
+      }
+      className="w-full border border-gray-200 rounded-xl p-4 outline-none focus:ring-2 focus:ring-orange-400"
+    />
+  </div>
+
+
+  {/* STATUS FILTER */}
+        <div>
+          <label className="block text-sm font-bold text-gray-600 mb-2">
+            Filter by Status
+          </label>
+
+          <select
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(e.target.value)
+            }
+            className="w-full border border-gray-200 rounded-xl p-4 bg-white outline-none focus:ring-2 focus:ring-orange-400"
+          >
+            <option value="All">
+              All Deliveries
+            </option>
+
+            <option value="Assigned">
+              Assigned
+            </option>
+
+            <option value="Out for Delivery">
+              Out for Delivery
+            </option>
+
+            <option value="Delivered">
+              Delivered
+            </option>
+
+            <option value="Missed">
+              Missed
+            </option>
+          </select>
+        </div>
+
       </div>
+       
             
 
         {/* DELIVERY LIST */}
@@ -253,7 +361,14 @@ const filteredDeliveries = deliveries.filter((d) => {
 
             ) : (
 
-            filteredDeliveries.map((delivery)=>(
+            filteredDeliveries.map((delivery) => {
+
+            const extraItems = (delivery.items || []).filter(
+              (item) => item.is_extra === true
+            );
+
+            return (
+
             <div
                 key={delivery.id}
                 className="
@@ -365,7 +480,7 @@ const filteredDeliveries = deliveries.filter((d) => {
             </p>
 
            <div className="grid grid-cols-3 gap-2 mt-3">
-            {delivery.items.map((item) => (
+            {(delivery.items || []).map((item) => (
               <div
                 key={item.id}
                 className={`
@@ -457,45 +572,58 @@ const filteredDeliveries = deliveries.filter((d) => {
 
            <div className="grid grid-cols-2 gap-2">
 
-            <button
-            disabled={delivery.status==="Delivered"}
-            onClick={()=>{updateDeliveryStatus(delivery,"Out for Delivery");
-                     loadDashboard();}}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 font-semibold disabled:bg-gray-400"
-            >
+              {/* OUT FOR DELIVERY */}
+              <button
+                disabled={delivery.status === "Delivered"}
+                onClick={() =>
+                  updateDeliveryStatus(
+                    delivery,
+                    "Out for Delivery"
+                  )
+                }
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 font-semibold disabled:bg-gray-400"
+              >
+                🚚 Out For Delivery
+              </button>
 
-            🚚 Out For Delivery
 
-            </button>
+              {/* DELIVERED */}
+              <button
+                disabled={delivery.status === "Delivered"}
+                onClick={() =>
+                  updateDeliveryStatus(
+                    delivery,
+                    "Delivered"
+                  )
+                }
+                className="bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-semibold disabled:bg-gray-400"
+              >
+                ✅ Delivered
+              </button>
 
-            <button
-            disabled={delivery.status==="Delivered"}
-            onClick={()=>{updateDeliveryStatus(delivery,"Delivered"); loadDashboard();}}
-            className="bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-semibold disabled:bg-gray-400"
-            >
 
-            ✅ Delivered
+              {/* MISSED */}
+              <button
+                disabled={delivery.status === "Delivered"}
+                onClick={() =>
+                  updateDeliveryStatus(
+                    delivery,
+                    "Missed"
+                  )
+                }
+                className="bg-red-600 hover:bg-red-700 text-white rounded-xl py-3 font-semibold disabled:bg-gray-400"
+              >
+                ❌ Missed
+              </button>
 
-            </button>
 
-            <button
-            disabled={delivery.status==="Delivered"}
-            onClick={()=>updateDeliveryStatus(delivery,"Missed")}
-            className="bg-red-600 hover:bg-red-700 text-white rounded-xl py-3 font-semibold disabled:bg-gray-400"
-            >
-
-            ❌ Missed
-
-            </button>
-
-            <a
-            href={`tel:${delivery.customer?.phone}`}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 text-center font-semibold"
-            >
-
-            📞 Call
-
-            </a>
+              {/* CALL */}
+              <a
+                href={`tel:${delivery.customer?.phone}`}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 text-center font-semibold"
+              >
+                📞 Call
+              </a>
 
             </div>
 
@@ -516,7 +644,8 @@ const filteredDeliveries = deliveries.filter((d) => {
 
             </div>
 
-            ))
+               );
+          })
 
             )}
 
