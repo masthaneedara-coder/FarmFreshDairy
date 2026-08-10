@@ -4,7 +4,7 @@ import {
   getMonthlyBills,
   markBillPaid,
 } from "../services/monthlyBillingService";
-import MonthlyBillDrawer from "../components/MonthlyBillDrawer";
+import MonthlyBillDrawer from "../Components/MonthlyBillDrawer";
 
 export default function AdminMonthlyBilling() {
   const today = new Date();

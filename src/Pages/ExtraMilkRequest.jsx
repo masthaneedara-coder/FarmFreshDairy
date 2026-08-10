@@ -6,9 +6,8 @@ import {
   fetchProducts,
   fetchCustomerSubscriptions,
 } from "../config/api";
-import ExtraMilkForm from "../components/extraMilk/ExtraMilkForm";
-import ExtraMilkHistory from "../components/extraMilk/ExtraMilkHistory";
-
+import ExtraMilkForm from "../Components/extraMilk/ExtraMilkForm";
+import ExtraMilkHistory from "../Components/extraMilk/ExtraMilkHistory";
 export default function ExtraMilkRequest() {
 
   const customer = JSON.parse(

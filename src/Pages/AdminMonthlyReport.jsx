@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
 
-import MonthlyBillDrawer from "../components/admin/MonthlyBillDrawer";
-import { generateMonthlyBillPDF } from "../utils/monthlyBillPDF";
+import MonthlyBillDrawer from "../Components/admin/MonthlyBillDrawer";
+import { generateMonthlyBillPDF } from "../utils/monthlyBillPdf";
 import { sendMonthlyBillWhatsapp } from "../utils/whatsappBill";
 import {
   getCustomerMonthlyBill,
