@@ -85,17 +85,44 @@ export async function updateSubscriptionStatusService(
   id,
   status
 ) {
+  const updateData = {
+    status,
+    updated_at: new Date(),
+  };
+
+  // ==============================
+  // ACTIVATE SUBSCRIPTION
+  // ==============================
+  if (status === "Active") {
+    updateData.is_paused = false;
+    updateData.pause_from = null;
+    updateData.pause_to = null;
+  }
+
+  // ==============================
+  // STOP SUBSCRIPTION
+  // ==============================
+  if (status === "Stopped") {
+    updateData.is_paused = false;
+    updateData.pause_from = null;
+    updateData.pause_to = null;
+  }
+
   const { data, error } = await supabaseAdmin
     .from("subscriptions")
-    .update({
-      status,
-      updated_at: new Date(),
-    })
+    .update(updateData)
     .eq("id", id)
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error(
+      "Update Subscription Status Error:",
+      error
+    );
+
+    throw error;
+  }
 
   return data;
 }
