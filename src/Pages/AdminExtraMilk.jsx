@@ -4,8 +4,8 @@ import {
   approveExtraMilk,
   rejectExtraMilk,
 } from "../config/api";
-import ExtraMilkTable from "../Components/admin/ExtraMilkTable";
-import ExtraMilkDrawer from "../Components/admin/ExtraMilkDrawer";
+import ExtraMilkTable from "../components/admin/ExtraMilkTable";
+import ExtraMilkDrawer from "../components/admin/ExtraMilkDrawer";
 export default function AdminExtraMilk() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
