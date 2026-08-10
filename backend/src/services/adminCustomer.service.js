@@ -53,6 +53,7 @@ export async function getAllCustomersService() {
     // ===================================
     // Orders
     // ===================================
+
     const { data: orders = [] } = await supabaseAdmin
       .from("orders")
       .select("*")
@@ -62,6 +63,7 @@ export async function getAllCustomersService() {
     // ===================================
     // Subscriptions
     // ===================================
+
     const { data: subscriptions = [] } =
       await supabaseAdmin
         .from("subscriptions")
@@ -72,6 +74,7 @@ export async function getAllCustomersService() {
     // ===================================
     // Address
     // ===================================
+
     const { data: addresses } = await supabaseAdmin
       .from("addresses")
       .select("*")
@@ -84,31 +87,55 @@ export async function getAllCustomersService() {
     // ===================================
     // Total Spent
     // ===================================
+
     const totalSpent = orders.reduce(
       (sum, order) =>
         sum + Number(order.total_amount || 0),
       0
     );
 
-    // ===================================
-    // Subscription Counts
-    // ===================================
-    const activeSubscriptions =
-      subscriptions.filter(
-        (subscription) =>
-          subscription.status === "Active" &&
-          !isSubscriptionCurrentlyPaused(subscription)
-      );
+   // ===================================
+// Subscription Counts
+// ===================================
 
-    const pausedSubscriptions =
-      subscriptions.filter(
-        (subscription) =>
-          isSubscriptionCurrentlyPaused(subscription)
-      );
+const activeSubscriptions =
+  subscriptions.filter(
+    (subscription) =>
+      subscription.status === "Active" &&
+      !isSubscriptionCurrentlyPaused(subscription)
+  );
 
-    // ===================================
-    // Latest Subscription
-    // ===================================
+const pausedSubscriptions =
+  subscriptions.filter(
+    (subscription) =>
+      isSubscriptionCurrentlyPaused(subscription)
+  );
+
+const stoppedSubscriptions =
+  subscriptions.filter(
+    (subscription) =>
+      subscription.status === "Stopped"
+  );
+
+
+// ===================================
+// Customer Subscription Status
+// ===================================
+
+let customerSubscriptionStatus = "No Subscription";
+
+if (pausedSubscriptions.length > 0) {
+  customerSubscriptionStatus = "Paused";
+} else if (activeSubscriptions.length > 0) {
+  customerSubscriptionStatus = "Active";
+} else if (stoppedSubscriptions.length > 0) {
+  customerSubscriptionStatus = "Stopped";
+}
+
+// ===================================
+// Latest Subscription
+// ===================================
+
     const latestSubscription =
       subscriptions?.[0] || null;
 
@@ -122,6 +149,7 @@ export async function getAllCustomersService() {
     // ===================================
     // Customer Result
     // ===================================
+
     result.push({
       id: customer.id,
 
@@ -150,39 +178,48 @@ export async function getAllCustomersService() {
 
       totalSpent,
 
-      // Total subscriptions
-      totalSubscriptions: subscriptions.length,
+      totalSubscriptions:
+        subscriptions.length,
 
-      // Currently active subscriptions
       activeSubscriptions:
         activeSubscriptions.length,
 
-      // Currently paused subscriptions
       pausedSubscriptions:
         pausedSubscriptions.length,
 
-      // Latest subscription status
+      stoppedSubscriptions:
+        stoppedSubscriptions.length,
+
+      subscriptionStatus:
+        customerSubscriptionStatus,
+
       latestSubscriptionStatus,
 
-      // Latest subscription details
       latestSubscription:
         latestSubscription
           ? {
               id: latestSubscription.id,
+
               status:
                 latestSubscriptionStatus,
+
               start_date:
                 latestSubscription.start_date,
+
               end_date:
                 latestSubscription.end_date,
+
               frequency:
                 latestSubscription.frequency,
+
               is_paused:
                 isSubscriptionCurrentlyPaused(
                   latestSubscription
                 ),
+
               pause_from:
                 latestSubscription.pause_from,
+
               pause_to:
                 latestSubscription.pause_to,
             }
@@ -202,7 +239,6 @@ export async function getAllCustomersService() {
 
   return result;
 }
-
 // ===================================
 // Get Customer By ID
 // ===================================
@@ -273,22 +309,39 @@ export async function getCustomerByIdService(id) {
   // ===================================
   // Subscription Counts
   // ===================================
-  const activeSubscriptions =
-    subscriptions.filter(
-      (subscription) =>
-        subscription.status === "Active" &&
-        !isSubscriptionCurrentlyPaused(
-          subscription
-        )
-    );
+  // ===================================
+// Subscription Counts
+// ===================================
 
-  const pausedSubscriptions =
-    subscriptions.filter(
-      (subscription) =>
-        isSubscriptionCurrentlyPaused(
-          subscription
-        )
-    );
+const activeSubscriptions = subscriptions.filter(
+  (subscription) =>
+    subscription.status === "Active" &&
+    !isSubscriptionCurrentlyPaused(subscription)
+);
+
+const pausedSubscriptions = subscriptions.filter(
+  (subscription) =>
+    isSubscriptionCurrentlyPaused(subscription)
+);
+
+const stoppedSubscriptions = subscriptions.filter(
+  (subscription) =>
+    subscription.status === "Stopped"
+);
+
+// ===================================
+// Customer Subscription Status
+// ===================================
+
+let customerSubscriptionStatus = "No Subscription";
+
+if (pausedSubscriptions.length > 0) {
+  customerSubscriptionStatus = "Paused";
+} else if (activeSubscriptions.length > 0) {
+  customerSubscriptionStatus = "Active";
+} else if (stoppedSubscriptions.length > 0) {
+  customerSubscriptionStatus = "Stopped";
+}
 
   // ===================================
   // Add display status to subscriptions
@@ -315,31 +368,37 @@ export async function getCustomerByIdService(id) {
     formattedSubscriptions[0] || null;
 
   return {
-    ...customer,
+  ...customer,
 
-    totalOrders: orders.length,
+  totalOrders: orders.length,
 
-    totalSpent,
+  totalSpent,
 
-    totalSubscriptions:
-      subscriptions.length,
+  totalSubscriptions:
+    subscriptions.length,
 
-    activeSubscriptions:
-      activeSubscriptions.length,
+  activeSubscriptions:
+    activeSubscriptions.length,
 
-    pausedSubscriptions:
-      pausedSubscriptions.length,
+  pausedSubscriptions:
+    pausedSubscriptions.length,
 
-    latestSubscriptionStatus:
-      latestSubscription
-        ? latestSubscription.display_status
-        : null,
+  stoppedSubscriptions:
+    stoppedSubscriptions.length,
 
-    orders,
+  subscriptionStatus:
+    customerSubscriptionStatus,
 
-    subscriptions:
-      formattedSubscriptions,
+  latestSubscriptionStatus:
+    latestSubscription
+      ? latestSubscription.display_status
+      : null,
 
-    addresses,
-  };
+  orders,
+
+  subscriptions:
+    formattedSubscriptions,
+
+  addresses,
+};
 }

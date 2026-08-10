@@ -2,6 +2,28 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getCustomerById } from "../services/adminCustomerService";
 import AdminLayout from "../Components/AdminLayout";
+function getSubscriptionDisplayStatus(subscription) {
+  if (
+    subscription.is_paused &&
+    subscription.pause_from &&
+    subscription.pause_to
+  ) {
+    const today = new Date();
+    const pauseFrom = new Date(subscription.pause_from);
+    const pauseTo = new Date(subscription.pause_to);
+
+    // Compare dates only
+    today.setHours(0, 0, 0, 0);
+    pauseFrom.setHours(0, 0, 0, 0);
+    pauseTo.setHours(0, 0, 0, 0);
+
+    if (today >= pauseFrom && today <= pauseTo) {
+      return "Paused";
+    }
+  }
+
+  return subscription.status;
+}
 
 export default function AdminCustomerDetails() {
   const { id } = useParams();
@@ -40,6 +62,14 @@ export default function AdminCustomerDetails() {
       </AdminLayout>
     );
   }
+  const pausedSubscription = customer.subscriptions?.find(
+  (subscription) =>
+    getSubscriptionDisplayStatus(subscription) === "Paused"
+);
+
+const customerDisplayStatus = pausedSubscription
+  ? "Paused"
+  : "Active";
 
   return (
   <AdminLayout title="Customer Details">
@@ -133,8 +163,8 @@ export default function AdminCustomerDetails() {
 
         <StatCard
             title="Status"
-            value="Active"
-            icon="✅"
+            value={customerDisplayStatus}
+            icon={customerDisplayStatus === "Paused" ? "⏸️" : "✅"}
         />
 
         </div>
@@ -417,15 +447,32 @@ export default function AdminCustomerDetails() {
 
               </div>
 
-              <span
-                className={`px-4 py-2 rounded-full font-semibold ${
-                  subscription.status === "Active"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {subscription.status}
-              </span>
+            {(() => {
+                const displayStatus =
+                  getSubscriptionDisplayStatus(subscription);
+
+                return (
+                  <span
+                    className={`px-4 py-2 rounded-full font-semibold ${
+                      displayStatus === "Paused"
+                        ? "bg-orange-100 text-orange-700"
+                        : displayStatus === "Active"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-red-100 text-red-700"
+                    }`}
+                  >
+                    {displayStatus}
+                  </span>
+                );
+              })()}
+              {getSubscriptionDisplayStatus(subscription) === "Paused" && (
+                <div className="mt-2 text-sm text-orange-600 font-medium">
+                  Paused from{" "}
+                  {new Date(subscription.pause_from).toLocaleDateString()}
+                  {" "}to{" "}
+                  {new Date(subscription.pause_to).toLocaleDateString()}
+                </div>
+              )}
 
             </div>
 
@@ -460,9 +507,9 @@ export default function AdminCustomerDetails() {
                 value={`₹${subscription.total_amount}`}
               />
 
-              <SubscriptionInfo
+             <SubscriptionInfo
                 label="Status"
-                value={subscription.status}
+                value={getSubscriptionDisplayStatus(subscription)}
               />
 
             </div>

@@ -13,7 +13,7 @@ export default function AdminSubscriptions() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [deliverySummary, setDeliverySummary] =  useState({});
   const [loading, setLoading] = useState(true);
-
+ const [updating, setUpdating] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -24,6 +24,19 @@ export default function AdminSubscriptions() {
     console.log("Loading started");
 
     const data = await getAllSubscriptions();
+    console.log("API Data:", data);
+
+data.forEach((sub) => {
+  if (sub.is_paused === true) {
+    console.log("🟡 PAUSED CUSTOMER:", {
+      customer: sub.customerName,
+      status: sub.status,
+      is_paused: sub.is_paused,
+      pause_from: sub.pause_from,
+      pause_to: sub.pause_to,
+    });
+  }
+});
 
     console.log("API Data:", data);
 
@@ -60,50 +73,91 @@ async function loadDeliverySummary(subscriptionId) {
   }
 }
 
-  useEffect(() => {
-    loadSubscriptions();
-  }, []);
+ useEffect(() => {
+  loadSubscriptions();
+}, []);
 
-  const filteredSubscriptions = useMemo(() => {
-    const q = search.toLowerCase().trim();
 
-    return subscriptions.filter((sub) => {
-      const customerName = String(sub.customerName || sub.name || "").toLowerCase();
-      const phone = String(sub.phone || sub.mobile || "").toLowerCase();
-      const product = String(sub.product || sub.planName || "").toLowerCase();
-      const status = String(sub.status || "Active").toLowerCase();
+// =====================================
+// Display Subscription Status
+// =====================================
+const getDisplayStatus = (sub) => {
+  if (sub.is_paused === true) {
+    return "Paused";
+  }
 
-      const matchesSearch =
-        !q ||
-        customerName.includes(q) ||
-        phone.includes(q) ||
-        product.includes(q);
+  const status = String(sub.status || "")
+    .trim()
+    .toLowerCase();
 
-      const matchesStatus =
-        statusFilter === "All" ||
-        status === statusFilter.toLowerCase();
+  if (status === "active") {
+    return "Active";
+  }
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [subscriptions, search, statusFilter]);
+  if (status === "paused") {
+    return "Paused";
+  }
 
-  const stats = useMemo(() => {
-    const total = subscriptions.length;
-    const active = subscriptions.filter(
-      (s) => String(s.status || "Active").toLowerCase() === "active"
-    ).length;
-    const paused = subscriptions.filter(
-      (s) => String(s.status || "").toLowerCase() === "paused"
-    ).length;
-    const stopped = subscriptions.filter(
-      (s) =>
-        String(s.status || "").toLowerCase() === "stopped" ||
-        String(s.status || "").toLowerCase() === "expired"
-    ).length;
+  if (status === "stopped") {
+    return "Stopped";
+  }
 
-    const monthlyRevenue = subscriptions.reduce((sum, sub) => {
-      const status = String(sub.status || "Active").toLowerCase();
-      if (status !== "active") return sum;
+  if (status === "expired") {
+    return "Expired";
+  }
+
+  return sub.status || "Unknown";
+};
+
+const filteredSubscriptions = subscriptions.filter((subscription) => {
+  const displayStatus = getDisplayStatus(subscription);
+
+  const matchesSearch =
+    `${subscription.customerName || ""} ${
+      subscription.phone || ""
+    } ${subscription.product || ""}`
+      .toLowerCase()
+      .includes(search.toLowerCase());
+
+  const matchesStatus =
+  statusFilter === "All" ||
+  displayStatus === statusFilter;
+
+  return matchesSearch && matchesStatus;
+});
+
+const stats = useMemo(() => {
+  const total = subscriptions.length;
+
+  const activeCount = subscriptions.filter(
+    (s) =>
+      String(s.status || "").trim().toLowerCase() === "active" &&
+      s.is_paused !== true
+  ).length;
+
+  const pausedCount = subscriptions.filter(
+    (s) => s.is_paused === true
+  ).length;
+
+  const stoppedCount = subscriptions.filter(
+    (s) =>
+      String(s.status || "").trim().toLowerCase() === "stopped"
+  ).length;
+
+  const monthlyRevenue = subscriptions.reduce(
+    (sum, sub) => {
+      // Do not count paused subscriptions
+      if (sub.is_paused === true) {
+        return sum;
+      }
+
+      const status = String(sub.status || "")
+        .trim()
+        .toLowerCase();
+
+      if (status !== "active") {
+        return sum;
+      }
 
       return (
         sum +
@@ -114,16 +168,18 @@ async function loadDeliverySummary(subscriptionId) {
             0
         )
       );
-    }, 0);
+    },
+    0
+  );
 
-    return {
-      total,
-      active,
-      paused,
-      stopped,
-      monthlyRevenue,
-    };
-  }, [subscriptions]);
+  return {
+    total,
+    active: activeCount,
+    paused: pausedCount,
+    stopped: stoppedCount,
+    monthlyRevenue,
+  };
+}, [subscriptions]);
 
   const formatDate = (dateValue) => {
     if (!dateValue) return "-";
@@ -143,6 +199,8 @@ async function loadDeliverySummary(subscriptionId) {
     if (Number.isNaN(num)) return "₹0";
     return `₹${num.toLocaleString("en-IN")}`;
   };
+
+ 
 
   const getStatusStyle = (status) => {
     const s = String(status || "").toLowerCase();
@@ -174,31 +232,37 @@ async function loadDeliverySummary(subscriptionId) {
     };
   };
 
-  const updateStatusLocal = async (
-  subscriptionId,
-  newStatus
-) => {
+ const updateStatusLocal = async (subscriptionId, newStatus) => {
   try {
+    setUpdating(true);
+
+    console.log(
+      "Updating subscription:",
+      subscriptionId,
+      newStatus
+    );
+
     await updateSubscriptionStatus(
       subscriptionId,
       newStatus
     );
 
-    setSubscriptions((prev) =>
-      prev.map((sub) =>
-        String(sub.subscriptionId || sub.id) ===
-        String(subscriptionId)
-          ? { ...sub, status: newStatus }
-          : sub
-      )
+    await loadSubscriptions();
+
+  } catch (error) {
+    console.error(
+      "Update subscription status error:",
+      error
     );
 
-  } catch (err) {
-    console.error(err);
-    alert("Unable to update subscription");
+    alert(
+      error?.message ||
+      "Unable to update subscription"
+    );
+  } finally {
+    setUpdating(false);
   }
 };
-
 
   return (
     <AdminLayout title="Subscriptions">
@@ -308,7 +372,9 @@ async function loadDeliverySummary(subscriptionId) {
         ) : (
           <div className="grid gap-4">
             {filteredSubscriptions.map((sub, index) => {
-              const statusStyle = getStatusStyle(sub.status || "Active");
+              const displayStatus = getDisplayStatus(sub);
+
+              const statusStyle =  getStatusStyle(displayStatus);
               const subscriptionId = sub.subscriptionId || sub.id || `SUB-${index + 1}`;
               const summary =
                     deliverySummary[subscriptionId] || {
@@ -335,14 +401,19 @@ async function loadDeliverySummary(subscriptionId) {
                             {sub.customerName || sub.name || "Customer"}
                           </h2>
 
-                          <span
-                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs sm:text-sm font-bold ${statusStyle.badge}`}
-                          >
-                            <span
-                              className={`w-2.5 h-2.5 rounded-full ${statusStyle.dot}`}
-                            ></span>
-                            {sub.status || "Active"}
-                          </span>
+                         <span
+                          className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                            displayStatus === "Paused"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : displayStatus === "Active"
+                              ? "bg-green-100 text-green-700"
+                              : displayStatus === "Stopped"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {displayStatus}
+                        </span>
                         </div>
 
                         <p className="text-sm text-slate-500 mt-2 break-all">
@@ -388,6 +459,36 @@ async function loadDeliverySummary(subscriptionId) {
                       />
                       <InfoBox label="Area" value={sub.area || "-"} />
                     </div>
+                    {sub.is_paused === true && (
+                      <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">⏸️</span>
+
+                          <div>
+                            <p className="font-bold text-yellow-800">
+                              Subscription Paused
+                            </p>
+
+                            <p className="text-sm text-yellow-700 mt-1">
+                              Pause period:{" "}
+                              <span className="font-semibold">
+                                {formatDate(
+                                  sub.pause_from ||
+                                  sub.pauseFrom
+                                )}
+                              </span>
+                              {" → "}
+                              <span className="font-semibold">
+                                {formatDate(
+                                  sub.pause_to ||
+                                  sub.pauseTo
+                                )}
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* SUMMARY + ACTIONS */}
                     <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px_360px] gap-4">
@@ -466,13 +567,17 @@ async function loadDeliverySummary(subscriptionId) {
                         </p>
 
                         <div className="grid grid-cols-3 xl:grid-cols-1 gap-2 mt-4">
-                          <button
+                         <button
                             onClick={() =>
-                              updateStatusLocal(subscriptionId, "Active")
+                              updateStatusLocal(
+                                sub.subscriptionId,
+                                "Active"
+                              )
                             }
-                            className="bg-green-600 hover:bg-green-700 text-white py-3 rounded-2xl font-semibold text-sm"
+                            disabled={updating}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-semibold"
                           >
-                            Activate
+                            {updating ? "Updating..." : "Activate"}
                           </button>
 
                           <button
