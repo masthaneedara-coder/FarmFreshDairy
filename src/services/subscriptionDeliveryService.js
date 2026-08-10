@@ -4,8 +4,9 @@ import {
   putJSON,
 } from "../config/api";
 
-const API_URL = "https://farmfreshdairy.onrender.com/api";
-
+//const API_URL = "https://farmfreshdairy.onrender.com/api";
+const API_URL =
+  "http://localhost:5000/api";
 /**
  * Get Today's Subscription Deliveries
  */

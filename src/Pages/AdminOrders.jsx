@@ -113,27 +113,24 @@ const handleAssign = (order) => {
   setSelectedOrder(order);
   setAssignOpen(true);
 };
-const handlePaymentPaid = async (orderId) => {
+const handlePaymentPaid = async (order) => {
   try {
+    await updatePaymentStatus(order.id, {
+      payment_status: "Paid",
+      payment_method: order.payment_method,
+      transaction_id: "",
+      received_by: getAdminId(),
+    });
 
-    await updatePaymentStatus(
-      orderId,
-      "Paid"
-    );
-
-    alert("Payment updated successfully.");
+    alert("Payment updated successfully");
 
     loadOrders();
 
   } catch (err) {
-
     console.error(err);
-
     alert(err.message);
-
   }
 };
-
   return (
     <div>
 
@@ -156,6 +153,7 @@ const handlePaymentPaid = async (orderId) => {
             onAssign={handleAssign}
             onStatusChange={handleStatusChange}
             onReceivePayment={handleReceivePayment}
+            onPaymentPaid={handlePaymentPaid}
           />
         </div>
 

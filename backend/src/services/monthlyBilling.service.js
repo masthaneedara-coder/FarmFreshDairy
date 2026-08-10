@@ -213,7 +213,7 @@ export async function getMonthlyBills(month, year) {
   return data;
 }
 export async function getCustomerMonthlyBill(
-  customerId,
+  subscriptionId,
   month,
   year
 ) {
@@ -225,7 +225,7 @@ export async function getCustomerMonthlyBill(
       customers(*),
       subscriptions(*)
     `)
-    .eq("customer_id", customerId)
+    .eq("subscription_id", subscriptionId)
     .eq("month", month)
     .eq("year", year)
     .maybeSingle();
@@ -253,56 +253,48 @@ export async function markMonthlyBillPaid(
 
   return data;
 }
-export async function getMonthlyBillDetails(
-  customerId,
-  month,
-  year
-) {
+export async function getMonthlyBillDetails(subscriptionId, month, year) {
 
-  // Monthly Bill
-  const { data: bill, error: billError } =
-    await supabaseAdmin
-      .from("monthly_bills")
-      .select(`
-        *,
-        customers(*),
-        subscriptions(*)
-      `)
-      .eq("customer_id", customerId)
-      .eq("month", month)
-      .eq("year", year)
-      .single();
+  console.log("subscriptionId:", subscriptionId);
+  console.log("month:", month);
+  console.log("year:", year);
 
-  if (billError) throw billError;
+  const { data: bills, error } = await supabaseAdmin
+    .from("monthly_bills")
+    .select(`
+      *,
+      customers(*),
+      subscriptions(*)
+    `)
+    .eq("subscription_id", subscriptionId)
+    .eq("month", Number(month))
+    .eq("year", Number(year));
 
-  // Daily Deliveries
-  const fromDate =
-    `${year}-${String(month).padStart(2,"0")}-01`;
+  console.log("Bills:", bills);
+  console.log("Error:", error);
 
-  const lastDay =
-    new Date(year, month, 0).getDate();
+  if (error) throw error;
 
-  const toDate =
-    `${year}-${String(month).padStart(2,"0")}-${String(lastDay).padStart(2,"0")}`;
+  if (!bills || bills.length === 0) {
+    throw new Error("Monthly bill not found");
+  }
 
-  const {
-    data: deliveries,
-    error: deliveryError,
-  } = await supabaseAdmin
+  const bill = bills[0];
+
+  const fromDate = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const toDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  const { data: deliveries, error: deliveryError } = await supabaseAdmin
     .from("subscription_deliveries")
     .select(`
       *,
       subscription_delivery_items(
         *,
-        products(
-          id,
-          name,
-          image
-        )
-      ),
-      addresses(*)
+        products(*)
+      )
     `)
-    .eq("subscription_id", bill.subscription_id)
+    .eq("subscription_id", subscriptionId)
     .gte("delivery_date", fromDate)
     .lte("delivery_date", toDate)
     .order("delivery_date");
@@ -310,15 +302,9 @@ export async function getMonthlyBillDetails(
   if (deliveryError) throw deliveryError;
 
   return {
-
     bill,
-
     customer: bill.customers,
-
     subscription: bill.subscriptions,
-
     deliveries,
-
   };
-
 }

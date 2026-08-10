@@ -299,6 +299,13 @@ async function loadNotifications() {
               color="green"             
               onClick={() => navigate("/admin/subscription-deliveries")}
             />
+            <ActionCard
+              icon="🥛"
+              title="Extra Milk"
+              desc="Approve, reject and manage customer extra milk requests."
+              color="green"
+              onClick={() => navigate("/admin/extra-milk")}
+            />
         </div>
 
         {/* LOW STOCK + PRODUCT TABLE */}

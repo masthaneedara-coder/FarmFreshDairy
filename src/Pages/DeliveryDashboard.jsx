@@ -340,6 +340,25 @@ const filteredDeliveries = deliveries.filter((d) => {
             </div>
 
             <div>
+              {extraItems.length > 0 && (
+
+            <div className="mb-3 rounded-xl bg-orange-100 border border-orange-300 p-3">
+
+              <div className="font-semibold text-orange-700">
+
+                🥛 Extra Milk Added
+
+              </div>
+
+              <div className="text-sm text-orange-600">
+
+                {extraItems.length} Extra Item(s)
+
+              </div>
+
+            </div>
+
+          )}
 
             <p className="text-sm text-gray-500 mb-2">
             Products
@@ -349,17 +368,21 @@ const filteredDeliveries = deliveries.filter((d) => {
             {delivery.items.map((item) => (
               <div
                 key={item.id}
-                className="
-                bg-slate-50
-                rounded-xl
-                border
-                p-2
-                flex
-                flex-col
-                items-center
-                justify-center
-                min-h-[110px]
-                "
+                className={`
+                  rounded-xl
+                  border
+                  p-2
+                  flex
+                  flex-col
+                  items-center
+                  justify-center
+                  min-h-[120px]
+                  ${
+                    item.is_extra
+                      ? "bg-orange-50 border-orange-300"
+                      : "bg-slate-50 border-gray-200"
+                  }
+                `}
               >
                 <img
                   src={item.products?.image}
@@ -367,11 +390,17 @@ const filteredDeliveries = deliveries.filter((d) => {
                   className="w-12 h-12 mx-auto rounded-lg object-cover"
                 />
 
-                <p className="mt-2 text-sm font-semibold truncate">
+                {item.is_extra && (
+                  <span className="mt-2 px-2 py-1 rounded-full bg-orange-500 text-white text-[10px] font-bold">
+                    ➕ EXTRA
+                  </span>
+                )}
+
+                <p className="mt-2 text-sm font-semibold text-center">
                   {item.products?.name}
                 </p>
 
-                <p className="text-[11px] text-gray-500 text-center">
+                <p className="text-xs text-gray-500">
                   {item.quantity} × {item.size}
                 </p>
               </div>

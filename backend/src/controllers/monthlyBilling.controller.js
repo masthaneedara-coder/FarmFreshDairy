@@ -69,29 +69,20 @@ export async function getBills(req, res) {
 // GET /api/monthly-bills/:customerId?month=8&year=2026
 // ======================================
 export async function getCustomerBill(req, res) {
-  try {
-    const { customerId } = req.params;
-    const { month, year } = req.query;
 
-    const bill = await getCustomerMonthlyBill(
-      customerId,
+  const { subscriptionId } = req.params;
+  const { month, year } = req.query;
+
+  const bill = await getCustomerMonthlyBill(
+      subscriptionId,
       month,
       year
-    );
+  );
 
-    return res.json({
+  res.json({
       success: true,
-      bill,
-    });
-
-  } catch (err) {
-    console.error(err);
-
-    return res.status(500).json({
-      success: false,
-      message: err.message,
-    });
-  }
+      bill
+  });
 }
 
 // ======================================
@@ -119,44 +110,30 @@ export async function markBillPaid(req, res) {
     });
   }
 }
-export async function getBillDetails(
-  req,
-  res
-) {
-
+export async function getBillDetails(req, res) {
   try {
+    const { subscriptionId } = req.params;
+    const { month, year } = req.query;
 
-    const { customerId } =
-      req.params;
+    console.log(subscriptionId, month, year);
 
-    const { month, year } =
-      req.query;
+    const result = await getMonthlyBillDetails(
+      subscriptionId,
+      month,
+      year
+    );
 
-    const result =
-      await getMonthlyBillDetails(
-        customerId,
-        month,
-        year
-      );
-
-    res.json({
-
-      success:true,
-
-      ...result
-
+    return res.json({
+      success: true,
+      ...result,
     });
 
-  } catch(err){
+  } catch (err) {
+    console.error(err);
 
-    res.status(500).json({
-
-      success:false,
-
-      message:err.message
-
+    return res.status(500).json({
+      success: false,
+      message: err.message,
     });
-
   }
-
 }

@@ -94,6 +94,7 @@ export async function getDeliveryDashboardService(deliveryBoyId) {
     unit_price,
     total_price,
     size,
+    is_extra,
     products(
       id,
       name,

@@ -1,6 +1,20 @@
 import { useEffect, useState } from "react";
 
-import { getMonthlyDeliveryReport } from "../config/api";
+
+import MonthlyBillDrawer from "../components/admin/MonthlyBillDrawer";
+import { generateMonthlyBillPDF } from "../utils/monthlyBillPDF";
+import { sendMonthlyBillWhatsapp } from "../utils/whatsappBill";
+import {
+  getCustomerMonthlyBill,
+  //downloadMonthlyInvoice,
+  //printMonthlyInvoice,
+  //sendMonthlyInvoiceWhatsapp,
+  //markMonthlyBillPaid,
+  markMonthlyBillPaid,
+  getMonthlyDeliveryReport,
+  //getCustomerMonthlyBill
+  getMonthlyBillDetails 
+} from "../config/api";
 
 export default function AdminMonthlyReport() {
 
@@ -19,6 +33,8 @@ export default function AdminMonthlyReport() {
 
   const [customers, setCustomers] =
     useState([]);
+  const [selectedBill, setSelectedBill] = useState(null);
+const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     loadReport();
@@ -67,6 +83,99 @@ const totalRevenue = customers.reduce(
   (sum, c) => sum + Number(c.billAmount || 0),
   0
 );
+async function handleViewBill(subscriptionId) {
+  try {
+    const data = await getMonthlyBillDetails(
+      subscriptionId,
+      month,
+      year
+    );
+
+    console.log(data);
+
+    if (!data.success) {
+      alert(data.message);
+      return;
+    }
+
+    setSelectedBill({
+      bill: data.bill,
+      customer: data.customer,
+      subscription: data.subscription,
+      deliveries: data.deliveries,
+    });
+    console.log("Selected Bill:", {
+      bill: data.bill,
+      customer: data.customer,
+      subscription: data.subscription,
+      deliveries: data.deliveries,
+    });
+
+    setDrawerOpen(true);
+    console.log("Drawer:", true);
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+const handleDownloadInvoice = async (subscriptionId) => {
+  const data = await getMonthlyBillDetails(
+    subscriptionId,
+    month,
+    year
+  );
+
+  if (!data.success) return;
+
+  await generateMonthlyBillPDF(
+    {
+      bill: data.bill,
+      customer: data.customer,
+      subscription: data.subscription,
+      deliveries: data.deliveries,
+    },
+    "download"
+  );
+};
+const handlePrintInvoice = async (subscriptionId) => {
+  console.log("Print Subscription ID:", subscriptionId);
+
+  const data = await getMonthlyBillDetails(
+    subscriptionId,
+    month,
+    year
+  );
+
+  await generateMonthlyBillPDF(data, "print");
+};
+const handleWhatsappInvoice = async (subscriptionId) => {
+  const data = await getMonthlyBillDetails(
+    subscriptionId,
+    month,
+    year
+  );
+
+  sendMonthlyBillWhatsapp(data);
+};
+const handleMarkPaid = async (billId) => {
+  try {
+    await markMonthlyBillPaid(billId);
+
+    alert("Bill marked as Paid successfully.");
+
+    // Refresh monthly report
+    await loadMonthlyReport();
+
+    // Close drawer (optional)
+    setDrawerOpen(false);
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to mark bill as paid.");
+  }
+};
+
+
 
   return (
 
@@ -249,6 +358,9 @@ const totalRevenue = customers.reduce(
                 <th className="px-4 py-4 text-center font-semibold">
                 Subscription
                 </th>
+                <th className="px-4 py-4 text-center font-semibold">
+                  Actions
+                </th>
 
                 </tr>
 
@@ -260,7 +372,7 @@ const totalRevenue = customers.reduce(
 
     <tr>
       <td
-        colSpan={9}
+        colSpan={10}
         className="py-12 text-center"
       >
         <div className="flex flex-col items-center">
@@ -315,6 +427,7 @@ const totalRevenue = customers.reduce(
 
     customers.map((c) => (
 
+      
       <tr
         key={c.subscriptionId}
         className="border-t even:bg-gray-50 hover:bg-green-50 transition-all"
@@ -381,6 +494,52 @@ const totalRevenue = customers.reduce(
             {c.status}
           </span>
         </td>
+       <td className="px-4 py-4">
+          <div className="flex flex-wrap justify-center gap-2">
+
+            <button
+              onClick={() => {
+                console.log(c);
+                console.log("Customer ID:", c.customerId);
+                handleViewBill(c.subscriptionId)
+              }}
+            >
+              👁 View
+            </button>
+
+            <button
+              onClick={() => handleDownloadInvoice(c.subscriptionId)}
+              className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm"
+            >
+              📄 PDF
+            </button>
+
+            <button
+              onClick={() => handlePrintInvoice(c.subscriptionId)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm"
+            >
+              🖨 Print
+            </button>
+
+            <button
+              onClick={() => handleWhatsappInvoice(c.subscriptionId)}
+              className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm"
+            >
+              📲 WhatsApp
+            </button>
+
+            {c.paymentStatus !== "Paid" && (
+              <button
+                onClick={() => handleMarkPaid?.(c.subscriptionId)}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-lg text-sm"
+              >
+                ✅ Paid
+              </button>
+            )}
+
+          </div>
+        </td>
+        
 
       </tr>
 
@@ -393,6 +552,14 @@ const totalRevenue = customers.reduce(
         </table>
 
       </div>
+     <MonthlyBillDrawer
+    open={drawerOpen}
+    details={selectedBill}
+    month={month}
+    year={year}
+    onMarkPaid={handleMarkPaid}
+    onClose={() => setDrawerOpen(false)}
+/>
 
     </div>
 

@@ -4,7 +4,8 @@ export default function OrdersTable({
   onView,
   onAssign,
   onPaymentPaid,
-  onReceivePayment
+  onReceivePayment,
+  
 }) {
     const statusColor = (status) => {
   switch (status) {
@@ -109,7 +110,7 @@ const paymentColor = (payment) => {
 
                       <button
                         onClick={() =>
-                          onPaymentPaid(order.id)
+                           onPaymentPaid(order)
                         }
                         className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1 rounded"
                       >

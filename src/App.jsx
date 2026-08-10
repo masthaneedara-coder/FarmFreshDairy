@@ -25,7 +25,7 @@ import AddressBook from "./Pages/AddressBook";
 import SubscriptionPlans from "./Pages/SubscriptionPlans";
 import CreateSubscription from "./Pages/CreateSubscription";
 import ReviewSubscription from "./Pages/ReviewSubscription";
-
+import ExtraMilkRequest from "./Pages/ExtraMilkRequest";
 /* Admin */
 import AdminLogin from "./Pages/AdminLogin";
 import AdminDashboard from "./Pages/AdminDashboard";
@@ -39,7 +39,7 @@ import AdminDeliveryBoys from "./Pages/AdminDeliveryBoys";
 import AdminCustomerDetails from "./Pages/AdminCustomerDetails";
 import AdminSubscriptionDeliveries from "./Pages/AdminSubscriptionDeliveries";
 import AdminMonthlyReport from "./Pages/AdminMonthlyReport";
-
+import AdminExtraMilk from "./Pages/AdminExtraMilk";
 
 /* Delivery */
 import DeliveryLogin from "./Pages/DeliveryLogin";
@@ -266,7 +266,16 @@ export default function App() {
           path="/admin/monthly-report"
           element={<AdminMonthlyReport />}
         />
+          <Route
+          path="/extra-milk"
+          element={<ExtraMilkRequest />}
+      />
+      <Route
+      path="/admin/extra-milk"
+      element={<AdminExtraMilk />}
+    />
       </Routes>
+    
       
       </div>
     </div>

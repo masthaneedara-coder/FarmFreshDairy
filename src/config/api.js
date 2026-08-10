@@ -1,5 +1,6 @@
 
-const API_URL = "https://farmfreshdairy.onrender.com/api";
+//const API_URL = "https://farmfreshdairy.onrender.com/api";
+const API_URL = "http://localhost:5000/api";
 /* ---------------------------------------
    COMMON HELPERS
 --------------------------------------- */
@@ -870,4 +871,58 @@ export async function getSubscriptionDeliverySummary(subscriptionId) {
     `${API_URL}/subscriptions/${subscriptionId}/delivery-summary`
   );
 }
+export async function getCustomerMonthlyBill(
+  subscriptionId,
+  month,
+  year
+) {
+  return await getJSON(
+    `${API_URL}/monthly-bills/${subscriptionId}?month=${month}&year=${year}`
+  );
+}
+export async function getMonthlyBillDetails(
+  subscriptionId,
+  month,
+  year
+) {
+  return await getJSON(
+    `${API_URL}/monthly-bills/details/${subscriptionId}?month=${month}&year=${year}`
+  );
+}
+export async function markMonthlyBillPaid(billId) {
+  return await putJSON(
+    `${API_URL}/monthly-bills/${billId}/pay`
+  );
+}
+export async function createExtraMilkRequest(data) {
+  return await postJSON(
+    `${API_URL}/extra-milk`,
+    data
+  );
+}
 
+export async function getCustomerExtraMilk(customerId) {
+  return await getJSON(
+    `${API_URL}/extra-milk/customer/${customerId}`
+  );
+}
+export async function cancelExtraMilkRequest(id) {
+  return await putJSON(
+    `${API_URL}/extra-milk/${id}/cancel`
+  );
+}
+export async function getExtraMilkRequests() {
+  return await getJSON(`${API_URL}/extra-milk`);
+}
+
+export async function approveExtraMilk(id) {
+  return await putJSON(
+    `${API_URL}/extra-milk/${id}/approve`
+  );
+}
+
+export async function rejectExtraMilk(id) {
+  return await putJSON(
+    `${API_URL}/extra-milk/${id}/reject`
+  );
+}

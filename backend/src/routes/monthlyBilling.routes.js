@@ -14,12 +14,13 @@ router.post("/generate", generateBills);
 
 router.get("/", getBills);
 
+router.get("/details/:subscriptionId", getBillDetails);
+
+// Generic route LAST
 router.get("/:customerId", getCustomerBill);
 
 router.put("/:id/pay", markBillPaid);
-router.get(
-    "/details/:customerId",
-    getBillDetails
-);
+
+
 
 export default router;

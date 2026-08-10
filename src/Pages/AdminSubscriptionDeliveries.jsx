@@ -299,31 +299,49 @@ export default function AdminSubscriptionDeliveries() {
 
             </td>
 
-            <td className="p-3">
+           <td className="p-3">
 
-            <div className="space-y-1">
+              <div className="space-y-2">
 
-            {delivery.subscription_delivery_items?.map(
-            (item) => (
+                {delivery.subscription_delivery_items?.map((item) => {
 
-            <div
-            key={item.id}
-            className="text-sm"
-            >
+                  const isExtra = item.is_extra === true;
 
-            {item.products?.name}
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-center gap-2 ${
+                        isExtra
+                          ? "bg-orange-50 border border-orange-200 rounded-lg px-2 py-1"
+                          : ""
+                      }`}
+                    >
 
-            <span className="text-gray-500">
-            {" "}
-            ({item.quantity} × {item.size})
-            </span>
+                      {/* Product */}
+                      <span
+                        className={
+                          isExtra
+                            ? "font-semibold text-orange-900"
+                            : "text-gray-800"
+                        }
+                      >
+                        {item.products?.name} (
+                        {item.quantity} × {item.size}
+                        )
+                      </span>
 
-            </div>
+                      {/* Extra Badge */}
+                      {isExtra && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-500 text-white px-2 py-1 text-[11px] font-bold">
+                          🥛 EXTRA
+                        </span>
+                      )}
 
-            )
-            )}
+                    </div>
+                  );
+                })}
 
-            </div>
+              </div>
 
             </td>
 

@@ -93,29 +93,16 @@ export default function InvoiceTemplate({ bill }) {
         </h3>
 
         <div className="overflow-x-auto mt-4">
-          <table className="w-full border">
-            <thead className="bg-emerald-600 text-white">
-              <tr>
-                <th className="p-3 text-left">Product</th>
-                <th className="p-3 text-center">Qty</th>
-                <th className="p-3 text-center">Delivery</th>
-                <th className="p-3 text-right">Amount</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr className="border-b">
-                <td className="p-3">{bill.product}</td>
-                <td className="p-3 text-center">{bill.qty}</td>
-                <td className="p-3 text-center">
-                  {bill.deliveryType}
-                </td>
-                <td className="p-3 text-right font-bold">
-                  {formatMoney(bill.amount)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          {loading ? (
+              <p>Loading...</p>
+            ) : (
+              <ExtraMilkTable
+                requests={filtered}
+                onView={handleView}
+                onApprove={handleApprove}
+                onReject={handleReject}
+              />
+            )}
         </div>
       </div>
 

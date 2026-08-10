@@ -112,31 +112,46 @@ export async function deleteDelivery(req, res) {
     });
   }
 }
-export async function generateTodayDeliveries(req, res) {
-
+  export async function generateTodayDeliveries(req, res) {
   try {
 
     const result =
-        await generateTodayDeliveriesService();
+      await generateTodayDeliveriesService();
 
-        res.json({
-        success: true,
-        message:
-            "Today's subscription deliveries generated successfully.",
-        generated: result.created.length,
-        skipped: result.skipped,
-        deliveries: result.created,
-        });
+    res.json({
+  success: true,
+
+  message:
+    "Today's subscription deliveries generated successfully.",
+
+  generated:
+    result.created.length,
+
+  updated:
+    result.updated.length,
+
+  skipped:
+    result.skipped,
+
+  deliveries:
+    result.created,
+
+  updatedDeliveries:
+    result.updated,
+});
 
   } catch (err) {
+
+    console.error(
+      "Generate Deliveries Error:",
+      err
+    );
 
     res.status(500).json({
       success: false,
       message: err.message,
     });
-
   }
-
 }
 export async function assignSubscriptionDelivery(req, res) {
   try {

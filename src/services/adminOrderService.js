@@ -29,7 +29,7 @@ export async function updateOrderStatus(id, status) {
 }
 export async function updatePaymentStatus(
   orderId,
-  paymentStatus
+  payment
 ) {
   const res = await fetch(
     `${API_URL}/orders/${orderId}/payment`,
@@ -38,9 +38,7 @@ export async function updatePaymentStatus(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        payment_status: paymentStatus,
-      }),
+      body: JSON.stringify(payment),
     }
   );
 
