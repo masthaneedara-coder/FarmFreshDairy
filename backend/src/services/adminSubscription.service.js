@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../config/supabase.js";
 
+
 // ======================================
 // Get All Subscriptions
 // ======================================
@@ -14,6 +15,7 @@ export async function getAllSubscriptionsService() {
   const result = [];
 
   for (const sub of subscriptions) {
+    
     // Customer
     const { data: customer } = await supabaseAdmin
       .from("customers")
@@ -27,34 +29,50 @@ export async function getAllSubscriptionsService() {
       .select("*")
       .eq("id", sub.address_id)
       .single();
+      result.push({
+        subscriptionId: sub.id,
 
-    result.push({
-      subscriptionId: sub.id,
+        customerName: customer?.full_name || "-",
 
-      customerName: customer?.full_name || "-",
+        phone: customer?.phone || "-",
 
-      phone: customer?.phone || "-",
+        product: sub.product || "Milk",
 
-      product: sub.product || "Milk",
+        qty: sub.quantity || "1",
 
-      qty: sub.quantity || "1",
+        deliveryType: sub.delivery_time,
 
-      deliveryType: sub.delivery_time,
+        monthlyAmount: sub.total_amount,
 
-      monthlyAmount: sub.total_amount,
+        // ==============================
+        // Subscription Status
+        // ==============================
+       status: sub.is_paused === true
+          ? "Paused"
+          : sub.status,
 
-      status: sub.status,
+        // Keep the original pause information
+        
 
-      startDate: sub.start_date,
+        // ==============================
+        // Pause Information
+        // ==============================
+        is_paused: sub.is_paused === true,
+        pause_from: sub.pause_from || null,
+        pause_to: sub.pause_to || null,
 
-      expireDate: sub.end_date,
+        startDate: sub.start_date,
 
-      address: address
-        ? `${address.house_no}, ${address.street}`
-        : "-",
+        expireDate: sub.end_date,
 
-      area: address?.area || "-",
-    });
+        address: address
+          ? `${address.house_no}, ${address.street}`
+          : "-",
+
+        area: address?.area || "-",
+      });
+
+ 
   }
 
   return result;
