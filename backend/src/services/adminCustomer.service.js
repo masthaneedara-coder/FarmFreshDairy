@@ -4,15 +4,14 @@ import { supabaseAdmin } from "../config/supabase.js";
 // Check whether subscription is currently paused
 // ===================================
 function isSubscriptionCurrentlyPaused(subscription) {
-  if (!subscription.is_paused) {
+  if (
+    !subscription.is_paused ||
+    !subscription.pause_from ||
+    !subscription.pause_to
+  ) {
     return false;
   }
 
-  if (!subscription.pause_from || !subscription.pause_to) {
-    return false;
-  }
-
-  // Use YYYY-MM-DD to avoid timezone problems
   const today = new Date().toISOString().split("T")[0];
 
   return (
@@ -20,15 +19,28 @@ function isSubscriptionCurrentlyPaused(subscription) {
     today <= subscription.pause_to
   );
 }
-
 // ===================================
 // Get subscription status for Admin
 // ===================================
 function getSubscriptionDisplayStatus(subscription) {
+  // Currently inside pause period
   if (isSubscriptionCurrentlyPaused(subscription)) {
     return "Paused";
   }
 
+  // Pause period has ended
+  if (
+    subscription.status === "Paused" &&
+    subscription.pause_to
+  ) {
+    const today = new Date().toISOString().split("T")[0];
+
+    if (today > subscription.pause_to) {
+      return "Active";
+    }
+  }
+
+  // Normal active subscription
   if (subscription.status === "Active") {
     return "Active";
   }
@@ -98,24 +110,20 @@ export async function getAllCustomersService() {
 // Subscription Counts
 // ===================================
 
-const activeSubscriptions =
-  subscriptions.filter(
-    (subscription) =>
-      subscription.status === "Active" &&
-      !isSubscriptionCurrentlyPaused(subscription)
-  );
+const activeSubscriptions = subscriptions.filter(
+  (subscription) =>
+    getSubscriptionDisplayStatus(subscription) === "Active"
+);
 
-const pausedSubscriptions =
-  subscriptions.filter(
-    (subscription) =>
-      isSubscriptionCurrentlyPaused(subscription)
-  );
+const pausedSubscriptions = subscriptions.filter(
+  (subscription) =>
+    getSubscriptionDisplayStatus(subscription) === "Paused"
+);
 
-const stoppedSubscriptions =
-  subscriptions.filter(
-    (subscription) =>
-      subscription.status === "Stopped"
-  );
+const stoppedSubscriptions = subscriptions.filter(
+  (subscription) =>
+    subscription.status === "Stopped"
+);
 
 
 // ===================================
