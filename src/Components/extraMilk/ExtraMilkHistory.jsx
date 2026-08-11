@@ -235,26 +235,23 @@ export default function ExtraMilkHistory({
 
             {/* Cancel */}
 
-            {item.status === "Pending" && (
+            {/* Cancel */}
 
-              <div className="mt-6">
+              {item.status === "Pending" && (
+                <div className="mt-6">
 
-                <button
-                  onClick={() =>
-                    onCancel(item.id)
-                  }
-                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl"
-                >
+                  <button
+                    type="button"
+                    onClick={() => onCancel(item.id)}
+                    className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl"
+                  >
+                    <XCircle size={18} />
 
-                  <XCircle size={18} />
+                    Cancel Request
+                  </button>
 
-                  Cancel Request
-
-                </button>
-
-              </div>
-
-            )}
+                </div>
+              )}
 
           </div>
 

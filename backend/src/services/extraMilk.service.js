@@ -5,9 +5,9 @@ import { supabaseAdmin } from "../config/supabase.js";
 // ======================================
 export async function createExtraMilkRequestService(data) {
   console.log("=================================");
-  console.log("Incoming Extra Milk Request:");
+  console.log("INCOMING EXTRA MILK DATA");
   console.log(data);
-  console.log("Estimated Amount:", data.estimated_amount);
+  console.log("Frontend estimated_amount:", data.estimated_amount);
   console.log("=================================");
 
   const insertData = {
@@ -19,15 +19,14 @@ export async function createExtraMilkRequestService(data) {
     from_date: data.from_date,
     to_date: data.to_date,
     remarks: data.remarks || null,
-
-    // IMPORTANT
     estimated_amount: Number(data.estimated_amount || 0),
-
     status: "Pending",
   };
 
-  console.log("Data going to Supabase:");
+  console.log("=================================");
+  console.log("DATA BEING INSERTED INTO SUPABASE");
   console.log(insertData);
+  console.log("=================================");
 
   const {
     data: request,
@@ -48,16 +47,18 @@ export async function createExtraMilkRequestService(data) {
     .single();
 
   if (error) {
-    console.error("Supabase Extra Milk Insert Error:", error);
+    console.error("SUPABASE INSERT ERROR:", error);
     throw error;
   }
 
-  console.log("Created Extra Milk Request:");
+  console.log("=================================");
+  console.log("SUPABASE CREATED REQUEST");
   console.log(request);
+  console.log("Saved estimated_amount:", request.estimated_amount);
+  console.log("=================================");
 
   return request;
 }
-
 // ======================================
 // Admin List
 // ======================================

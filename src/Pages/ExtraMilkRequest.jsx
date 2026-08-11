@@ -92,17 +92,19 @@ async function handleSubmit(data) {
       from_date: data.from_date,
       to_date: data.to_date,
       remarks: data.remarks || "",
+
+      // IMPORTANT
+      estimated_amount: Number(data.estimated_amount || 0),
     };
 
-    console.log("Extra Milk Payload:", payload);
+    console.log("=================================");
+    console.log("FINAL EXTRA MILK PAYLOAD:", payload);
+    console.log("Estimated Amount:", payload.estimated_amount);
+    console.log("=================================");
 
-    const response =
-      await createExtraMilkRequest(payload);
+    const response = await createExtraMilkRequest(payload);
 
-    console.log(
-      "Extra Milk API Response:",
-      response
-    );
+    console.log("Extra Milk API Response:", response);
 
     alert(
       "✅ Extra milk request submitted successfully!"
@@ -136,17 +138,49 @@ async function loadHistory() {
 
  
 async function handleCancel(id) {
+  try {
+    if (!id) {
+      alert("Invalid request ID.");
+      return;
+    }
 
-  const ok = window.confirm(
-    "Cancel this request?"
-  );
+    const ok = window.confirm(
+      "Are you sure you want to cancel this extra milk request?"
+    );
 
-  if (!ok) return;
+    if (!ok) return;
 
-  await cancelExtraMilkRequest(id);
+    setLoading(true);
 
-  loadHistory();
+    console.log("Cancelling Extra Milk Request:", id);
 
+    const response = await cancelExtraMilkRequest(id);
+
+    console.log(
+      "Cancel API Response:",
+      response
+    );
+
+    alert(
+      "✅ Extra milk request cancelled successfully."
+    );
+
+    await loadHistory();
+
+  } catch (error) {
+    console.error(
+      "Cancel Extra Milk Error:",
+      error
+    );
+
+    alert(
+      error?.message ||
+        "❌ Unable to cancel extra milk request."
+    );
+
+  } finally {
+    setLoading(false);
+  }
 }
 // useEffect(() => {
 

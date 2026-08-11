@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 
-const SIZE_OPTIONS = [
-  { value: "250ml", label: "250 ml" },
-  { value: "500ml", label: "500 ml" },
-  { value: "1L", label: "1 L" },
-  { value: "2L", label: "2 L" },
-];
-
 export default function ExtraMilkForm({
   products = [],
   loading = false,
@@ -14,7 +7,7 @@ export default function ExtraMilkForm({
 }) {
   const [form, setForm] = useState({
     product_id: "",
-    size: "500ml",
+    size: "",
     quantity: 1,
     from_date: "",
     to_date: "",
@@ -23,9 +16,24 @@ export default function ExtraMilkForm({
 
   const [errors, setErrors] = useState({});
 
-  // Auto set today's date
+  // =========================================================
+  // Today's date - local date
+  // =========================================================
+  function getTodayLocal() {
+    const today = new Date();
+
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  // =========================================================
+  // Set today's date
+  // =========================================================
   useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayLocal();
 
     setForm((prev) => ({
       ...prev,
@@ -34,19 +42,90 @@ export default function ExtraMilkForm({
     }));
   }, []);
 
+  // =========================================================
   // Selected Product
+  // =========================================================
   const selectedProduct = useMemo(() => {
-    return products.find(
-      (p) => p.id === form.product_id
+    const product = products.find(
+      (p) => String(p.id) === String(form.product_id)
     );
+
+    console.log("SELECTED PRODUCT:", product);
+
+    return product || null;
   }, [products, form.product_id]);
 
-  // Estimate Days
-  const duration = useMemo(() => {
-    if (!form.from_date || !form.to_date) return 0;
+  // =========================================================
+  // Available Sizes
+  // =========================================================
+  const availableSizes = useMemo(() => {
+    if (!selectedProduct?.product_sizes) {
+      return [];
+    }
 
-    const from = new Date(form.from_date);
-    const to = new Date(form.to_date);
+    return selectedProduct.product_sizes.filter(
+      (size) => size.is_active !== false
+    );
+  }, [selectedProduct]);
+
+  // =========================================================
+  // Automatically select first available size
+  // =========================================================
+  useEffect(() => {
+    if (!selectedProduct) {
+      return;
+    }
+
+    if (availableSizes.length === 0) {
+      setForm((prev) => ({
+        ...prev,
+        size: "",
+      }));
+
+      return;
+    }
+
+    const currentSizeExists = availableSizes.some(
+      (size) =>
+        size.label?.trim().toLowerCase() ===
+        form.size?.trim().toLowerCase()
+    );
+
+    if (!currentSizeExists) {
+      setForm((prev) => ({
+        ...prev,
+        size: availableSizes[0].label,
+      }));
+    }
+  }, [selectedProduct, availableSizes]);
+
+  // =========================================================
+  // Selected Size
+  // =========================================================
+  const selectedSize = useMemo(() => {
+    if (!selectedProduct || !form.size) {
+      return null;
+    }
+
+    return (
+      selectedProduct.product_sizes?.find(
+        (size) =>
+          size.label?.trim().toLowerCase() ===
+          form.size.trim().toLowerCase()
+      ) || null
+    );
+  }, [selectedProduct, form.size]);
+
+  // =========================================================
+  // Duration
+  // =========================================================
+  const duration = useMemo(() => {
+    if (!form.from_date || !form.to_date) {
+      return 0;
+    }
+
+    const from = new Date(`${form.from_date}T00:00:00`);
+    const to = new Date(`${form.to_date}T00:00:00`);
 
     const diff =
       (to - from) / (1000 * 60 * 60 * 24);
@@ -54,62 +133,90 @@ export default function ExtraMilkForm({
     return diff >= 0 ? diff + 1 : 0;
   }, [form.from_date, form.to_date]);
 
-  // Estimate Cost
+  // =========================================================
+  // Estimated Cost
+  // =========================================================
   const estimatedCost = useMemo(() => {
-    if (!selectedProduct) return 0;
-
-    let rate = 0;
-
-    switch (form.size) {
-      case "250ml":
-        rate = selectedProduct.price_250ml || 0;
-        break;
-
-      case "500ml":
-        rate = selectedProduct.price_500ml || 0;
-        break;
-
-      case "1L":
-        rate = selectedProduct.price_1l || 0;
-        break;
-
-      case "2L":
-        rate = selectedProduct.price_2l || 0;
-        break;
-
-      default:
-        rate = 0;
+    if (!selectedSize) {
+      return 0;
     }
 
-    return rate * duration * Number(form.quantity);
+    const rate = Number(selectedSize.price || 0);
+    const quantity = Number(form.quantity || 0);
+
+    const total = rate * duration * quantity;
+
+    console.log("================================");
+    console.log("Extra Milk Calculation");
+    console.log("Product:", selectedProduct?.name);
+    console.log("Size:", selectedSize?.label);
+    console.log("Rate:", rate);
+    console.log("Quantity:", quantity);
+    console.log("Duration:", duration);
+    console.log("Estimated Cost:", total);
+    console.log("================================");
+
+    return total;
   }, [
-    selectedProduct,
-    form.size,
+    selectedSize,
     form.quantity,
     duration,
+    selectedProduct,
   ]);
 
+  // =========================================================
+  // Input Change
+  // =========================================================
+  function updateForm(field, value) {
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+
+    // Remove error for field
+    setErrors((prev) => ({
+      ...prev,
+      [field]: "",
+    }));
+  }
+
+  // =========================================================
+  // Validation
+  // =========================================================
   function validate() {
     const e = {};
 
-    if (!form.product_id)
-      e.product = "Select a product";
+    if (!form.product_id) {
+      e.product = "Please select a product";
+    }
 
-    if (Number(form.quantity) <= 0)
+    if (!form.size) {
+      e.size = "Please select a size";
+    }
+
+    if (Number(form.quantity) <= 0) {
       e.quantity = "Invalid quantity";
+    }
 
-    if (!form.from_date)
-      e.from_date = "Required";
+    if (!form.from_date) {
+      e.from_date = "Please select from date";
+    }
 
-    if (!form.to_date)
-      e.to_date = "Required";
+    if (!form.to_date) {
+      e.to_date = "Please select end date";
+    }
 
     if (
-      new Date(form.to_date) <
-      new Date(form.from_date)
+      form.from_date &&
+      form.to_date &&
+      form.to_date < form.from_date
     ) {
       e.to_date =
-        "To Date cannot be before From Date";
+        "End Date cannot be before From Date";
+    }
+
+    if (!selectedSize) {
+      e.size = "Price not available for selected size";
     }
 
     setErrors(e);
@@ -117,26 +224,34 @@ export default function ExtraMilkForm({
     return Object.keys(e).length === 0;
   }
 
+  // =========================================================
+  // Submit
+  // =========================================================
   async function submit(e) {
     e.preventDefault();
 
-    if (!validate()) return;
+    if (!validate()) {
+      return;
+    }
 
-    await onSubmit(form);
+    const payload = {
+      ...form,
+      quantity: Number(form.quantity),
+      estimated_amount: Number(estimatedCost),
+    };
+
+    console.log("EXTRA MILK FORM PAYLOAD:", payload);
+
+    await onSubmit(payload);
   }
- 
 
   return (
-    <form
-      onSubmit={submit}
-      className="bg-white rounded-2xl shadow-lg p-6"
-    >
-      <h2 className="text-2xl font-bold mb-6">
-        🥛 Extra Milk Request
-      </h2>
+    <form onSubmit={submit} className="space-y-5">
 
-      {/* Product */}
-      <div className="mb-5">
+      {/* =====================================================
+          Product
+      ====================================================== */}
+      <div>
         <label className="font-medium">
           Product
         </label>
@@ -144,23 +259,27 @@ export default function ExtraMilkForm({
         <select
           className="w-full mt-2 border rounded-xl p-3"
           value={form.product_id}
-          onChange={(e) =>
-            setForm({
-              ...form,
+          onChange={(e) => {
+            updateForm("product_id", e.target.value);
+
+            // Reset size when product changes
+            setForm((prev) => ({
+              ...prev,
               product_id: e.target.value,
-            })
-          }
+              size: "",
+            }));
+          }}
         >
           <option value="">
             Select Product
           </option>
 
-          {products.map((p) => (
+          {products.map((product) => (
             <option
-              key={p.id}
-              value={p.id}
+              key={product.id}
+              value={product.id}
             >
-              {p.name}
+              {product.name}
             </option>
           ))}
         </select>
@@ -172,9 +291,12 @@ export default function ExtraMilkForm({
         )}
       </div>
 
-      {/* Size & Quantity */}
-      <div className="grid md:grid-cols-2 gap-5">
+      {/* =====================================================
+          Size + Quantity
+      ====================================================== */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
+        {/* SIZE */}
         <div>
           <label className="font-medium">
             Size
@@ -184,23 +306,35 @@ export default function ExtraMilkForm({
             className="w-full mt-2 border rounded-xl p-3"
             value={form.size}
             onChange={(e) =>
-              setForm({
-                ...form,
-                size: e.target.value,
-              })
+              updateForm("size", e.target.value)
             }
+            disabled={!selectedProduct}
           >
-            {SIZE_OPTIONS.map((s) => (
-              <option
-                key={s.value}
-                value={s.value}
-              >
-                {s.label}
+            {!selectedProduct && (
+              <option value="">
+                Select Product First
               </option>
-            ))}
+            )}
+
+            {selectedProduct &&
+              availableSizes.map((size) => (
+                <option
+                  key={size.id}
+                  value={size.label}
+                >
+                  {size.label} - ₹{size.price}
+                </option>
+              ))}
           </select>
+
+          {errors.size && (
+            <p className="text-red-500 text-sm mt-1">
+              {errors.size}
+            </p>
+          )}
         </div>
 
+        {/* QUANTITY */}
         <div>
           <label className="font-medium">
             Quantity
@@ -210,35 +344,34 @@ export default function ExtraMilkForm({
 
             <button
               type="button"
-              className="w-10 h-10 bg-gray-200 rounded-l-xl"
+              className="w-12 h-12 bg-gray-200 rounded-l-xl text-lg font-bold"
               onClick={() =>
-                setForm({
-                  ...form,
-                  quantity: Math.max(
+                updateForm(
+                  "quantity",
+                  Math.max(
                     1,
                     Number(form.quantity) - 1
-                  ),
-                })
+                  )
+                )
               }
             >
-              -
+              −
             </button>
 
             <input
-              className="w-full border-y h-10 text-center"
+              className="flex-1 border-y h-12 text-center"
               value={form.quantity}
               readOnly
             />
 
             <button
               type="button"
-              className="w-10 h-10 bg-gray-200 rounded-r-xl"
+              className="w-12 h-12 bg-gray-200 rounded-r-xl text-lg font-bold"
               onClick={() =>
-                setForm({
-                  ...form,
-                  quantity:
-                    Number(form.quantity) + 1,
-                })
+                updateForm(
+                  "quantity",
+                  Number(form.quantity) + 1
+                )
               }
             >
               +
@@ -246,89 +379,130 @@ export default function ExtraMilkForm({
 
           </div>
 
+          {errors.quantity && (
+            <p className="text-red-500 text-sm mt-1">
+              {errors.quantity}
+            </p>
+          )}
         </div>
 
       </div>
 
-      {/* Dates */}
-      <div className="grid md:grid-cols-2 gap-5 mt-5">
+      {/* =====================================================
+          Dates
+      ====================================================== */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
+        {/* FROM */}
         <div>
-          <label>From Date</label>
+          <label className="font-medium">
+            From Date
+          </label>
 
           <input
             type="date"
             className="w-full mt-2 border rounded-xl p-3"
             value={form.from_date}
             onChange={(e) =>
-              setForm({
-                ...form,
-                from_date: e.target.value,
-              })
+              updateForm(
+                "from_date",
+                e.target.value
+              )
             }
           />
+
+          {errors.from_date && (
+            <p className="text-red-500 text-sm mt-1">
+              {errors.from_date}
+            </p>
+          )}
         </div>
 
+        {/* TO */}
         <div>
-          <label>End Date</label>
+          <label className="font-medium">
+            End Date
+          </label>
 
           <input
             type="date"
             className="w-full mt-2 border rounded-xl p-3"
             value={form.to_date}
             onChange={(e) =>
-              setForm({
-                ...form,
-                to_date: e.target.value,
-              })
+              updateForm(
+                "to_date",
+                e.target.value
+              )
             }
           />
+
+          {errors.to_date && (
+            <p className="text-red-500 text-sm mt-1">
+              {errors.to_date}
+            </p>
+          )}
         </div>
 
       </div>
 
-      {/* Duration */}
-      <div className="mt-5 bg-green-50 rounded-xl p-4">
+      {/* =====================================================
+          Duration + Estimated Cost
+      ====================================================== */}
+      <div className="bg-green-50 rounded-xl p-4">
 
         <p>
-          <strong>Duration:</strong> {duration} Day(s)
+          <strong>Duration:</strong>{" "}
+          {duration} Day(s)
         </p>
 
         <p className="mt-2">
-          <strong>Estimated Cost:</strong> ₹
-          {estimatedCost}
+          <strong>Rate:</strong>{" "}
+          ₹{selectedSize?.price || 0}
+        </p>
+
+        <p className="mt-2">
+          <strong>Estimated Cost:</strong>{" "}
+          <span className="text-green-700 font-bold">
+            ₹{estimatedCost}
+          </span>
         </p>
 
       </div>
 
-      {/* Remarks */}
-      <div className="mt-5">
-
-        <label>Remarks</label>
+      {/* =====================================================
+          Remarks
+      ====================================================== */}
+      <div>
+        <label className="font-medium">
+          Remarks
+        </label>
 
         <textarea
           rows={4}
           className="w-full mt-2 border rounded-xl p-3"
           value={form.remarks}
           onChange={(e) =>
-            setForm({
-              ...form,
-              remarks: e.target.value,
-            })
+            updateForm(
+              "remarks",
+              e.target.value
+            )
           }
           placeholder="Optional remarks..."
         />
-
       </div>
 
-      {/* Submit */}
+      {/* =====================================================
+          Submit
+      ====================================================== */}
       <button
-      type="submit"
-      disabled={loading}
-      className="mt-6 w-full bg-green-700 hover:bg-green-800 text-white py-3 rounded-xl font-semibold"
-    >
-      {loading ? "Submitting..." : "Submit Request"}
-    </button>
+        type="submit"
+        disabled={loading}
+        className="w-full bg-green-700 hover:bg-green-800 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold"
+      >
+        {loading
+          ? "Submitting..."
+          : "Submit Request"}
+      </button>
 
     </form>
   );
