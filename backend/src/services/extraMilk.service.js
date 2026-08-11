@@ -1,26 +1,59 @@
 import { supabaseAdmin } from "../config/supabase.js";
 
 // ======================================
-// Create Request
+// Create Extra Milk Request
 // ======================================
 export async function createExtraMilkRequestService(data) {
+  console.log("=================================");
+  console.log("Incoming Extra Milk Request:");
+  console.log(data);
+  console.log("Estimated Amount:", data.estimated_amount);
+  console.log("=================================");
 
-  console.log("Incoming Request:", data);
+  const insertData = {
+    customer_id: data.customer_id,
+    subscription_id: data.subscription_id,
+    product_id: data.product_id,
+    quantity: Number(data.quantity || 1),
+    size: data.size,
+    from_date: data.from_date,
+    to_date: data.to_date,
+    remarks: data.remarks || null,
 
-  const { data: request, error } = await supabaseAdmin
+    // IMPORTANT
+    estimated_amount: Number(data.estimated_amount || 0),
+
+    status: "Pending",
+  };
+
+  console.log("Data going to Supabase:");
+  console.log(insertData);
+
+  const {
+    data: request,
+    error,
+  } = await supabaseAdmin
     .from("extra_milk_requests")
-    .insert([data])
+    .insert(insertData)
     .select(`
       *,
-      customers(full_name, phone),
-      products(name)
+      customers(
+        full_name,
+        phone
+      ),
+      products(
+        name
+      )
     `)
     .single();
 
   if (error) {
-    console.error("Supabase Error:", error);
+    console.error("Supabase Extra Milk Insert Error:", error);
     throw error;
   }
+
+  console.log("Created Extra Milk Request:");
+  console.log(request);
 
   return request;
 }
@@ -210,41 +243,63 @@ export async function approveExtraMilkService(id) {
     return approvedRequest;
   }
 
-  // ======================================
-  // 7. Get Product Price
-  // ======================================
-  const {
-    data: product,
-    error: productError,
-  } = await supabaseAdmin
-    .from("products")
-    .select(`
-      id,
-      name,
-      price,
-      offer_price
-    `)
-    .eq("id", request.product_id)
-    .single();
+ // ======================================
+// 7. Get Product Size Price
+// ======================================
+const {
+  data: productSize,
+  error: productSizeError,
+} = await supabaseAdmin
+  .from("product_sizes")
+  .select(`
+    id,
+    product_id,
+    label,
+    price,
+    is_active
+  `)
+  .eq("product_id", request.product_id)
+  .eq("is_active", true)
+  .ilike("label", request.size)
+  .maybeSingle();
+
+if (productSizeError) {
+  throw productSizeError;
+}
+
+if (!productSize) {
+  throw new Error(
+    `Price not found for ${request.size}`
+  );
+}
+
+console.log("Extra Milk Size:", productSize.label);
+console.log("Extra Milk Unit Price:", productSize.price);
 
   if (productError) {
     throw productError;
   }
 
-  // ======================================
-  // 8. Calculate Price
-  // ======================================
-  const unitPrice = Number(
-    product.offer_price ??
-    product.price ??
-    0
-  );
+ // ======================================
+// 8. Calculate Price
+// ======================================
+const unitPrice = Number(
+  productSize.price || 0
+);
 
-  const quantity =
-    Number(request.quantity || 0);
+const quantity =
+  Number(request.quantity || 0);
 
-  const totalPrice =
-    quantity * unitPrice;
+const totalPrice =
+  quantity * unitPrice;
+
+console.log("=================================");
+console.log("EXTRA MILK DELIVERY PRICE");
+console.log("Size:", request.size);
+console.log("Unit Price:", unitPrice);
+console.log("Quantity:", quantity);
+console.log("Total:", totalPrice);
+console.log("=================================");
 
   // ======================================
   // 9. Insert Extra Delivery Item

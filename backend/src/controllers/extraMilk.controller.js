@@ -11,31 +11,33 @@ import {
 // Create
 // ======================================
 export async function createExtraMilkRequest(req, res) {
-
   try {
-
-    console.log(req.body);
+    console.log("=================================");
+    console.log("CREATE EXTRA MILK REQUEST");
+    console.log("Request Body:", req.body);
+    console.log(
+      "Estimated Amount:",
+      req.body.estimated_amount
+    );
+    console.log("=================================");
 
     const request =
       await createExtraMilkRequestService(req.body);
 
     res.status(201).json({
       success: true,
+      message: "Extra milk request created successfully.",
       request,
     });
 
   } catch (err) {
-
-    console.error(err);
+    console.error("Create Extra Milk Error:", err);
 
     res.status(500).json({
       success: false,
       message: err.message,
-      error: err,
     });
-
   }
-
 }
 
 // ======================================
