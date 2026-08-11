@@ -4,6 +4,7 @@ import {
   getCustomerExtraMilkService,
   approveExtraMilkService,
   rejectExtraMilkService,
+  cancelExtraMilkService
 } from "../services/extraMilk.service.js";
 
 // ======================================
@@ -136,25 +137,29 @@ export async function rejectExtraMilk(req, res) {
 
   }
 }
+// ======================================
+// Cancel Extra Milk
+// ======================================
 export async function cancelExtraMilk(req, res) {
   try {
+    const { id } = req.params;
 
-    const request =
-      await cancelExtraMilkService(
-        req.params.id
-      );
+    console.log("Cancelling Extra Milk Request:", id);
 
-    res.json({
+    const request = await cancelExtraMilkService(id);
+
+    res.status(200).json({
       success: true,
+      message: "Extra milk request cancelled successfully.",
       request,
     });
 
   } catch (err) {
-  console.error("Create Extra Milk Error:", err);
+    console.error("Cancel Extra Milk Error:", err);
+
     res.status(500).json({
       success: false,
       message: err.message,
     });
-
   }
 }
