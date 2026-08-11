@@ -69,21 +69,61 @@ if (
 
   }
 
- async function handleSubmit(data) {
+async function handleSubmit(data) {
+  try {
+    if (!customer?.id) {
+      alert("Please login again.");
+      return;
+    }
 
-  console.log("Form Data:", data);
+    if (!subscription?.id) {
+      alert("No active milk subscription found.");
+      return;
+    }
 
-  console.log("Subscription:", subscription);
+    setLoading(true);
 
-  const payload = {
-    customer_id: customer.id,
-    subscription_id: subscription.id,
-    ...data,
-  };
+    const payload = {
+      customer_id: customer.id,
+      subscription_id: subscription.id,
+      product_id: data.product_id,
+      size: data.size,
+      quantity: Number(data.quantity),
+      from_date: data.from_date,
+      to_date: data.to_date,
+      remarks: data.remarks || "",
+    };
 
-  console.log("Payload:", payload);
+    console.log("Extra Milk Payload:", payload);
 
-  await createExtraMilkRequest(payload);
+    const response =
+      await createExtraMilkRequest(payload);
+
+    console.log(
+      "Extra Milk API Response:",
+      response
+    );
+
+    alert(
+      "✅ Extra milk request submitted successfully!"
+    );
+
+    await loadHistory();
+
+  } catch (error) {
+    console.error(
+      "Extra Milk Request Error:",
+      error
+    );
+
+    alert(
+      error?.message ||
+        "❌ Failed to submit extra milk request."
+    );
+
+  } finally {
+    setLoading(false);
+  }
 }
 async function loadHistory() {
 

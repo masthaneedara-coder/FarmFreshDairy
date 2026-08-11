@@ -124,31 +124,7 @@ export default function ExtraMilkForm({
 
     await onSubmit(form);
   }
-  async function handleSubmit(data) {
-
-  console.log("handleSubmit called");
-
-  console.log(data);
-
-  console.log(subscription);
-
-  try {
-
-    const res = await createExtraMilkRequest({
-      customer_id: customer.id,
-      subscription_id: subscription.id,
-      ...data,
-    });
-
-    console.log("API Response:", res);
-
-  } catch (err) {
-
-    console.error("API Error:", err);
-
-  }
-
-}
+ 
 
   return (
     <form
@@ -347,13 +323,12 @@ export default function ExtraMilkForm({
 
       {/* Submit */}
       <button
-        disabled={loading}
-        className="mt-6 w-full bg-green-700 hover:bg-green-800 text-white py-3 rounded-xl font-semibold"
-      >
-        {loading
-          ? "Submitting..."
-          : "Submit Request"}
-      </button>
+      type="submit"
+      disabled={loading}
+      className="mt-6 w-full bg-green-700 hover:bg-green-800 text-white py-3 rounded-xl font-semibold"
+    >
+      {loading ? "Submitting..." : "Submit Request"}
+    </button>
 
     </form>
   );
