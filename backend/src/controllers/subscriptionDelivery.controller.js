@@ -6,7 +6,8 @@ import {
   updateDeliveryStatusService,
   deleteDeliveryService,
   assignSubscriptionDeliveryService,
-  getCustomerDeliverySummaryService
+  getCustomerDeliverySummaryService,
+  bulkAssignSubscriptionDeliveriesService
 } from "../services/subscriptionDelivery.service.js";
 
 
@@ -191,5 +192,59 @@ export async function getCustomerDeliverySummary(req, res) {
       success: false,
       message: err.message,
     });
+  }
+}
+export async function bulkAssignSubscriptionDeliveries(
+  req,
+  res
+) {
+  try {
+
+    const {
+      delivery_ids,
+      delivery_boy_id,
+    } = req.body;
+
+    if (
+      !Array.isArray(delivery_ids) ||
+      delivery_ids.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "No deliveries selected.",
+      });
+    }
+
+    if (!delivery_boy_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Delivery boy is required.",
+      });
+    }
+
+    const data =
+      await bulkAssignSubscriptionDeliveriesService(
+        delivery_ids,
+        delivery_boy_id
+      );
+
+    return res.json({
+      success: true,
+      message: "Deliveries assigned successfully.",
+      deliveries: data,
+    });
+
+  } catch (err) {
+
+    console.error(
+      "Bulk Assign Error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+
   }
 }

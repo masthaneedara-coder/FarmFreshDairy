@@ -662,3 +662,42 @@ export async function getCustomerDeliverySummaryService(customerId) {
 
   return summary;
 }
+export async function bulkAssignSubscriptionDeliveriesService(
+  deliveryIds,
+  deliveryBoyId
+) {
+
+  const {
+    data,
+    error,
+  } = await supabaseAdmin
+    .from("subscription_deliveries")
+    .update({
+      delivery_boy_id: deliveryBoyId,
+      status: "Assigned",
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", deliveryIds)
+    .select(`
+      id,
+      delivery_number,
+      delivery_boy_id,
+      status,
+      customers(
+        id,
+        full_name,
+        phone
+      ),
+      delivery_boys(
+        id,
+        full_name,
+        phone
+      )
+    `);
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}

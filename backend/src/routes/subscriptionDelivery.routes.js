@@ -6,7 +6,8 @@ import {
   assignSubscriptionDelivery,
   updateDeliveryStatus,
   deleteDelivery,
-  getCustomerDeliverySummary
+  getCustomerDeliverySummary,
+  bulkAssignSubscriptionDeliveries
 } from "../controllers/subscriptionDelivery.controller.js";
 
 const router = express.Router();
@@ -19,6 +20,10 @@ router.get(
   getCustomerDeliverySummary
 );
 router.get("/:id", getDeliveryById);
+router.put(
+  "/bulk-assign",
+  bulkAssignSubscriptionDeliveries
+);
 
 router.put("/:id/assign", assignSubscriptionDelivery);
 
