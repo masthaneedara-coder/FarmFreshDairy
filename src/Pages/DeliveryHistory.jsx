@@ -3,6 +3,9 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  getDeliveryBoyHistory,
+} from "../config/deliveryBoyApi";
 
 import {
   Search,
@@ -15,9 +18,7 @@ import {
   IndianRupee,
 } from "lucide-react";
 
-import {
-  getDeliveryBoyHistory,
-} from "../config/deliveryBoyApi";
+
 
 
 export default function DeliveryHistory() {
