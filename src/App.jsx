@@ -40,7 +40,7 @@ import AdminCustomerDetails from "./Pages/AdminCustomerDetails";
 import AdminSubscriptionDeliveries from "./Pages/AdminSubscriptionDeliveries";
 import AdminMonthlyReport from "./Pages/AdminMonthlyReport";
 import AdminExtraMilk from "./Pages/AdminExtraMilk";
-import DeliveryHistory from "./pages/DeliveryHistory";
+import DeliveryHistory from "./Pages/DeliveryHistory";
 
 /* Delivery */
 import DeliveryLogin from "./Pages/DeliveryLogin";
