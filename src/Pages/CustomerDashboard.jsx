@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ExtraMilkCard from "../Components/ExtraMilkCard";
 import {
   Milk,
   PlusCircle
@@ -305,37 +306,8 @@ const handlePauseConfirm = async (
                 color="pink"
               />
         </div>
-        <div
-    onClick={() => navigate("/extra-milk")}
-    className="cursor-pointer bg-white rounded-2xl shadow hover:shadow-lg transition p-6 border border-green-100"
->
-
-    <div className="flex justify-between items-center">
-
-        <div>
-
-            <h3 className="text-lg font-bold">
-                Extra Milk
-            </h3>
-
-            <p className="text-gray-500 mt-2">
-                Request temporary extra milk
-            </p>
-
-        </div>
-
-        <div className="bg-green-100 p-4 rounded-full">
-
-            <Milk
-                className="text-green-700"
-                size={30}
-            />
-
-        </div>
-
-    </div>
-
-</div>
+     <ExtraMilkCard navigate={navigate} />
+     
 
         {/* SUBSCRIPTIONS LIST */}
           <div className="mt-8 bg-white rounded-3xl shadow-lg border border-green-100 overflow-hidden">
