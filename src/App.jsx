@@ -40,6 +40,7 @@ import AdminCustomerDetails from "./Pages/AdminCustomerDetails";
 import AdminSubscriptionDeliveries from "./Pages/AdminSubscriptionDeliveries";
 import AdminMonthlyReport from "./Pages/AdminMonthlyReport";
 import AdminExtraMilk from "./Pages/AdminExtraMilk";
+import DeliveryHistory from "./pages/DeliveryHistory";
 
 /* Delivery */
 import DeliveryLogin from "./Pages/DeliveryLogin";
@@ -274,6 +275,10 @@ export default function App() {
       path="/admin/extra-milk"
       element={<AdminExtraMilk />}
     />
+    <Route
+    path="/delivery/history"
+    element={<DeliveryHistory />}
+  />
       </Routes>
     
       
