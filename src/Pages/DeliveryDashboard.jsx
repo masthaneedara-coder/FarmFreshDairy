@@ -72,7 +72,32 @@ const loadDeliveries = async () => {
     setLoading(false);
   }
 };
+const handleNavigate = (delivery) => {
+  const address = [
+    delivery.address?.house_no,
+    delivery.address?.street,
+    delivery.address?.area,
+    delivery.address?.city,
+    delivery.address?.state,
+    delivery.address?.pincode,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
+  if (!address) {
+    alert("Customer delivery address is not available.");
+    return;
+  }
+
+  const destination = encodeURIComponent(address);
+
+  const mapsUrl =
+    `https://www.google.com/maps/dir/?api=1` +
+    `&destination=${destination}` +
+    `&travelmode=driving`;
+
+  window.open(mapsUrl, "_blank");
+};
 
 // addNotification({
 //   title: "Out for Delivery",
@@ -627,18 +652,29 @@ const filteredDeliveries = deliveries.filter((d) => {
 
             </div>
 
-            <a
-            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-            `${delivery.address?.house_no ?? ""} ${delivery.address?.street ?? ""} ${delivery.address?.area ?? ""}`
-            )}`}
-            target="_blank"
-            rel="noreferrer"
-            className="block text-center mt-3 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-semibold"
-            >
-
-            🗺 Navigate
-
-            </a>
+            <button
+                type="button"
+                onClick={() => handleNavigate(delivery)}
+                className="
+                  w-full
+                  mt-3
+                  bg-orange-500
+                  hover:bg-orange-600
+                  active:scale-[0.98]
+                  text-white
+                  py-3
+                  rounded-xl
+                  font-bold
+                  transition-all
+                  duration-200
+                  flex
+                  items-center
+                  justify-center
+                  gap-2
+                "
+              >
+                🗺️ Navigate to Customer
+              </button>
 
             </div>
 

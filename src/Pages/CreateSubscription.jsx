@@ -3,7 +3,10 @@ import { useNavigate } from "react-router-dom";
 import {
   fetchProducts,
   fetchCustomerAddresses,
+  createAddress
 } from "../config/api";
+import LocationButton from "../Components/LocationButton";
+import AddressForm from "../Components/AddressForm";
 
 const PRICE_MAP = {
   "500ml": 1350,
@@ -23,6 +26,11 @@ export default function CreateSubscription() {
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   const [addresses, setAddresses] = useState([]);
+  const [showAddressForm, setShowAddressForm] =
+  useState(false);
+
+const [editingAddress, setEditingAddress] =
+  useState(null);
 
   const [form, setForm] = useState({
     size: "1L",
@@ -82,7 +90,94 @@ const monthlyAmount = useMemo(() => {
       setLoading(false);
     }
   }
+function handleAddAddress() {
+  setEditingAddress(null);
+  setShowAddressForm(true);
+}
+function handleLocationFound(location) {
+  console.log(
+    "Current location detected:",
+    location
+  );
 
+  setEditingAddress({
+    ...location,
+    is_default: false,
+  });
+
+  setShowAddressForm(true);
+}
+async function handleSaveAddress(addressData) {
+  try {
+    const customer = JSON.parse(
+      localStorage.getItem("customer")
+    );
+
+    if (!customer?.id) {
+      alert("Please login again.");
+      return;
+    }
+
+    const response = await createAddress({
+      ...addressData,
+      customer_id: customer.id,
+    });
+
+    console.log(
+      "Created address:",
+      response
+    );
+
+    // Reload addresses
+    const result =
+      await fetchCustomerAddresses(
+        customer.id
+      );
+
+    const list =
+      result.addresses || [];
+
+    setAddresses(list);
+
+    // Try to identify newly created address
+    const newAddress =
+      response?.address ||
+      response?.data ||
+      response;
+
+    if (newAddress?.id) {
+      updateForm(
+        "addressId",
+        newAddress.id
+      );
+    } else {
+      // fallback: select latest address
+      const latest =
+        list[list.length - 1];
+
+      if (latest?.id) {
+        updateForm(
+          "addressId",
+          latest.id
+        );
+      }
+    }
+
+    setShowAddressForm(false);
+    setEditingAddress(null);
+
+  } catch (error) {
+    console.error(
+      "Create address error:",
+      error
+    );
+
+    alert(
+      error?.message ||
+      "Failed to create address."
+    );
+  }
+}
 async function loadProducts() {
   try {
     const list = await fetchProducts();
@@ -401,63 +496,266 @@ async function loadProducts() {
 
         {/* Address */}
 
-        <div>
+       {/* =====================================
+    DELIVERY ADDRESS
+===================================== */}
 
-          <label className="block font-semibold mb-3">
-            Delivery Address
-          </label>
+<div>
 
-          <select
-            value={form.addressId}
-            onChange={(e)=>updateForm("addressId",e.target.value)}
-            className="w-full rounded-xl border px-4 py-3"
-          >
+  <label className="block font-semibold mb-3">
+    Delivery Address
+  </label>
 
-            <option value="">
-              Select Delivery Address
-            </option>
 
-            {addresses.map(address=>(
+  {/* Existing Addresses */}
 
-              <option
-                key={address.id}
-                value={address.id}
+  <select
+    value={form.addressId}
+    onChange={(e) =>
+      updateForm(
+        "addressId",
+        e.target.value
+      )
+    }
+    className="
+      w-full
+      rounded-2xl
+      border
+      border-gray-200
+      px-4
+      py-4
+      bg-white
+      text-gray-700
+      outline-none
+      focus:ring-2
+      focus:ring-green-200
+      focus:border-green-500
+    "
+  >
+
+    <option value="">
+      Select Delivery Address
+    </option>
+
+    {addresses.map((address) => (
+
+      <option
+        key={address.id}
+        value={address.id}
+      >
+
+        {[
+          address.house_no,
+          address.street,
+          address.area,
+          address.city,
+        ]
+          .filter(Boolean)
+          .join(", ")}
+
+      </option>
+
+    ))}
+
+  </select>
+
+
+  {/* =====================================
+      ADDRESS ACTIONS
+  ====================================== */}
+
+  <div
+    className="
+      grid
+      grid-cols-1
+      sm:grid-cols-2
+      gap-3
+      mt-3
+    "
+  >
+
+    {/* Add New Address */}
+
+    <button
+      type="button"
+      onClick={handleAddAddress}
+      className="
+        flex
+        items-center
+        justify-center
+        gap-2
+        px-4
+        py-3
+        rounded-2xl
+        border-2
+        border-green-200
+        bg-green-50
+        text-green-700
+        font-bold
+        hover:bg-green-100
+        active:scale-[0.98]
+        transition
+      "
+    >
+
+      <span className="text-lg">
+        +
+      </span>
+
+      Add New Address
+
+    </button>
+
+
+    {/* Current Location */}
+
+    <LocationButton
+      onLocationFound={
+        handleLocationFound
+      }
+    />
+
+  </div>
+
+
+  {/* Selected Address Preview */}
+
+  {form.addressId && (
+    <div
+      className="
+        mt-4
+        rounded-2xl
+        bg-green-50
+        border
+        border-green-200
+        p-4
+      "
+    >
+
+      {(() => {
+
+        const selected =
+          addresses.find(
+            (a) =>
+              String(a.id) ===
+              String(form.addressId)
+          );
+
+        if (!selected)
+          return null;
+
+        return (
+          <>
+
+            <div
+              className="
+                flex
+                items-start
+                gap-3
+              "
+            >
+
+              <div
+                className="
+                  w-10
+                  h-10
+                  rounded-xl
+                  bg-green-100
+                  flex
+                  items-center
+                  justify-center
+                  text-green-700
+                  shrink-0
+                "
               >
-                {[
-                  address.house_no,
-                  address.street,
-                  address.area,
-                  address.city,
-                ]
-                  .filter(Boolean)
-                  .join(", ")}
-              </option>
+                📍
+              </div>
 
-            ))}
+              <div>
 
-          </select>
+                <p
+                  className="
+                    font-bold
+                    text-green-800
+                  "
+                >
+                  Delivery Address
+                </p>
 
-          {addresses.length===0 &&(
+                <p
+                  className="
+                    text-sm
+                    text-gray-600
+                    mt-1
+                  "
+                >
 
-            <div className="mt-4 rounded-xl border border-yellow-300 bg-yellow-50 p-4">
+                  {[
+                    selected.house_no,
+                    selected.street,
+                    selected.area,
+                    selected.city,
+                    selected.state,
+                    selected.pincode,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
 
-              <p className="text-yellow-700">
-                No delivery address found.
-              </p>
+                </p>
 
-              <button
-                type="button"
-                onClick={()=>navigate("/address-book")}
-                className="mt-3 text-green-700 font-semibold"
-              >
-                + Add Address
-              </button>
+              </div>
 
             </div>
 
-          )}
+          </>
+        );
 
-        </div>
+      })()}
+
+    </div>
+  )}
+
+
+  {/* No address */}
+
+  {addresses.length === 0 && (
+
+    <div
+      className="
+        mt-4
+        rounded-2xl
+        border
+        border-yellow-200
+        bg-yellow-50
+        p-4
+      "
+    >
+
+      <p
+        className="
+          text-yellow-800
+          font-semibold
+        "
+      >
+        No delivery address found.
+      </p>
+
+      <p
+        className="
+          text-yellow-700
+          text-sm
+          mt-1
+        "
+      >
+        Add your address to continue
+        with the subscription.
+      </p>
+
+    </div>
+
+  )}
+
+</div>
 
         {/* Monthly Amount */}
 
@@ -487,6 +785,24 @@ async function loadProducts() {
     </div>
 
   </div>
+  {showAddressForm && (
+  <AddressForm
+    customerId={
+      JSON.parse(
+        localStorage.getItem("customer")
+      )?.id
+    }
+
+    address={editingAddress}
+
+    onSave={handleSaveAddress}
+
+    onCancel={() => {
+      setShowAddressForm(false);
+      setEditingAddress(null);
+    }}
+  />
+)}
       </div>
 
  

@@ -436,11 +436,19 @@ const handlePauseConfirm = async (
 
                         {/* CARD BODY */}
                         <div className="p-5 grid grid-cols-2 gap-3">
-                          <MiniInfoCard
-                            label="Quantity"
-                              value={sub.quantity}
-                            color="blue"
-                          />
+                          <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                            <p className="text-sm text-gray-500">
+                              Daily Milk
+                            </p>
+
+                            <p className="text-2xl font-black text-blue-700">
+                              {sub.size || "500 ml"}
+                            </p>
+
+                            <p className="text-xs text-gray-500 mt-1">
+                              {sub.quantity} bottle{Number(sub.quantity) > 1 ? "s" : ""} daily
+                            </p>
+                          </div>
                           <MiniInfoCard
                             label="Delivery"
                             value={sub.deliveryType || "N/A"}

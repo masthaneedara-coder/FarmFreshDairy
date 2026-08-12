@@ -926,3 +926,9 @@ export async function rejectExtraMilk(id) {
     `${API_URL}/extra-milk/${id}/reject`
   );
 }
+// export async function createAddress(addressData) {
+//   return await postJSON(
+//     `${API_URL}/addresses`,
+//     addressData
+//   );
+// }
