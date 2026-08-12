@@ -16,6 +16,7 @@ import {
 } from "../controllers/deliveryBoy.controller.js";
 import {
   getAssignedOrders,
+  getDeliveryBoyHistory
 } from "../controllers/deliveryBoy.controller.js";
 
 const router = express.Router();
@@ -31,5 +32,9 @@ router.delete("/:id", deleteDeliveryBoy);
 router.patch("/:id/status", toggleDeliveryBoyStatus);
 router.post("/login", loginDeliveryBoy);
 router.get("/:id/orders", getAssignedOrders);
+router.get(
+  "/:id/history",
+  getDeliveryBoyHistory
+);
 
 export default router;

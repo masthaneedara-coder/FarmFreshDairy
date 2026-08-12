@@ -10,7 +10,8 @@ import {
 } from "../services/deliveryBoy.service.js";
 import {
     loginDeliveryBoyService,
-    getAssignedOrdersService
+    getAssignedOrdersService,
+    getDeliveryBoyHistoryService,
 } from "../services/deliveryBoy.service.js";
 
 
@@ -247,6 +248,33 @@ export const getAssignedOrders = async (req, res) => {
     });
 
   } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+// ======================================
+// Delivery Boy History
+// ======================================
+export const getDeliveryBoyHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const history =
+      await getDeliveryBoyHistoryService(id);
+
+    return res.json({
+      success: true,
+      history,
+    });
+
+  } catch (err) {
+    console.error(
+      "Delivery Boy History Error:",
+      err
+    );
+
     return res.status(500).json({
       success: false,
       message: err.message,
