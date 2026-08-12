@@ -80,3 +80,15 @@ export async function deleteSubscriptionDelivery(
     }
   ).then((res) => res.json());
 }
+export async function bulkAssignSubscriptionDeliveries(
+  deliveryIds,
+  deliveryBoyId
+) {
+  return await putJSON(
+    `${API_URL}/subscription-deliveries/bulk-assign`,
+    {
+      delivery_ids: deliveryIds,
+      delivery_boy_id: deliveryBoyId,
+    }
+  );
+}
