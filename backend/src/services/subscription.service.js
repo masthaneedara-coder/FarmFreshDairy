@@ -589,152 +589,169 @@ export async function resumeSubscriptionService(
 // whose pause period has completed
 // ==========================================
 // ==========================================
-// Automatically resume subscriptions
-// after their pause period is completed
+// AUTO RESUME PAUSED SUBSCRIPTIONS
+// Timezone: Asia/Kolkata (IST)
 // ==========================================
 export async function autoResumePausedSubscriptionsService() {
-  const today = new Date()
-    .toISOString()
-    .split("T")[0];
+  try {
+    // ==========================================
+    // TODAY IN IST
+    // ==========================================
 
-  console.log("=================================");
-  console.log("AUTO RESUME CHECK");
-  console.log("Today:", today);
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
 
-  // Find subscriptions whose pause period
-  // finished before today.
-  const {
-    data: pausedSubscriptions,
-    error: findPausedError,
-  } = await supabaseAdmin
-    .from("subscriptions")
-    .select("*")
-    .eq("is_paused", true)
-    .not("pause_from", "is", null)
-    .not("pause_to", "is", null)
-    .lt("pause_to", today);
+    console.log("=================================");
+    console.log("AUTO RESUME CHECK");
+    console.log("IST Today:", today);
+    console.log("=================================");
 
-  if (findPausedError) {
-    throw findPausedError;
-  }
+    // ==========================================
+    // FIND EXPIRED PAUSED SUBSCRIPTIONS
+    // ==========================================
 
-  console.log(
-    "Expired paused subscriptions:",
-    pausedSubscriptions?.length || 0
-  );
+    const {
+      data: pausedSubscriptions,
+      error: findError,
+    } = await supabaseAdmin
+      .from("subscriptions")
+      .select("*")
+      .eq("is_paused", true)
+      .eq("status", "Paused")
+      .not("pause_from", "is", null)
+      .not("pause_to", "is", null)
+      .lt("pause_to", today);
 
-  const resumedSubscriptions = [];
-
-  for (const subscription of pausedSubscriptions || []) {
-    try {
-      // ==========================================
-      // Calculate paused calendar days
-      //
-      // 12 Aug → 13 Aug = 2 days
-      // ==========================================
-      const pauseFromDate = new Date(
-        `${subscription.pause_from}T00:00:00`
-      );
-
-      const pauseToDate = new Date(
-        `${subscription.pause_to}T00:00:00`
-      );
-
-      const pausedDaysThisPeriod =
-        Math.floor(
-          (
-            pauseToDate.getTime() -
-            pauseFromDate.getTime()
-          ) /
-            (1000 * 60 * 60 * 24)
-        ) + 1;
-
-      const previousPausedDays =
-        Number(subscription.paused_days || 0);
-
-      const totalPausedDays =
-        previousPausedDays +
-        pausedDaysThisPeriod;
-
-      console.log("---------------------------------");
-      console.log(
-        "Subscription:",
-        subscription.id
-      );
-      console.log(
-        "Pause From:",
-        subscription.pause_from
-      );
-      console.log(
-        "Pause To:",
-        subscription.pause_to
-      );
-      console.log(
-        "Paused Days This Period:",
-        pausedDaysThisPeriod
-      );
-      console.log(
-        "Previous Paused Days:",
-        previousPausedDays
-      );
-      console.log(
-        "Total Paused Days:",
-        totalPausedDays
-      );
-
-      // ==========================================
-      // IMPORTANT:
-      // DO NOT change end_date
-      // ==========================================
-      const {
-        data: resumedSubscription,
-        error: resumeUpdateError,
-      } = await supabaseAdmin
-        .from("subscriptions")
-        .update({
-          status: "Active",
-          is_paused: false,
-          pause_from: null,
-          pause_to: null,
-          paused_days: totalPausedDays,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", subscription.id)
-        .eq("is_paused", true)
-        .select()
-        .single();
-
-      if (resumeUpdateError) {
-        throw resumeUpdateError;
-      }
-
-      resumedSubscriptions.push(
-        resumedSubscription
-      );
-
-      console.log(
-        "AUTO RESUMED:",
-        subscription.id
-      );
-
-      console.log(
-        "End date remains:",
-        subscription.end_date
-      );
-
-    } catch (resumeError) {
-      console.error(
-        `Auto resume failed for ${subscription.id}:`,
-        resumeError
-      );
+    if (findError) {
+      throw findError;
     }
+
+    console.log(
+      "Subscriptions ready to resume:",
+      pausedSubscriptions?.length || 0
+    );
+
+    const resumedSubscriptions = [];
+
+    // ==========================================
+    // RESUME EACH SUBSCRIPTION
+    // ==========================================
+
+    for (const subscription of pausedSubscriptions || []) {
+      try {
+        // --------------------------------------
+        // Calculate paused days
+        // --------------------------------------
+
+        const pauseFrom = new Date(
+          `${subscription.pause_from}T00:00:00+05:30`
+        );
+
+        const pauseTo = new Date(
+          `${subscription.pause_to}T00:00:00+05:30`
+        );
+
+        const pausedDaysThisPeriod =
+          Math.floor(
+            (
+              pauseTo.getTime() -
+              pauseFrom.getTime()
+            ) /
+              (1000 * 60 * 60 * 24)
+          ) + 1;
+
+        const previousPausedDays =
+          Number(subscription.paused_days || 0);
+
+        const totalPausedDays =
+          previousPausedDays +
+          pausedDaysThisPeriod;
+
+        console.log("---------------------------------");
+        console.log(
+          "Subscription:",
+          subscription.id
+        );
+        console.log(
+          "Pause From:",
+          subscription.pause_from
+        );
+        console.log(
+          "Pause To:",
+          subscription.pause_to
+        );
+        console.log(
+          "Paused Days:",
+          pausedDaysThisPeriod
+        );
+        console.log(
+          "Total Paused Days:",
+          totalPausedDays
+        );
+
+        // --------------------------------------
+        // RESUME
+        // --------------------------------------
+
+        const {
+          data: resumedSubscription,
+          error: resumeError,
+        } = await supabaseAdmin
+          .from("subscriptions")
+          .update({
+            status: "Active",
+            is_paused: false,
+
+            pause_from: null,
+            pause_to: null,
+
+            paused_days: totalPausedDays,
+
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", subscription.id)
+          .eq("is_paused", true)
+          .select()
+          .single();
+
+        if (resumeError) {
+          throw resumeError;
+        }
+
+        resumedSubscriptions.push(
+          resumedSubscription
+        );
+
+        console.log(
+          `✅ AUTO RESUMED: ${subscription.id}`
+        );
+
+      } catch (error) {
+        console.error(
+          `❌ Failed to resume ${subscription.id}:`,
+          error.message
+        );
+      }
+    }
+
+    console.log(
+      `AUTO RESUME COMPLETED: ${resumedSubscriptions.length}`
+    );
+
+    console.log("=================================");
+
+    return resumedSubscriptions;
+
+  } catch (error) {
+    console.error(
+      "❌ Auto resume service failed:",
+      error
+    );
+
+    throw error;
   }
-
-  console.log("---------------------------------");
-  console.log(
-    `Auto resumed: ${resumedSubscriptions.length}`
-  );
-  console.log("=================================");
-
-  return resumedSubscriptions;
 }

@@ -70,17 +70,53 @@ export async function assignDeliveryBoyService(
 }
 export async function updateDeliveryStatusService(
   deliveryId,
-  status
+  status,
+  type
 ) {
-  return await supabaseAdmin
-    .from("subscription_deliveries")
-    .update({
-      status,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", deliveryId)
-    .select()
-    .single();
+  const now = new Date().toISOString();
+
+  const update = {
+    status,
+    updated_at: now,
+  };
+
+  // ==========================================
+  // ORDER
+  // ==========================================
+  if (type === "Order") {
+
+    if (status === "Out for Delivery") {
+      update.out_for_delivery_at = now;
+    }
+
+    if (status === "Delivered") {
+      update.delivery_completed_at = now;
+    }
+
+    return await supabaseAdmin
+      .from("orders")
+      .update(update)
+      .eq("id", deliveryId)
+      .select()
+      .single();
+  }
+
+  // ==========================================
+  // SUBSCRIPTION
+  // ==========================================
+  if (type === "Subscription") {
+
+    return await supabaseAdmin
+      .from("subscription_deliveries")
+      .update(update)
+      .eq("id", deliveryId)
+      .select()
+      .single();
+  }
+
+  throw new Error(
+    `Invalid delivery type: ${type}`
+  );
 }
 export async function deleteDeliveryService(id) {
   return await supabaseAdmin
@@ -193,12 +229,13 @@ export async function generateTodayDeliveriesService() {
         error: deliveryError,
       } = await supabaseAdmin
         .from("subscription_deliveries")
-        .insert({
+       .insert({
           delivery_number: deliveryNumber,
           subscription_id: subscription.id,
           customer_id: subscription.customer_id,
           address_id: subscription.address_id,
           delivery_date: today,
+          delivery_type: subscription.delivery_type,
           status: "Pending",
         })
         .select()
