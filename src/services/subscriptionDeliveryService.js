@@ -66,6 +66,7 @@ export async function updateSubscriptionDeliveryStatus(
     `${API_URL}/subscription-deliveries/${deliveryId}/status`,
     {
       status,
+      delivery_type: "Subscription",
     }
   );
 }

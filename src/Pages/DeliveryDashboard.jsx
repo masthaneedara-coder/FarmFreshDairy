@@ -153,45 +153,25 @@ const handleNavigate = (delivery) => {
 // });
 const updateDeliveryStatus = async (delivery, status) => {
   try {
-    console.log("=================================");
-    console.log("UPDATING DELIVERY");
-    console.log("=================================");
-    console.log("ID:", delivery.id);
-    console.log("TYPE:", delivery.type);
-    console.log("STATUS:", status);
-    console.log("FULL DELIVERY:", delivery);
-    console.log("=================================");
+    console.log("Updating delivery:", delivery);
 
-    if (delivery.type === "Subscription") {
-      console.log("Calling Subscription API");
+    await updateSubscriptionDeliveryStatus(
+      delivery.id,
+      status
+    );
 
-      await updateSubscriptionDeliveryStatus(
-        delivery.id,
-        status
-      );
-    } else if (delivery.type === "Order") {
-      console.log("Calling Order API");
-
-      await updateOrderDeliveryStatus(
-        delivery.id,
-        status
-      );
-    } else {
-      throw new Error(
-        `Unknown delivery type: ${delivery.type}`
-      );
-    }
-
-    console.log("Delivery status updated successfully");
-
-    // refresh dashboard
-    await loadDashboard();
+    // Update screen immediately
+    setDeliveries((prev) =>
+      prev.map((item) =>
+        item.id === delivery.id
+          ? { ...item, status }
+          : item
+      )
+    );
 
   } catch (error) {
-    console.error(
-      "Update Delivery Status Error:",
-      error
-    );
+    console.error("Update Delivery Status Error:", error);
+    alert("Failed to update delivery status");
   }
 };
 function getSizeInLiters(size) {
