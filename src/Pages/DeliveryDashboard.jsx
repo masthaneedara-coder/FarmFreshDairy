@@ -151,48 +151,48 @@ const handleNavigate = (delivery) => {
 //   priority: "high",
 //   actionUrl: "/order-history",
 // });
-async function updateDeliveryStatus(delivery, status) {
+const updateDeliveryStatus = async (delivery, newStatus) => {
   try {
-    let res;
+    console.log("Updating delivery:", {
+      id: delivery.id,
+      type: delivery.type,
+      status: newStatus,
+    });
 
-    if (delivery.type === "Order") {
-      res = await updateOrderStatus(
+    if (delivery.type === "Subscription") {
+      await updateSubscriptionDeliveryStatus(
         delivery.id,
-        status,
-         delivery.type
+        newStatus,
+        delivery.type
       );
     } else {
-      res = await updateSubscriptionDeliveryStatus(
+      // Order
+      await updateOrderDeliveryStatus(
         delivery.id,
-        status, delivery.type
+        newStatus
       );
     }
 
-    if (res.success) {
-      // Refresh delivery data
-      await loadDeliveries();
+    // Update UI immediately
+    setDeliveries((prev) =>
+      prev.map((item) =>
+        item.id === delivery.id &&
+        item.type === delivery.type
+          ? {
+              ...item,
+              status: newStatus,
+            }
+          : item
+      )
+    );
 
-      // Show success message
-      alert(
-        `Delivery status updated successfully to "${status}"`
-      );
-    } else {
-      alert(
-        res.message || "Failed to update delivery status"
-      );
-    }
-
-  } catch (err) {
+  } catch (error) {
     console.error(
       "Update Delivery Status Error:",
-      err
-    );
-
-    alert(
-      "Failed to update delivery status"
+      error
     );
   }
-}
+};
 function getSizeInLiters(size) {
   if (!size) return 0;
 
