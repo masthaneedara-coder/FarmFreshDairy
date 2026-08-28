@@ -253,20 +253,7 @@ const subscriptionList = (subscriptions || []).map((delivery) => {
     ...orderList,
     ...subscriptionList,
   ];
-  console.log("========== FINAL API DATA ==========");
-
-console.table(
-  deliveries.map((d) => ({
-    type: d.type,
-    number: d.number,
-    customer: d.customer?.full_name,
-    delivery_date: d.delivery_date,
-    delivery_shift: d.delivery_shift,
-    status: d.status,
-  }))
-);
-
-console.log("====================================");
+ 
 
   // =====================================================
   // 6. Sort Latest First
