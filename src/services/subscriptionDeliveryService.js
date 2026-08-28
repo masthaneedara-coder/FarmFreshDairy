@@ -55,16 +55,17 @@ export async function assignSubscriptionDelivery(
 /**
  * Update Delivery Status
  */
+/**
+ * Update Delivery Status
+ */
 export async function updateSubscriptionDeliveryStatus(
   deliveryId,
-  status,
-  deliveryType
+  status
 ) {
   return await putJSON(
     `${API_URL}/subscription-deliveries/${deliveryId}/status`,
     {
       status,
-      delivery_type: deliveryType,
     }
   );
 }

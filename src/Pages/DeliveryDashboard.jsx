@@ -151,40 +151,41 @@ const handleNavigate = (delivery) => {
 //   priority: "high",
 //   actionUrl: "/order-history",
 // });
-const updateDeliveryStatus = async (delivery, newStatus) => {
+const updateDeliveryStatus = async (delivery, status) => {
   try {
-    console.log("Updating delivery:", {
-      id: delivery.id,
-      type: delivery.type,
-      status: newStatus,
-    });
+    console.log("=================================");
+    console.log("UPDATING DELIVERY");
+    console.log("=================================");
+    console.log("ID:", delivery.id);
+    console.log("TYPE:", delivery.type);
+    console.log("STATUS:", status);
+    console.log("FULL DELIVERY:", delivery);
+    console.log("=================================");
 
     if (delivery.type === "Subscription") {
+      console.log("Calling Subscription API");
+
       await updateSubscriptionDeliveryStatus(
         delivery.id,
-        newStatus,
-        delivery.type
+        status
       );
-    } else {
-      // Order
+    } else if (delivery.type === "Order") {
+      console.log("Calling Order API");
+
       await updateOrderDeliveryStatus(
         delivery.id,
-        newStatus
+        status
+      );
+    } else {
+      throw new Error(
+        `Unknown delivery type: ${delivery.type}`
       );
     }
 
-    // Update UI immediately
-    setDeliveries((prev) =>
-      prev.map((item) =>
-        item.id === delivery.id &&
-        item.type === delivery.type
-          ? {
-              ...item,
-              status: newStatus,
-            }
-          : item
-      )
-    );
+    console.log("Delivery status updated successfully");
+
+    // refresh dashboard
+    await loadDashboard();
 
   } catch (error) {
     console.error(

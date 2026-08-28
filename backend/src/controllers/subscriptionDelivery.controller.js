@@ -9,6 +9,7 @@ import {
   getCustomerDeliverySummaryService,
   bulkAssignSubscriptionDeliveriesService
 } from "../services/subscriptionDelivery.service.js";
+import { supabaseAdmin } from "../config/supabase.js";
 
 
 export async function getTodayDeliveries(req, res) {
@@ -246,5 +247,59 @@ export async function bulkAssignSubscriptionDeliveries(
       message: err.message,
     });
 
+  }
+}
+export async function updateSubscriptionDeliveryStatus(
+  req,
+  res
+) {
+  try {
+    const { deliveryId } = req.params;
+    const { status } = req.body;
+
+    if (!deliveryId) {
+      return res.status(400).json({
+        success: false,
+        message: "Delivery ID is required",
+      });
+    }
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: "Status is required",
+      });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("subscription_deliveries")
+      .update({
+        status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", deliveryId)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return res.json({
+      success: true,
+      message: "Subscription delivery status updated",
+      delivery: data,
+    });
+
+  } catch (err) {
+    console.error(
+      "Update Subscription Delivery Status Error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 }
