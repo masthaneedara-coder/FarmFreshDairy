@@ -15,6 +15,10 @@ router.post("/generate", generateBills);
 router.get("/", getBills);
 
 router.get("/details/:subscriptionId", getBillDetails);
+router.get(
+  "/:subscriptionId",
+  getCustomerBill
+);
 
 // Generic route LAST
 router.get("/:customerId", getCustomerBill);

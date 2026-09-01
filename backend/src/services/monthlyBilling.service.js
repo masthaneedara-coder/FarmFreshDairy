@@ -253,13 +253,25 @@ export async function markMonthlyBillPaid(
 
   return data;
 }
-export async function getMonthlyBillDetails(subscriptionId, month, year) {
-
+export async function getMonthlyBillDetails(
+  subscriptionId,
+  month,
+  year
+) {
+  console.log("=================================");
+  console.log("MONTHLY BILL DETAILS");
   console.log("subscriptionId:", subscriptionId);
   console.log("month:", month);
   console.log("year:", year);
+  console.log("=================================");
 
-  const { data: bills, error } = await supabaseAdmin
+  const numericMonth = Number(month);
+  const numericYear = Number(year);
+
+  // ===============================
+  // Get Monthly Bill
+  // ===============================
+  const { data: bill, error: billError } = await supabaseAdmin
     .from("monthly_bills")
     .select(`
       *,
@@ -267,25 +279,45 @@ export async function getMonthlyBillDetails(subscriptionId, month, year) {
       subscriptions(*)
     `)
     .eq("subscription_id", subscriptionId)
-    .eq("month", Number(month))
-    .eq("year", Number(year));
+    .eq("month", numericMonth)
+    .eq("year", numericYear)
+    .maybeSingle();
 
-  console.log("Bills:", bills);
-  console.log("Error:", error);
+  console.log("Bill:", bill);
+  console.log("Bill Error:", billError);
 
-  if (error) throw error;
-
-  if (!bills || bills.length === 0) {
-    throw new Error("Monthly bill not found");
+  if (billError) {
+    throw billError;
   }
 
-  const bill = bills[0];
+  if (!bill) {
+    throw new Error(
+      `Monthly bill not found for subscription ${subscriptionId}, month ${numericMonth}, year ${numericYear}`
+    );
+  }
 
-  const fromDate = `${year}-${String(month).padStart(2, "0")}-01`;
-  const lastDay = new Date(year, month, 0).getDate();
-  const toDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  // ===============================
+  // Date Range
+  // ===============================
+  const fromDate =
+    `${numericYear}-${String(numericMonth).padStart(2, "0")}-01`;
 
-  const { data: deliveries, error: deliveryError } = await supabaseAdmin
+  const lastDay =
+    new Date(numericYear, numericMonth, 0).getDate();
+
+  const toDate =
+    `${numericYear}-${String(numericMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  console.log("From:", fromDate);
+  console.log("To:", toDate);
+
+  // ===============================
+  // Get Deliveries
+  // ===============================
+  const {
+    data: deliveries,
+    error: deliveryError,
+  } = await supabaseAdmin
     .from("subscription_deliveries")
     .select(`
       *,
@@ -297,14 +329,23 @@ export async function getMonthlyBillDetails(subscriptionId, month, year) {
     .eq("subscription_id", subscriptionId)
     .gte("delivery_date", fromDate)
     .lte("delivery_date", toDate)
-    .order("delivery_date");
+    .order("delivery_date", {
+      ascending: true,
+    });
 
-  if (deliveryError) throw deliveryError;
+  if (deliveryError) {
+    throw deliveryError;
+  }
+
+  console.log(
+    "Deliveries:",
+    deliveries?.length || 0
+  );
 
   return {
     bill,
     customer: bill.customers,
     subscription: bill.subscriptions,
-    deliveries,
+    deliveries: deliveries || [],
   };
 }

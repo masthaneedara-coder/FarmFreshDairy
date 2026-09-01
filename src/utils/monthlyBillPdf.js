@@ -225,136 +225,68 @@ export async function generateMonthlyBillPDF(
   // =====================================================
 
   autoTable(doc, {
+  startY: 90,
 
-    startY: 90,
+  margin: {
+    left: 10,
+    right: 10,
+  },
 
-    margin: {
-      top: 12,
-      right: rightMargin,
-      bottom: 25,
-      left: leftMargin,
+  tableWidth: "auto",
+
+  head: [[
+    "Date",
+    "Product",
+    "Size",
+    "Qty",
+    "Rate",
+    "Amount",
+    "Status",
+  ]],
+
+  body: rows,
+
+  styles: {
+    fontSize: 8,
+    cellPadding: 2,
+    overflow: "linebreak",
+    valign: "middle",
+  },
+
+  columnStyles: {
+    0: {
+      cellWidth: 24,
     },
-
-    head: [[
-      "Date",
-      "Product",
-      "Size",
-      "Qty",
-      "Rate",
-      "Amount",
-      "Status",
-    ]],
-
-    body: rows,
-
-    theme: "grid",
-
-    // -------------------------------------------------
-    // IMPORTANT: TABLE WILL AUTOMATICALLY CONTINUE
-    // TO NEW PAGES
-    // -------------------------------------------------
-
-    pageBreak: "auto",
-
-    rowPageBreak: "avoid",
-
-    showHead: "everyPage",
-
-    styles: {
-      fontSize: 9,
-      cellPadding: 3,
-      overflow: "linebreak",
-      valign: "middle",
-      textColor: [40, 40, 40],
+    1: {
+      cellWidth: 45,
     },
-
-    headStyles: {
-      fillColor: [22, 101, 52],
-      textColor: [255, 255, 255],
-      fontSize: 9,
-      fontStyle: "bold",
+    2: {
+      cellWidth: 20,
+    },
+    3: {
+      cellWidth: 15,
       halign: "center",
-      valign: "middle",
     },
-
-    bodyStyles: {
-      fontSize: 9,
+    4: {
+      cellWidth: 22,
     },
-
-    alternateRowStyles: {
-      fillColor: [245, 248, 246],
+    5: {
+      cellWidth: 25,
     },
-
-    columnStyles: {
-
-      // Date
-      0: {
-        cellWidth: 25,
-        halign: "center",
-      },
-
-      // Product
-      1: {
-        cellWidth: 42,
-      },
-
-      // Size
-      2: {
-        cellWidth: 22,
-        halign: "center",
-      },
-
-      // Quantity
-      3: {
-        cellWidth: 15,
-        halign: "center",
-      },
-
-      // Rate
-      4: {
-        cellWidth: 25,
-        halign: "right",
-      },
-
-      // Amount
-      5: {
-        cellWidth: 27,
-        halign: "right",
-      },
-
-      // Status
-      6: {
-        cellWidth: 30,
-        halign: "center",
-      },
+    6: {
+      cellWidth: 25,
     },
+  },
 
-    // =================================================
-    // FOOTER ON EVERY PAGE
-    // =================================================
+  headStyles: {
+    fillColor: [22, 101, 52],
+    fontSize: 8,
+  },
 
-    didDrawPage: function () {
-
-      const currentPage =
-        doc.internal.getNumberOfPages();
-
-      doc.setFontSize(8);
-
-      doc.setTextColor(120);
-
-      doc.text(
-        `Farm Fresh Dairy • Page ${currentPage}`,
-        pageWidth / 2,
-        pageHeight - 8,
-        {
-          align: "center",
-        }
-      );
-
-    },
-
-  });
-
+  alternateRowStyles: {
+    fillColor: [245, 245, 245],
+  },
+});
   // =====================================================
   // BILL SUMMARY
   // =====================================================
