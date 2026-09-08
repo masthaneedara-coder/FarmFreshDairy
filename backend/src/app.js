@@ -43,24 +43,85 @@ const app = express();
 app.use(helmet());
 
 // Enable CORS
+// Enable CORS
+// Enable CORS
 const allowedOrigins = [
   "http://localhost:5173",
   "https://farm-fresh-dairy.vercel.app",
-  "https://farm-fresh-dairy-mrwawn6uk-masthaneedara-coders-projects.vercel.app"
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (Postman, mobile apps, etc.)
-      if (!origin) return callback(null, true);
+      // Allow requests with no origin
+      // Example: Postman, server-to-server requests, some mobile apps
+      if (!origin) {
+        return callback(null, true);
+      }
 
+      // Allow production and localhost
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
+      // Allow Farm Fresh Dairy Vercel Preview deployments
+      // without hard-coding any personal/team name.
+      try {
+        const url = new URL(origin);
+
+        const isFarmFreshVercelPreview =
+          url.protocol === "https:" &&
+          url.hostname.endsWith(".vercel.app") &&
+          url.hostname.startsWith("farm-fresh-dairy-");
+
+        if (isFarmFreshVercelPreview) {
+          return callback(null, true);
+        }
+      } catch (error) {
+        // Invalid origin
+      }
+
       return callback(new Error("Not allowed by CORS"));
     },
+
+    credentials: true,
+  })
+);
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin
+      // Example: Postman, server-to-server requests, some mobile apps
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // Allow existing fixed domains
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Allow Farm Fresh Dairy Vercel Preview deployments
+      try {
+        const url = new URL(origin);
+
+        const isFarmFreshVercelPreview =
+          url.protocol === "https:" &&
+          url.hostname.endsWith(".vercel.app") &&
+          url.hostname.startsWith("farm-fresh-dairy-") &&
+          url.hostname.includes("-masthaneedara-coders-projects");
+
+        if (isFarmFreshVercelPreview) {
+          return callback(null, true);
+        }
+      } catch (error) {
+        // Invalid origin
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
+
     credentials: true,
   })
 );
