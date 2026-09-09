@@ -47,7 +47,8 @@ app.use(helmet());
 // Enable CORS
 const allowedOrigins = [
   "http://localhost:5173",
-   "https://localhost",
+  "http://localhost",
+  "https://localhost",
   "https://farm-fresh-dairy.vercel.app",
 ];
 
