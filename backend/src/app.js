@@ -32,9 +32,6 @@ import notificationRoutes from "./routes/notification.routes.js";
 import monthlyBillingRoutes from "./routes/monthlyBilling.routes.js";
 import extraMilkRoutes from "./routes/extraMilk.routes.js";
 
-
-
-
 dotenv.config();
 
 const app = express();
@@ -42,7 +39,6 @@ const app = express();
 // Security
 app.use(helmet());
 
-// Enable CORS
 // Enable CORS
 // Enable CORS
 const allowedOrigins = [
@@ -55,19 +51,19 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin
+      // Allow requests with no Origin
       // Example: Postman, server-to-server requests, some mobile apps
       if (!origin) {
         return callback(null, true);
       }
 
-      // Allow production and localhost
+      // Allow known origins
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
       // Allow Farm Fresh Dairy Vercel Preview deployments
-      // without hard-coding any personal/team name.
+      // without using any personal/team name.
       try {
         const url = new URL(origin);
 
@@ -80,51 +76,23 @@ app.use(
           return callback(null, true);
         }
       } catch (error) {
-        // Invalid origin
+        // Invalid Origin
       }
 
       return callback(new Error("Not allowed by CORS"));
     },
 
     credentials: true,
-  })
-);
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin
-      // Example: Postman, server-to-server requests, some mobile apps
-      if (!origin) {
-        return callback(null, true);
-      }
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 
-      // Allow existing fixed domains
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+    ],
 
-      // Allow Farm Fresh Dairy Vercel Preview deployments
-      try {
-        const url = new URL(origin);
-
-        const isFarmFreshVercelPreview =
-          url.protocol === "https:" &&
-          url.hostname.endsWith(".vercel.app") &&
-          url.hostname.startsWith("farm-fresh-dairy-") &&
-          url.hostname.includes("-masthaneedara-coders-projects");
-
-        if (isFarmFreshVercelPreview) {
-          return callback(null, true);
-        }
-      } catch (error) {
-        // Invalid origin
-      }
-
-      return callback(new Error("Not allowed by CORS"));
-    },
-
-    credentials: true,
+    optionsSuccessStatus: 204,
   })
 );
 
