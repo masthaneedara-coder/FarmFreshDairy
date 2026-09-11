@@ -143,8 +143,10 @@ export const forgotPassword = async (req, res) => {
     const { error } =
       await supabase.auth.resetPasswordForEmail(email, {
         redirectTo:
-          "http://localhost:5173/reset-password",
-      });
+            process.env.NODE_ENV === "production"
+              ? "https://farm-fresh-dairy.vercel.app/reset-password"
+              : "http://localhost:5173/reset-password",
+                });
 
     if (error) {
       return res.status(400).json({
