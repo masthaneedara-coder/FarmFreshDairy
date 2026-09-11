@@ -738,3 +738,38 @@ export async function bulkAssignSubscriptionDeliveriesService(
 
   return data;
 }
+/* ==========================================================
+   AUTO EXPIRE SUBSCRIPTIONS
+   ========================================================== */
+
+export async function expireSubscriptionsService() {
+  const today = new Date().toISOString().split("T")[0];
+
+  const {
+    data,
+    error,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .update({
+      status: "Expired",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("status", "Active")
+    .lt("end_date", today)
+    .select("id, customer_id, start_date, end_date, status");
+
+  if (error) {
+    console.error(
+      "Expire Subscriptions Error:",
+      error
+    );
+
+    throw error;
+  }
+
+  console.log(
+    `AUTO EXPIRY: ${data?.length || 0} subscription(s) expired.`
+  );
+
+  return data || [];
+}

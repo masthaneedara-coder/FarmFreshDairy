@@ -15,6 +15,7 @@ import {
 } from "../services/subscription.service.js";
 import {
   generateTodayDeliveriesService,
+  expireSubscriptionsService,
 } from "../services/subscriptionDelivery.service.js";
 import {
   getSubscriptionDeliverySummaryService,
@@ -357,17 +358,35 @@ export async function renewSubscription(req, res) {
 }
 export async function generateTodayDeliveriesController(req, res) {
   try {
-    const result = await generateTodayDeliveriesService();
+    // ==========================================
+    // AUTO EXPIRE OLD SUBSCRIPTIONS FIRST
+    // ==========================================
+    const expiredSubscriptions =
+      await expireSubscriptionsService();
+
+    console.log(
+      `Auto expiry completed: ${expiredSubscriptions.length} subscription(s) expired.`
+    );
+
+    // ==========================================
+    // THEN GENERATE TODAY'S DELIVERIES
+    // ==========================================
+    const result =
+      await generateTodayDeliveriesService();
 
     return res.json({
       success: true,
+      expired: expiredSubscriptions.length,
       generated: result.created.length,
       skipped: result.skipped,
       deliveries: result.created,
     });
 
   } catch (err) {
-    console.error(err);
+    console.error(
+      "Generate Today Deliveries Error:",
+      err
+    );
 
     return res.status(500).json({
       success: false,
