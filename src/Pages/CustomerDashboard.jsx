@@ -435,10 +435,7 @@ const activeSubscriptions = subscriptions.filter(
                           key={sub.id}
                           className="
                             relative
-                            w-[calc(100vw-2rem)]
-                            max-w-[390px]
-                            sm:w-[390px]
-                            flex-shrink-0
+                           w-[calc(100vw-2rem)] sm:w-[340px] max-w-[340px] flex-shrink-0
                             snap-center
                             overflow-hidden
                             rounded-[30px]
