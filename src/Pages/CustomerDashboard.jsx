@@ -39,6 +39,7 @@ const [orders, setOrders] = useState([]);
 const [subscriptions, setSubscriptions] = useState([]);
   const [deliverySummaries, setDeliverySummaries] = useState({});
   const [statusUpdatingId, setStatusUpdatingId] = useState("");
+  const [expandedSubscriptionId, setExpandedSubscriptionId] = useState(null);
 const latestOrders = dashboard?.recentOrders || [];
   const subscriptionScrollRef = useRef(null);
 
@@ -397,226 +398,578 @@ const activeSubscriptions = subscriptions.filter(
                   "
                 >
                   {subscriptions
-                      .filter((sub) => !isSubscriptionExpired(sub.expireDate))
-                      .map((sub, index) => {
-                   const deliverySummary =
-                      deliverySummaries[sub.id] || {
-                        delivered: 0,
-                        outForDelivery: 0,
-                        skipped: 0,
-                      };
-                            const isPaused = sub.is_paused === true;
+                    .filter((sub) => !isSubscriptionExpired(sub.expireDate))
+                    .map((sub, index) => {
+                      const deliverySummary =
+                        deliverySummaries[sub.id] || {
+                          delivered: 0,
+                          outForDelivery: 0,
+                          skipped: 0,
+                        };
 
-                    const status = isPaused
-                      ? "paused"
-                      : (sub.status || "Active").toLowerCase();
+                      const isPaused = sub.is_paused === true;
 
-                    const isActive = !isPaused && status === "active";
-                  const isExpired = status === "expired";
-                  const isCancelled = status === "cancelled";
-                  const isStopped = status === "stopped";
-                  const remainingDays = getRemainingDays(sub.expireDate);
-                  
+                      const status = isPaused
+                        ? "paused"
+                        : (sub.status || "Active").toLowerCase();
 
-                    return (
-                      <div
-                        key={sub.id}
-                       className="
+                      const isActive = !isPaused && status === "active";
+                      const isStopped = status === "stopped";
+                      const remainingDays = getRemainingDays(sub.expireDate);
+                      const isExpanded = expandedSubscriptionId === sub.id;
+
+                      // Approximate progress for a standard 30-day subscription.
+                      const progressPercent =
+                        remainingDays === null
+                          ? 0
+                          : Math.min(
+                              100,
+                              Math.max(
+                                0,
+                                ((30 - remainingDays) / 30) * 100
+                              )
+                            );
+
+                      return (
+                        <div
+                          key={sub.id}
+                          className="
                             relative
+                            w-[calc(100vw-2rem)]
+                            max-w-[390px]
+                            sm:w-[390px]
+                            flex-shrink-0
+                            snap-center
                             overflow-hidden
-                            rounded-[32px]
+                            rounded-[30px]
                             bg-white
                             border border-green-100
-                            shadow-xl
-                            hover:shadow-2xl
-                            transition-all
-                            duration-300
-                            w-[calc(100vw-2rem)]
-                            sm:w-[380px]
-                            max-w-[380px]
-                            flex-shrink-0
+                            shadow-lg
+                            transition-all duration-500
+                            hover:-translate-y-1 hover:shadow-2xl
                           "
-                      >
-                        {/* CARD HEADER */}
-                        {/* CARD BODY */}
-<div className="p-4">
+                        >
+                          {/* =========================
+                              ANIMATED SUBSCRIPTION HEADER
+                          ========================== */}
+                          <div className="
+                            relative overflow-hidden
+                            bg-gradient-to-br
+                            from-green-600 via-emerald-600 to-green-700
+                            px-5 py-5 text-white
+                          ">
+                            <div className="
+                              absolute -right-10 -top-10
+                              h-32 w-32 rounded-full bg-white/10
+                              animate-pulse
+                            " />
+                            <div className="
+                              absolute -left-12 -bottom-16
+                              h-36 w-36 rounded-full bg-white/10
+                            " />
 
-  {/* BASIC SUBSCRIPTION DETAILS */}
-  <div className="grid grid-cols-2 gap-3">
+                            <div className="relative z-10">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="
+                                    text-[10px] font-black uppercase
+                                    tracking-[0.18em] text-green-100
+                                  ">
+                                    Milk Subscription
+                                  </p>
 
-    <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-      <p className="text-sm text-gray-500">
-        Daily Milk
-      </p>
+                                  <h3 className="
+                                    mt-1 text-2xl font-black tracking-tight
+                                  ">
+                                    🥛 Daily Milk
+                                  </h3>
 
-      <p className="text-2xl font-black text-blue-700">
-        {sub.size || "500 ml"}
-      </p>
+                                  <p className="
+                                    mt-1 text-sm font-medium text-green-50
+                                  ">
+                                    {sub.size || "500 ml"} • {sub.quantity || 1} bottle
+                                    {Number(sub.quantity) > 1 ? "s" : ""} daily
+                                  </p>
+                                </div>
 
-      <p className="text-xs text-gray-500 mt-1">
-        {sub.quantity} bottle
-        {Number(sub.quantity) > 1 ? "s" : ""} daily
-      </p>
-    </div>
+                                <span
+                                  className={`
+                                    shrink-0 rounded-full px-3 py-1.5
+                                    text-[10px] font-black uppercase tracking-wide
+                                    shadow-sm
+                                    ${
+                                      isPaused
+                                        ? "bg-orange-100 text-orange-700"
+                                        : isActive
+                                        ? "bg-white text-green-700"
+                                        : isStopped
+                                        ? "bg-gray-100 text-gray-700"
+                                        : "bg-red-100 text-red-700"
+                                    }
+                                  `}
+                                >
+                                  {isPaused ? "PAUSED" : status}
+                                </span>
+                              </div>
 
-    <MiniInfoCard
-      label="Delivery"
-      value={sub.deliveryType || "N/A"}
-      color="yellow"
-    />
+                              <div className="mt-5 grid grid-cols-2 gap-3">
+                                <div className="
+                                  rounded-2xl bg-white/15
+                                  border border-white/15 p-3
+                                  backdrop-blur-sm
+                                ">
+                                  <p className="text-[10px] text-green-100">
+                                    Monthly
+                                  </p>
+                                  <p className="mt-1 text-xl font-black">
+                                    {formatMoney(sub.monthlyAmount)}
+                                  </p>
+                                </div>
 
-    <MiniInfoCard
-      label="Monthly"
-      value={formatMoney(sub.monthlyAmount)}
-      color="purple"
-    />
+                                <div className="
+                                  rounded-2xl bg-white/15
+                                  border border-white/15 p-3
+                                  backdrop-blur-sm
+                                ">
+                                  <p className="text-[10px] text-green-100">
+                                    Delivery
+                                  </p>
+                                  <p className="mt-1 text-lg font-black">
+                                    {sub.deliveryType || "N/A"}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
 
-    <MiniInfoCard
-      label="Start Date"
-      value={formatDate(sub.startDate)}
-      color="pink"
-    />
+                          {/* =========================
+                              MOBILE SUMMARY
+                          ========================== */}
+                          <div className="p-5">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] font-bold text-gray-400">
+                                  START DATE
+                                </p>
+                                <p className="mt-1 text-sm font-black text-gray-800">
+                                  {formatDate(sub.startDate)}
+                                </p>
+                              </div>
 
-  </div>
+                              <div className="flex-1 px-2">
+                                <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                  <div
+                                    className="
+                                      h-full rounded-full
+                                      bg-gradient-to-r from-green-400 to-emerald-600
+                                      transition-all duration-1000 ease-out
+                                    "
+                                    style={{ width: `${progressPercent}%` }}
+                                  />
+                                </div>
+                                <p className="mt-1 text-center text-[9px] text-gray-400">
+                                  Subscription Progress
+                                </p>
+                              </div>
 
-  {/* EXPIRY SECTION */}
-  <div className="mt-3">
+                              <div className="text-right">
+                                <p className="text-[10px] font-bold text-gray-400">
+                                  EXPIRES
+                                </p>
+                                <p className="mt-1 text-sm font-black text-gray-800">
+                                  {formatDate(sub.expireDate)}
+                                </p>
+                              </div>
+                            </div>
 
-    <MiniInfoCard
-      label="Expire Date"
-      value={formatDate(sub.expireDate)}
-      color="emerald"
-    />
+                            {/* REMAINING DAYS */}
+                            {remainingDays !== null && (
+                              <div
+                                className={`
+                                  mt-5 rounded-2xl border p-4
+                                  transition-all duration-500
+                                  ${
+                                    remainingDays <= 7
+                                      ? "border-orange-200 bg-orange-50"
+                                      : "border-green-100 bg-green-50"
+                                  }
+                                `}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="
+                                      flex h-11 w-11 items-center justify-center
+                                      rounded-xl bg-white shadow-sm text-xl
+                                    ">
+                                      {remainingDays <= 7 ? "⚠️" : "📅"}
+                                    </div>
 
-  </div>
+                                    <div>
+                                      <p className="text-[10px] font-bold uppercase text-gray-500">
+                                        Subscription Validity
+                                      </p>
+                                      <p
+                                        className={`
+                                          mt-0.5 text-xl font-black
+                                          ${
+                                            remainingDays <= 7
+                                              ? "text-orange-700"
+                                              : "text-green-700"
+                                          }
+                                        `}
+                                      >
+                                        {remainingDays}{" "}
+                                        {remainingDays === 1 ? "Day" : "Days"} Remaining
+                                      </p>
+                                    </div>
+                                  </div>
 
-  {/* RENEWAL WARNING */}
-  {remainingDays > 0 && remainingDays <= 7 && (
-    <div className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 p-4">
+                                  <span className="text-[9px] font-bold text-gray-400">
+                                    VALID
+                                  </span>
+                                </div>
 
-      <p className="text-xs font-bold uppercase tracking-wide text-orange-600">
-        Subscription Renewal
-      </p>
+                                {remainingDays <= 7 && remainingDays > 0 && (
+                                  <p className="mt-3 text-xs font-semibold text-orange-600">
+                                    ⚡ Please renew your subscription soon.
+                                  </p>
+                                )}
+                              </div>
+                            )}
 
-      <p className="text-lg sm:text-xl font-black text-orange-700 mt-1">
-        🟠 {remainingDays}{" "}
-        {remainingDays === 1 ? "Day" : "Days"} Remaining
-      </p>
+                            {/* VIEW DETAILS */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedSubscriptionId(
+                                  isExpanded ? null : sub.id
+                                )
+                              }
+                              aria-expanded={isExpanded}
+                              className="
+                                mt-4 w-full rounded-2xl
+                                border border-gray-200 bg-gray-50
+                                px-4 py-4 text-left
+                                transition-all duration-300
+                                hover:border-green-200 hover:bg-green-50
+                                active:scale-[0.98]
+                              "
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="
+                                    flex h-10 w-10 items-center justify-center
+                                    rounded-xl bg-white shadow-sm text-lg
+                                  ">
+                                    📋
+                                  </div>
 
-      <p className="text-sm font-medium text-orange-600 mt-1">
-        Please renew your subscription soon.
-      </p>
+                                  <div>
+                                    <p className="font-bold text-gray-800">
+                                      {isExpanded
+                                        ? "Hide Subscription Details"
+                                        : "View Subscription Details"}
+                                    </p>
+                                    <p className="mt-0.5 text-[11px] text-gray-500">
+                                      Payment • Delivery • Dates
+                                    </p>
+                                  </div>
+                                </div>
 
-    </div>
-  )}
+                                <span
+                                  className={`
+                                    text-gray-500 transition-transform duration-300
+                                    ${isExpanded ? "rotate-180" : ""}
+                                  `}
+                                >
+                                  ▼
+                                </span>
+                              </div>
+                            </button>
 
-  {/* DELIVERY SUMMARY */}
-  <div className="mt-4 rounded-2xl border border-green-100 bg-green-50 p-4">
+                            {/* EXPANDABLE DETAILS */}
+                            <div
+                              className={`
+                                overflow-hidden transition-all duration-500 ease-in-out
+                                ${
+                                  isExpanded
+                                    ? "mt-4 max-h-[1000px] opacity-100"
+                                    : "mt-0 max-h-0 opacity-0"
+                                }
+                              `}
+                            >
+                              <div className="space-y-3">
+                                {/* MILK DETAILS */}
+                                <div className="
+                                  rounded-2xl border border-blue-100
+                                  bg-blue-50 p-4
+                                ">
+                                  <h4 className="font-bold text-blue-700">
+                                    🥛 Milk Details
+                                  </h4>
 
-    <h3 className="font-bold text-green-700 mb-3">
-      🚚 Delivery Summary
-    </h3>
+                                  <div className="mt-3 grid grid-cols-2 gap-3">
+                                    <div className="rounded-xl bg-white p-3">
+                                      <p className="text-[10px] text-gray-500">
+                                        Size
+                                      </p>
+                                      <p className="mt-1 font-bold text-gray-800">
+                                        {sub.size || "N/A"}
+                                      </p>
+                                    </div>
 
-    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                                    <div className="rounded-xl bg-white p-3">
+                                      <p className="text-[10px] text-gray-500">
+                                        Quantity
+                                      </p>
+                                      <p className="mt-1 font-bold text-gray-800">
+                                        {sub.quantity || 1} bottle/day
+                                      </p>
+                                    </div>
 
-      <div className="bg-white rounded-xl p-3 text-center">
-        <p className="text-xs text-gray-500">
-          Delivered
-        </p>
+                                    <div className="rounded-xl bg-white p-3">
+                                      <p className="text-[10px] text-gray-500">
+                                        Delivery
+                                      </p>
+                                      <p className="mt-1 font-bold text-gray-800">
+                                        {sub.deliveryType || "N/A"}
+                                      </p>
+                                    </div>
 
-        <p className="text-2xl font-bold text-green-600">
-          {deliverySummary.delivered || 0}
-        </p>
-      </div>
+                                    <div className="rounded-xl bg-white p-3">
+                                      <p className="text-[10px] text-gray-500">
+                                        Monthly
+                                      </p>
+                                      <p className="mt-1 font-bold text-green-700">
+                                        {formatMoney(sub.monthlyAmount)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
 
-      <div className="bg-white rounded-xl p-3 text-center">
-        <p className="text-xs text-gray-500">
-          Out
-        </p>
+                                {/* DATES */}
+                                <div className="
+                                  rounded-2xl border border-pink-100
+                                  bg-pink-50 p-4
+                                ">
+                                  <h4 className="font-bold text-pink-700">
+                                    📅 Subscription Period
+                                  </h4>
 
-        <p className="text-2xl font-bold text-blue-600">
-          {deliverySummary.outForDelivery || 0}
-        </p>
-      </div>
+                                  <div className="mt-3 grid grid-cols-2 gap-3">
+                                    <div className="rounded-xl bg-white p-3">
+                                      <p className="text-[10px] text-gray-500">
+                                        Start Date
+                                      </p>
+                                      <p className="mt-1 font-bold text-gray-800">
+                                        {formatDate(sub.startDate)}
+                                      </p>
+                                    </div>
 
-      <div className="bg-white rounded-xl p-3 text-center">
-        <p className="text-xs text-gray-500">
-          Skipped
-        </p>
+                                    <div className="rounded-xl bg-white p-3">
+                                      <p className="text-[10px] text-gray-500">
+                                        Expire Date
+                                      </p>
+                                      <p className="mt-1 font-bold text-gray-800">
+                                        {formatDate(sub.expireDate)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
 
-        <p className="text-2xl font-bold text-red-600">
-          {deliverySummary.skipped || 0}
-        </p>
-      </div>
+                                {/* PAYMENT */}
+                                <div className="
+                                  rounded-2xl border border-blue-100
+                                  bg-blue-50 p-4
+                                ">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <h4 className="font-bold text-blue-700">
+                                      💳 Payment Information
+                                    </h4>
 
-    </div>
+                                    <span
+                                      className={`
+                                        rounded-full px-3 py-1
+                                        text-[10px] font-black
+                                        ${
+                                          String(sub.payment_status || "")
+                                            .toLowerCase() === "paid"
+                                            ? "bg-green-100 text-green-700"
+                                            : "bg-orange-100 text-orange-700"
+                                        }
+                                      `}
+                                    >
+                                      {String(
+                                        sub.payment_status || "PENDING"
+                                      ).toUpperCase()}
+                                    </span>
+                                  </div>
 
-  </div>
+                                  <div className="mt-3 grid grid-cols-2 gap-3">
+                                    <div className="rounded-xl bg-white p-3">
+                                      <p className="text-[10px] text-gray-500">
+                                        Amount
+                                      </p>
+                                      <p className="mt-1 font-bold text-green-700">
+                                        {formatMoney(
+                                          sub.payment_amount ??
+                                          sub.total_amount ??
+                                          sub.monthlyAmount
+                                        )}
+                                      </p>
+                                    </div>
 
-</div>
+                                    <div className="rounded-xl bg-white p-3">
+                                      <p className="text-[10px] text-gray-500">
+                                        Method
+                                      </p>
+                                      <p className="mt-1 font-bold text-gray-800">
+                                        {sub.payment_method || "N/A"}
+                                      </p>
+                                    </div>
 
-                        {/* CARD FOOTER */}
-                        {/* CARD FOOTER */}
-<div className="px-5 pb-4 mt-4">
-  <div className="rounded-2xl border border-green-100 bg-green-50/70 p-4">
+                                    <div className="rounded-xl bg-white p-3">
+                                      <p className="text-[10px] text-gray-500">
+                                        Payment Date
+                                      </p>
+                                      <p className="mt-1 font-bold text-gray-800">
+                                        {sub.payment_date
+                                          ? formatDate(sub.payment_date)
+                                          : "Not Paid Yet"}
+                                      </p>
+                                    </div>
 
-    <div className="flex flex-col sm:flex-row gap-3">
+                                    <div className="rounded-xl bg-white p-3">
+                                      <p className="text-[10px] text-gray-500">
+                                        Reference
+                                      </p>
+                                      <p className="mt-1 break-all font-bold text-gray-800">
+                                        {sub.payment_reference || "N/A"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
 
-      {isActive && (
-        <button
-          onClick={() => {
-            setSelectedSubscription(sub);
-            setShowPauseModal(true);
-          }}
-          disabled={statusUpdatingId === sub.id}
-          className="flex-1 px-4 py-3 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold shadow disabled:opacity-60"
-        >
-          {statusUpdatingId === sub.id
-            ? "Updating..."
-            : "Pause"}
-        </button>
-      )}
+                                {/* DELIVERY SUMMARY */}
+                                <div className="
+                                  rounded-2xl border border-green-100
+                                  bg-green-50 p-4
+                                ">
+                                  <h4 className="font-bold text-green-700">
+                                    🚚 Delivery Summary
+                                  </h4>
 
-      {isPaused && (
-        <button
-          onClick={() => handleResume(sub.id)}
-          disabled={statusUpdatingId === sub.id}
-          className="flex-1 px-4 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-bold shadow disabled:opacity-60"
-        >
-          {statusUpdatingId === sub.id
-            ? "Updating..."
-            : "Activate"}
-        </button>
-      )}
+                                  <div className="mt-3 grid grid-cols-3 gap-2">
+                                    <div className="rounded-xl bg-white p-3 text-center">
+                                      <p className="text-[10px] text-gray-500">
+                                        Delivered
+                                      </p>
+                                      <p className="mt-1 text-2xl font-black text-green-600">
+                                        {deliverySummary.delivered || 0}
+                                      </p>
+                                    </div>
 
-      {isStopped && (
-        <button
-          onClick={() => handleResume(sub.id)}
-          disabled={statusUpdatingId === sub.id}
-          className="flex-1 px-4 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-bold shadow disabled:opacity-60"
-        >
-          {statusUpdatingId === sub.id
-            ? "Updating..."
-            : "Reactivate"}
-        </button>
-      )}
+                                    <div className="rounded-xl bg-white p-3 text-center">
+                                      <p className="text-[10px] text-gray-500">
+                                        Out
+                                      </p>
+                                      <p className="mt-1 text-2xl font-black text-blue-600">
+                                        {deliverySummary.outForDelivery || 0}
+                                      </p>
+                                    </div>
 
-      <button
-        onClick={() =>
-          navigate(`/subscription/manage/${sub.id}`)
-        }
-        className="flex-1 px-4 py-3 rounded-2xl bg-white border border-green-200 text-green-700 font-bold hover:bg-green-50"
-      >
-        Manage
-      </button>
+                                    <div className="rounded-xl bg-white p-3 text-center">
+                                      <p className="text-[10px] text-gray-500">
+                                        Skipped
+                                      </p>
+                                      <p className="mt-1 text-2xl font-black text-red-500">
+                                        {deliverySummary.skipped || 0}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
 
-    </div>
+                            {/* QUICK ACTIONS */}
+                            <div className="mt-4 flex gap-3">
+                              {isActive && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedSubscription(sub);
+                                    setShowPauseModal(true);
+                                  }}
+                                  disabled={statusUpdatingId === sub.id}
+                                  className="
+                                    flex-1 rounded-2xl
+                                    bg-orange-500 px-4 py-3
+                                    text-sm font-black text-white
+                                    shadow-md transition-all duration-200
+                                    hover:bg-orange-600 active:scale-95
+                                    disabled:opacity-60
+                                  "
+                                >
+                                  {statusUpdatingId === sub.id
+                                    ? "Updating..."
+                                    : "⏸ Pause"}
+                                </button>
+                              )}
 
-  </div>
-</div>
-                      </div>
-                    );
-                  })}
+                              {isPaused && (
+                                <button
+                                  onClick={() => handleResume(sub.id)}
+                                  disabled={statusUpdatingId === sub.id}
+                                  className="
+                                    flex-1 rounded-2xl
+                                    bg-green-600 px-4 py-3
+                                    text-sm font-black text-white
+                                    shadow-md transition-all active:scale-95
+                                    disabled:opacity-60
+                                  "
+                                >
+                                  {statusUpdatingId === sub.id
+                                    ? "Updating..."
+                                    : "▶ Activate"}
+                                </button>
+                              )}
+
+                              {isStopped && (
+                                <button
+                                  onClick={() => handleResume(sub.id)}
+                                  disabled={statusUpdatingId === sub.id}
+                                  className="
+                                    flex-1 rounded-2xl
+                                    bg-green-600 px-4 py-3
+                                    text-sm font-black text-white
+                                    shadow-md transition-all active:scale-95
+                                    disabled:opacity-60
+                                  "
+                                >
+                                  {statusUpdatingId === sub.id
+                                    ? "Updating..."
+                                    : "↻ Reactivate"}
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() =>
+                                  navigate(`/subscription/manage/${sub.id}`)
+                                }
+                                className="
+                                  flex-1 rounded-2xl
+                                  border border-green-200 bg-white
+                                  px-4 py-3 text-sm font-black text-green-700
+                                  transition-all hover:bg-green-50 active:scale-95
+                                "
+                              >
+                                ⚙ Manage
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
                 </div>
 
                 {/* MOBILE HINT */}
@@ -632,7 +985,9 @@ const activeSubscriptions = subscriptions.filter(
                 )}
               </div>
             )}
+            
           </div>
+  
 
         {/* QUICK ACTIONS */}
         <div className="grid md:grid-cols-3 gap-4 mt-6">
@@ -782,7 +1137,7 @@ const activeSubscriptions = subscriptions.filter(
       />
     </div>
   );
-}
+
 
 function StatCard({ title, value, color = "green" }) {
   const styles = {
@@ -836,4 +1191,5 @@ function MiniInfoCard({ label, value, color }) {
       <h3 className="text-lg sm:text-xl font-black mt-1 break-words">{value}</h3>
     </div>
   );
+}
 }
