@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../config/supabase.js";
+import { generateInvoiceNumber } from "./billing.service.js";
 
 /* ==========================================================
    Create Subscription
@@ -13,22 +14,36 @@ export async function createSubscriptionService(subscriptionData) {
     size,
     delivery_time,
     frequency,
-    start_date,    
+    start_date,
     total_amount,
-     // NEW
-  payment_method = "COD",
-  payment_status = "Pending",
-  payment_date = null,
-  payment_reference = null,
-  payment_amount = total_amount,
 
+    payment_method = "COD",
+    payment_status = "Pending",
+    payment_date = null,
+    payment_reference = null,
+    payment_amount = total_amount,
+
+    subtotal = total_amount,
+    discount = 0,
+    gst = 0,
+    gst_percent = 2,
   } = subscriptionData;
+
+  // ==========================================
+  // 1. Calculate subscription end date
+  // ==========================================
+
   const start = new Date(start_date);
+
   const end = new Date(start);
   end.setDate(end.getDate() + 30);
+
   const end_date = end.toISOString().split("T")[0];
 
-  // Create subscription
+  // ==========================================
+  // 2. Create Subscription
+  // ==========================================
+
   const { data: subscription, error } = await supabaseAdmin
     .from("subscriptions")
     .insert({
@@ -52,63 +67,72 @@ export async function createSubscriptionService(subscriptionData) {
     .single();
 
   if (error) {
-    return { data: null, error };
+    return {
+      data: null,
+      error,
+    };
   }
 
-  // Create one subscription item
-  // Daily price per litre
-const PRICE_PER_LITER = 90;
+  // ==========================================
+  // 3. Calculate Daily Price
+  // ==========================================
 
-let multiplier = 1;
+  const PRICE_PER_LITER = 90;
 
-switch (size) {
-  case "250ml":
-    multiplier = 0.25;
-    break;
+  let multiplier = 1;
 
-  case "500ml":
-    multiplier = 0.5;
-    break;
+  switch (size) {
+    case "250ml":
+      multiplier = 0.25;
+      break;
 
-  case "1L":
-    multiplier = 1;
-    break;
+    case "500ml":
+      multiplier = 0.5;
+      break;
 
-  case "2L":
-    multiplier = 2;
-    break;
+    case "1L":
+      multiplier = 1;
+      break;
 
-  case "3L":
-    multiplier = 3;
-    break;
+    case "2L":
+      multiplier = 2;
+      break;
 
-  case "5L":
-    multiplier = 5;
-    break;
+    case "3L":
+      multiplier = 3;
+      break;
 
-  default:
-    multiplier = 1;
-}
+    case "5L":
+      multiplier = 5;
+      break;
 
-const dailyPrice =
-  PRICE_PER_LITER *
-  multiplier *
-  quantity;
+    default:
+      multiplier = 1;
+  }
 
-const { error: itemError } = await supabaseAdmin
-  .from("subscription_items")
-  .insert({
-    subscription_id: subscription.id,
-    product_id,
-    quantity,
-    size,
+  const dailyPrice =
+    PRICE_PER_LITER *
+    multiplier *
+    quantity;
 
-    // Daily price
-    unit_price: dailyPrice,
+  // ==========================================
+  // 4. Create Subscription Item
+  // ==========================================
 
-    // Monthly subscription amount
-    price: total_amount,
-  });
+  const { error: itemError } = await supabaseAdmin
+    .from("subscription_items")
+    .insert({
+      subscription_id: subscription.id,
+      product_id,
+      quantity,
+      size,
+
+      // Daily price
+      unit_price: dailyPrice,
+
+      // Monthly subscription amount
+      price: total_amount,
+    });
 
   if (itemError) {
     await supabaseAdmin
@@ -116,8 +140,131 @@ const { error: itemError } = await supabaseAdmin
       .delete()
       .eq("id", subscription.id);
 
-    return { data: null, error: itemError };
+    return {
+      data: null,
+      error: itemError,
+    };
   }
+
+  // ==========================================
+// 5. Generate Invoice Number
+// ==========================================
+
+let invoiceNumber;
+
+try {
+  invoiceNumber = await generateInvoiceNumber();
+} catch (invoiceNumberError) {
+  await supabaseAdmin
+    .from("subscription_items")
+    .delete()
+    .eq("subscription_id", subscription.id);
+
+  await supabaseAdmin
+    .from("subscriptions")
+    .delete()
+    .eq("id", subscription.id);
+
+  return {
+    data: null,
+    error: invoiceNumberError,
+  };
+}
+  // ==========================================
+  // 6. Calculate Billing Values
+  // ==========================================
+
+  const billingSubtotal = Number(subtotal || 0);
+
+  const billingDiscount = Number(discount || 0);
+
+  const billingGst = Number(gst || 0);
+
+  const billingTotal = Number(
+    total_amount || 0
+  );
+
+  // ==========================================
+  // 7. Billing Month / Year
+  // ==========================================
+
+  const billingDate = new Date(start_date);
+
+  const billingMonth =
+    billingDate.toLocaleString("en-US", {
+      month: "long",
+    });
+
+  const billingYear =
+    billingDate.getFullYear();
+
+  // ==========================================
+  // 8. Create Billing Record
+  // ==========================================
+
+  const { error: billingError } = await supabaseAdmin
+    .from("billing")
+    .insert({
+      invoice_number: invoiceNumber,
+
+      customer_id,
+      subscription_id: subscription.id,
+
+      billing_month: billingMonth,
+      billing_year: billingYear,
+
+      amount: billingTotal,
+
+      subtotal: billingSubtotal,
+      discount: billingDiscount,
+
+      gst: billingGst,
+      gst_amount: billingGst,
+      gst_percent: Number(gst_percent || 2),
+
+      total_amount: billingTotal,
+
+      payment_status,
+      payment_method,
+
+      invoice_date: new Date().toISOString(),
+
+      invoice_type: "Subscription",
+
+      // New subscription has not had deliveries yet
+      delivered_days: 0,
+      daily_rate: dailyPrice,
+    });
+
+  // ==========================================
+  // 9. Rollback if Billing Creation Fails
+  // ==========================================
+
+  if (billingError) {
+    console.error(
+      "Subscription Billing Creation Error:",
+      billingError
+    );
+
+    await supabaseAdmin
+      .from("subscription_items")
+      .delete()
+      .eq("subscription_id", subscription.id);
+
+    await supabaseAdmin
+      .from("subscriptions")
+      .delete()
+      .eq("id", subscription.id);
+
+    return {
+      data: null,
+      error: billingError,
+    };
+  }
+
+  // ==========================================
+  // 10. Return Subscription
+  // ==========================================
 
   return {
     data: subscription,
