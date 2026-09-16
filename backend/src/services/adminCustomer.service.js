@@ -51,201 +51,440 @@ function getSubscriptionDisplayStatus(subscription) {
 // ===================================
 // Get All Customers
 // ===================================
-export async function getAllCustomersService() {
-  const { data: customers, error } = await supabaseAdmin
+export async function getAllCustomersService({
+  page = 1,
+  limit = 10,
+  search = "",
+  filter = "All",
+} = {}) {
+
+  // ===================================
+  // Pagination
+  // ===================================
+
+  const safePage = Math.max(
+    Number(page) || 1,
+    1
+  );
+
+  const safeLimit = Math.min(
+    Math.max(Number(limit) || 10, 1),
+    50
+  );
+
+  const from =
+    (safePage - 1) * safeLimit;
+
+  const to =
+    from + safeLimit - 1;
+
+
+  // ===================================
+  // Get Customers
+  // ===================================
+
+  let query = supabaseAdmin
     .from("customers")
-    .select("*")
-    .order("created_at", { ascending: false });
+    .select("*", {
+      count: "exact",
+    })
+    .order("created_at", {
+      ascending: false,
+    })
+    .range(from, to);
 
-  if (error) throw error;
 
-  const result = [];
+  // ===================================
+  // Search
+  // ===================================
 
-  for (const customer of customers) {
-    // ===================================
-    // Orders
-    // ===================================
+  if (search) {
 
-    const { data: orders = [] } = await supabaseAdmin
-      .from("orders")
-      .select("*")
-      .eq("customer_id", customer.id)
-      .order("created_at", { ascending: false });
+    const escapedSearch =
+      search.replace(/[%_]/g, "\\$&");
 
-    // ===================================
-    // Subscriptions
-    // ===================================
-
-    const { data: subscriptions = [] } =
-      await supabaseAdmin
-        .from("subscriptions")
-        .select("*")
-        .eq("customer_id", customer.id)
-        .order("created_at", { ascending: false });
-
-    // ===================================
-    // Address
-    // ===================================
-
-    const { data: addresses } = await supabaseAdmin
-      .from("addresses")
-      .select("*")
-      .eq("customer_id", customer.id)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    const address = addresses?.[0];
-
-    // ===================================
-    // Total Spent
-    // ===================================
-
-    const totalSpent = orders.reduce(
-      (sum, order) =>
-        sum + Number(order.total_amount || 0),
-      0
+    query = query.or(
+      `full_name.ilike.%${escapedSearch}%,phone.ilike.%${escapedSearch}%`
     );
-
-   // ===================================
-// Subscription Counts
-// ===================================
-
-const activeSubscriptions = subscriptions.filter(
-  (subscription) =>
-    getSubscriptionDisplayStatus(subscription) === "Active"
-);
-
-const pausedSubscriptions = subscriptions.filter(
-  (subscription) =>
-    getSubscriptionDisplayStatus(subscription) === "Paused"
-);
-
-const stoppedSubscriptions = subscriptions.filter(
-  (subscription) =>
-    subscription.status === "Stopped"
-);
-
-
-// ===================================
-// Customer Subscription Status
-// ===================================
-
-let customerSubscriptionStatus = "No Subscription";
-
-if (pausedSubscriptions.length > 0) {
-  customerSubscriptionStatus = "Paused";
-} else if (activeSubscriptions.length > 0) {
-  customerSubscriptionStatus = "Active";
-} else if (stoppedSubscriptions.length > 0) {
-  customerSubscriptionStatus = "Stopped";
-}
-
-// ===================================
-// Latest Subscription
-// ===================================
-
-    const latestSubscription =
-      subscriptions?.[0] || null;
-
-    const latestSubscriptionStatus =
-      latestSubscription
-        ? getSubscriptionDisplayStatus(
-            latestSubscription
-          )
-        : null;
-
-    // ===================================
-    // Customer Result
-    // ===================================
-
-    result.push({
-      id: customer.id,
-
-      name: customer.full_name,
-
-      phone: customer.phone,
-
-      email: customer.email,
-
-      area: address?.area || "-",
-
-      address: address
-        ? [
-            address.house_no,
-            address.street,
-            address.area,
-            address.city,
-            address.state,
-            address.pincode,
-          ]
-            .filter(Boolean)
-            .join(", ")
-        : "-",
-
-      totalOrders: orders.length,
-
-      totalSpent,
-
-      totalSubscriptions:
-        subscriptions.length,
-
-      activeSubscriptions:
-        activeSubscriptions.length,
-
-      pausedSubscriptions:
-        pausedSubscriptions.length,
-
-      stoppedSubscriptions:
-        stoppedSubscriptions.length,
-
-      subscriptionStatus:
-        customerSubscriptionStatus,
-
-      latestSubscriptionStatus,
-
-      latestSubscription:
-        latestSubscription
-          ? {
-              id: latestSubscription.id,
-
-              status:
-                latestSubscriptionStatus,
-
-              start_date:
-                latestSubscription.start_date,
-
-              end_date:
-                latestSubscription.end_date,
-
-              frequency:
-                latestSubscription.frequency,
-
-              is_paused:
-                isSubscriptionCurrentlyPaused(
-                  latestSubscription
-                ),
-
-              pause_from:
-                latestSubscription.pause_from,
-
-              pause_to:
-                latestSubscription.pause_to,
-            }
-          : null,
-
-      latestOrderDate:
-        orders.length > 0
-          ? orders[0].created_at
-          : "",
-
-      latestSubscriptionDate:
-        latestSubscription
-          ? latestSubscription.created_at
-          : "",
-    });
   }
 
-  return result;
+
+  const {
+    data: customers,
+    count,
+    error,
+  } = await query;
+
+
+  if (error) {
+    throw error;
+  }
+
+
+  // ===================================
+  // Load related data in parallel
+  // ===================================
+
+  const result =
+    await Promise.all(
+
+      (customers || []).map(
+        async (customer) => {
+
+          // -----------------------------------
+          // Orders
+          // -----------------------------------
+
+          const ordersPromise =
+            supabaseAdmin
+              .from("orders")
+              .select("*")
+              .eq(
+                "customer_id",
+                customer.id
+              )
+              .order("created_at", {
+                ascending: false,
+              });
+
+
+          // -----------------------------------
+          // Subscriptions
+          // -----------------------------------
+
+          const subscriptionsPromise =
+            supabaseAdmin
+              .from("subscriptions")
+              .select("*")
+              .eq(
+                "customer_id",
+                customer.id
+              )
+              .order("created_at", {
+                ascending: false,
+              });
+
+
+          // -----------------------------------
+          // Address
+          // -----------------------------------
+
+          const addressPromise =
+            supabaseAdmin
+              .from("addresses")
+              .select("*")
+              .eq(
+                "customer_id",
+                customer.id
+              )
+              .order("created_at", {
+                ascending: false,
+              })
+              .limit(1);
+
+
+          // -----------------------------------
+          // Run all 3 together
+          // -----------------------------------
+
+          const [
+            ordersResult,
+            subscriptionsResult,
+            addressResult,
+          ] = await Promise.all([
+            ordersPromise,
+            subscriptionsPromise,
+            addressPromise,
+          ]);
+
+
+          if (ordersResult.error) {
+            throw ordersResult.error;
+          }
+
+          if (subscriptionsResult.error) {
+            throw subscriptionsResult.error;
+          }
+
+          if (addressResult.error) {
+            throw addressResult.error;
+          }
+
+
+          const orders =
+            ordersResult.data || [];
+
+          const subscriptions =
+            subscriptionsResult.data || [];
+
+          const address =
+            addressResult.data?.[0] || null;
+
+
+          // ===================================
+          // Total Spent
+          // ===================================
+
+          const totalSpent =
+            orders.reduce(
+              (sum, order) =>
+                sum +
+                Number(
+                  order.total_amount || 0
+                ),
+              0
+            );
+
+
+          // ===================================
+          // Subscription Counts
+          // ===================================
+
+          const activeSubscriptions =
+            subscriptions.filter(
+              (subscription) =>
+                getSubscriptionDisplayStatus(
+                  subscription
+                ) === "Active"
+            );
+
+
+          const pausedSubscriptions =
+            subscriptions.filter(
+              (subscription) =>
+                getSubscriptionDisplayStatus(
+                  subscription
+                ) === "Paused"
+            );
+
+
+          const stoppedSubscriptions =
+            subscriptions.filter(
+              (subscription) =>
+                subscription.status === "Stopped"
+            );
+
+
+          // ===================================
+          // Customer Subscription Status
+          // ===================================
+
+          let customerSubscriptionStatus =
+            "No Subscription";
+
+
+          if (
+            pausedSubscriptions.length > 0
+          ) {
+
+            customerSubscriptionStatus =
+              "Paused";
+
+          } else if (
+            activeSubscriptions.length > 0
+          ) {
+
+            customerSubscriptionStatus =
+              "Active";
+
+          } else if (
+            stoppedSubscriptions.length > 0
+          ) {
+
+            customerSubscriptionStatus =
+              "Stopped";
+          }
+
+
+          // ===================================
+          // Latest Subscription
+          // ===================================
+
+          const latestSubscription =
+            subscriptions?.[0] || null;
+
+
+          const latestSubscriptionStatus =
+            latestSubscription
+              ? getSubscriptionDisplayStatus(
+                  latestSubscription
+                )
+              : null;
+
+
+          // ===================================
+          // Return Customer
+          // ===================================
+
+          return {
+
+            id: customer.id,
+
+            name: customer.full_name,
+
+            phone: customer.phone,
+
+            email: customer.email,
+
+            area:
+              address?.area || "-",
+
+            address: address
+              ? [
+                  address.house_no,
+                  address.street,
+                  address.area,
+                  address.city,
+                  address.state,
+                  address.pincode,
+                ]
+                  .filter(Boolean)
+                  .join(", ")
+              : "-",
+
+            totalOrders:
+              orders.length,
+
+            totalSpent,
+
+            totalSubscriptions:
+              subscriptions.length,
+
+            activeSubscriptions:
+              activeSubscriptions.length,
+
+            pausedSubscriptions:
+              pausedSubscriptions.length,
+
+            stoppedSubscriptions:
+              stoppedSubscriptions.length,
+
+            subscriptionStatus:
+              customerSubscriptionStatus,
+
+            latestSubscriptionStatus,
+
+            latestSubscription:
+              latestSubscription
+                ? {
+                    id:
+                      latestSubscription.id,
+
+                    status:
+                      latestSubscriptionStatus,
+
+                    start_date:
+                      latestSubscription.start_date,
+
+                    end_date:
+                      latestSubscription.end_date,
+
+                    frequency:
+                      latestSubscription.frequency,
+
+                    is_paused:
+                      isSubscriptionCurrentlyPaused(
+                        latestSubscription
+                      ),
+
+                    pause_from:
+                      latestSubscription.pause_from,
+
+                    pause_to:
+                      latestSubscription.pause_to,
+                  }
+                : null,
+
+            latestOrderDate:
+              orders.length > 0
+                ? orders[0].created_at
+                : "",
+
+            latestSubscriptionDate:
+              latestSubscription
+                ? latestSubscription.created_at
+                : "",
+          };
+        }
+      )
+    );
+
+
+  // ===================================
+  // Client-side filter compatibility
+  // ===================================
+  // Keep filtering behavior for now.
+  // We will move these filters fully into
+  // SQL in the next optimization step.
+
+  const filteredResult =
+    result.filter((customer) => {
+
+      if (filter === "Subscribed") {
+        return (
+          customer.totalSubscriptions > 0
+        );
+      }
+
+      if (filter === "Only Orders") {
+        return (
+          customer.totalOrders > 0 &&
+          customer.totalSubscriptions === 0
+        );
+      }
+
+      if (
+        filter ===
+        "Active Subscription"
+      ) {
+        return (
+          customer.activeSubscriptions > 0
+        );
+      }
+
+      if (
+        filter ===
+        "Paused Subscription"
+      ) {
+        return (
+          customer.pausedSubscriptions > 0
+        );
+      }
+
+      return true;
+    });
+
+
+  // ===================================
+  // Pagination Response
+  // ===================================
+
+  return {
+
+    customers: filteredResult,
+
+    pagination: {
+
+      page: safePage,
+
+      limit: safeLimit,
+
+      total: count || 0,
+
+      totalPages: Math.ceil(
+        (count || 0) / safeLimit
+      ),
+
+      hasNextPage:
+        safePage <
+        Math.ceil(
+          (count || 0) / safeLimit
+        ),
+
+      hasPreviousPage:
+        safePage > 1,
+    },
+  };
 }
 // ===================================
 // Get Customer By ID
