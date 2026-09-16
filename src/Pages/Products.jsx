@@ -1,38 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getProducts } from "../services/productService";
-import { addToCart, getCartItemCount } from "../config/cart";
-import { useSearchParams } from "react-router-dom";
 
+import { fetchProducts } from "../config/api";
 import { addProductToCart } from "../services/cartService";
+import { addToCart, getCartItemCount } from "../config/cart";
 import { useAuthSession } from "../context/AuthSessionContext";
-import Categories from "../Components/home/Categories";
-
 
 const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1563636619-e9143da7973b?q=80&w=1200&auto=format&fit=crop";
 
 export default function Products() {
-  const [searchParams] = useSearchParams();
-
-const selectedCategory =
-  searchParams.get("category") || "All";
   const navigate = useNavigate();
   const { customer } = useAuthSession();
   const audioRef = useRef(null);
 
   const [products, setProducts] = useState([]);
   const [cartCount, setCartCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [quantities, setQuantities] = useState({});
   const [selectedSizes, setSelectedSizes] = useState({});
   const [toast, setToast] = useState("");
-  const [addedProduct, setAddedProduct] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  useEffect(() => {
-  setCartCount(getCartItemCount());
-}, []);
 
   /* ----------------------------------
      PLAY CART SOUND
@@ -60,163 +46,131 @@ const selectedCategory =
      NORMALIZE PRODUCT DATA
      Supports many Google Sheet column names
   ---------------------------------- */
-const normalizeProduct = (item, index = 0) => {
-  const rawName =
-    item.name ||
-    item.Name ||
-    item.productName ||
-    item["Product Name"] ||
-    item["Product"] ||
-    item["Item Name"] ||
-    item["Title"] ||
-    "";
+  const normalizeProduct = (item, index = 0) => {
+    const rawName =
+      item.name ||
+      item.Name ||
+      item.productName ||
+      item["Product Name"] ||
+      item["Product"] ||
+      item["Item Name"] ||
+      item["Title"] ||
+      "";
 
-  const rawPrice =
-    item.price ??
-    item.Price ??
-    item.productPrice ??
-    item["Product Price"] ??
-    item["Price/Liter"] ??
-    item["Price Per Liter"] ??
-    item["Rate"] ??
-    item["Amount"] ??
-    0;
+    const rawPrice =
+      item.price ??
+      item.Price ??
+      item.productPrice ??
+      item["Product Price"] ??
+      item["Price/Liter"] ??
+      item["Price Per Liter"] ??
+      item["Rate"] ??
+      item["Amount"] ??
+      0;
 
-  const rawStock =
-    item.stock ??
-    item.Stock ??
-    item.qty ??
-    item.quantity ??
-    item["Stock Qty"] ??
-    item["Stock Quantity"] ??
-    item["Available Stock"] ??
-    item["Available Qty"] ??
-    0;
+    const rawStock =
+      item.stock ??
+      item.Stock ??
+      item.qty ??
+      item.quantity ??
+      item["Stock Qty"] ??
+      item["Stock Quantity"] ??
+      item["Available Stock"] ??
+      item["Available Qty"] ??
+      0;
 
-  const rawImage =
-    item.image ||
-    item.Image ||
-    item.productImage ||
-    item["Product Image"] ||
-    item["Image URL"] ||
-    item["Photo"] ||
-    "";
+    const rawImage =
+      item.image ||
+      item.Image ||
+      item.productImage ||
+      item["Product Image"] ||
+      item["Image URL"] ||
+      item["Photo"] ||
+      "";
 
-  return {
-    id:
-      item.id ||
-      item.productId ||
-      item["Product ID"] ||
-      item["ID"] ||
-      `product-${index}`,
-
-    name: String(rawName || "Product"),
-
-    price: toNumber(rawPrice, 0),
-
-    stock: toNumber(rawStock, 0),
-
-    image: String(rawImage || "").trim(),
-
-    category:
-  item.category ||
-  item.categories?.name ||
-  item.Category ||
-  item["Product Category"] ||
-  item.product_category ||
-  item.productType ||
-  item.type ||
-  "",
-
-  product_sizes: item.product_sizes || [],
+    return {
+      id:
+        item.id ||
+        item.productId ||
+        item["Product ID"] ||
+        item["ID"] ||
+        `product-${index}`,
+      name: String(rawName || "Product"),
+      price: toNumber(rawPrice, 0),
+      stock: toNumber(rawStock, 0),
+      image: String(rawImage || "").trim(),
+      category:
+        item.category ||
+        item.Category ||
+        item["Product Category"] ||
+        "",
+    };
   };
-};
-    
-    
-
-  const categories = useMemo(() => {
-  const uniqueCategories = [
-    "All",
-    ...new Set(
-      products
-        .map((product) => product.category)
-        .filter(Boolean)
-    ),
-  ];
-
-  return uniqueCategories;
-}, [products]);
-
-
- 
- const filteredProducts = products.filter((product) => {
-  const keyword = searchTerm.trim().toLowerCase();
-
-  const matchesCategory =
-    selectedCategory === "All" ||
-    product.category?.trim() === selectedCategory;
-
-  const matchesSearch =
-    keyword === "" ||
-    product.name?.toLowerCase().includes(keyword) ||
-    product.category?.toLowerCase().includes(keyword);
-
-  return matchesCategory && matchesSearch;
-});
 
   /* ----------------------------------
      SIZE PRICE CALCULATION
   ---------------------------------- */
-  // const getPrice = (basePrice, size) => {
-  //   const price = toNumber(basePrice, 0);
+  const getPrice = (basePrice, size) => {
+    const price = toNumber(basePrice, 0);
 
-  //   switch (size) {
-  //     case "250ml":
-  //       return Math.round(price * 0.25);
-  //     case "500ml":
-  //       return Math.round(price * 0.5);
-  //     case "1L":
-  //       return Math.round(price);
-  //     case "2L":
-  //       return Math.round(price * 2);
-  //     case "3L":
-  //       return Math.round(price * 3);
-  //     case "5L":
-  //       return Math.round(price * 5);
-  //     default:
-  //       return Math.round(price);
-  //   }
-  // };
+    switch (size) {
+      case "250ml":
+        return Math.round(price * 0.25);
+      case "500ml":
+        return Math.round(price * 0.5);
+      case "1L":
+        return Math.round(price);
+      case "2L":
+        return Math.round(price * 2);
+      case "3L":
+        return Math.round(price * 3);
+      case "5L":
+        return Math.round(price * 5);
+      default:
+        return Math.round(price);
+    }
+  };
 
   /* ----------------------------------
      LOAD PRODUCTS
   ---------------------------------- */
- useEffect(() => {
-  loadProducts();
-}, []);
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const data = await fetchProducts();
 
-const loadProducts = async () => {
-  try {
-    setLoading(true);
-    setError("");
+        console.log("Products API response:", data);
 
-    const products = await getProducts();
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.products)
+          ? data.products
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
 
-    console.log("API Response:", products);
+        const normalized = list
+          .map((item, index) => normalizeProduct(item, index))
+          .filter((p) => p.name && p.name.trim() !== "");
 
-    const list = products.map((item, index) =>
-      normalizeProduct(item, index)
-    );
+        console.log("Normalized products:", normalized);
 
-    setProducts(list);
-  } catch (err) {
-    console.error(err);
+        setProducts(normalized);
+      } catch (error) {
+        console.error("Products fetch failed:", error);
+        setProducts([]);
+      }
+    };
 
-    setError("Failed to load products.");
-  } finally {
-    setLoading(false);
-  }
-};
+    loadProducts();
+    setCartCount(getCartItemCount());
+
+    // sync cart count if localStorage changes in another tab/page
+    const onStorage = () => setCartCount(getCartItemCount());
+    window.addEventListener("storage", onStorage);
+
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   /* ----------------------------------
      QUANTITY HANDLERS
@@ -247,376 +201,413 @@ const loadProducts = async () => {
   /* ----------------------------------
      ADD TO CART
   ---------------------------------- */
-const getCalculatedPrice = (product) => {
-  const sizes = product.product_sizes || [];
+  const handleAddToCart = async (product) => {
+    const qty = quantities[product.id] || 1;
+    const size = selectedSizes[product.id] || "1L";
+    const price = getPrice(product.price, size);
 
-  if (sizes.length === 0) {
-    return Number(product.price || 0);
-  }
+    if (!customer) {
+      setToast("Please login to add products to cart");
+      setTimeout(() => setToast(""), 1800);
+      navigate("/auth");
+      return;
+    }
 
-  const selectedLabel =
-    selectedSizes[product.id] || sizes[0].label;
+    if (!product.name || price <= 0) {
+      setToast("Product data is invalid");
+      setTimeout(() => setToast(""), 1800);
+      return;
+    }
 
-  const selectedSize = sizes.find(
-    (size) => size.label === selectedLabel
-  );
+    try {
+      await addProductToCart({
+        customer_id: customer.id,
+        product_id: product.id,
+        quantity: qty,
+        price,
+        size,
+      });
 
-  if (!selectedSize) {
-    return Number(product.price || 0);
-  }
+      // Keep the existing local cart badge in sync.
+      addToCart({
+        id: product.id,
+        name: product.name,
+        image: product.image || FALLBACK_IMAGE,
+        size,
+        qty,
+        price,
+        stock: product.stock,
+        total: qty * price,
+      });
 
-  if (!selectedSize.available) {
-    return Number(product.price || 0);
-  }
+      setCartCount(getCartItemCount());
+      setToast(`${product.name} added to cart`);
+      playCartSound();
 
-  return Number(selectedSize.price || product.price || 0);
-};
-const handleAddToCart = async (product) => {
-  const qty = quantities[product.id] || 1;
-  const sizes = product.product_sizes || [];
+      setTimeout(() => setToast(""), 1800);
+    } catch (err) {
+      console.error("Add to cart failed:", err);
+      setToast(err?.message || "Failed to add item");
+      setTimeout(() => setToast(""), 2200);
+    }
+  };
 
-const size =
-  selectedSizes[product.id] ||
-  sizes[0]?.label ||
-  "";
-  const price = getCalculatedPrice(product);
-  //const sizes = product.product_sizes || [];
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
 
-const selectedSize = sizes.find(
-  (s) => s.label === size
-);
+  const categories = [
+    "All",
+    ...Array.from(
+      new Set(
+        products
+          .map((p) => String(p.category || "").trim())
+          .filter(Boolean)
+      )
+    ),
+  ];
 
-if (selectedSize && !selectedSize.available) {
-  setToast("Selected size is out of stock.");
+  const visibleProducts = products.filter((product) => {
+    const matchesSearch = product.name
+      .toLowerCase()
+      .includes(search.trim().toLowerCase());
 
-  setTimeout(() => {
-    setToast("");
-  }, 2000);
+    const matchesCategory =
+      activeCategory === "All" ||
+      String(product.category || "").trim() === activeCategory;
 
-  return;
-}
-
-  if (!customer) {
-    navigate("/auth");
-    return;
-  }
-
-  try {
-    await addProductToCart({
-      customer_id: customer.id,
-      product_id: product.id,
-      quantity: qty,
-      price,
-      size,
-    });
-
-    // Keep local cart temporarily so existing Cart page still works
-    addToCart({
-      id: product.id,
-      name: product.name,
-      image: product.image || FALLBACK_IMAGE,
-      size,
-      qty,
-      price,
-      stock: product.stock,
-      total: qty * price,
-    });
-
-    setCartCount(getCartItemCount());
-    setAddedProduct(product.id);
-    playCartSound();
-    setToast(`${product.name} added to cart`);
-
-    setTimeout(() => {
-      setToast("");
-      setAddedProduct(null);
-    }, 2000);
-
-  } catch (err) {
-    console.error(err);
-    setToast("Failed to add item");
-  }
-};
+    return matchesSearch && matchesCategory;
+  });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 via-white to-emerald-50 px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
-      {/* Cart sound */}
+    <div className="min-h-screen bg-[#f6fbf7] text-slate-900">
       <audio ref={audioRef} preload="auto">
-        <source src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" type="audio/ogg" />
+        <source
+          src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"
+          type="audio/ogg"
+        />
       </audio>
 
-      <div className="max-w-7xl mx-auto">
+      {/* Floating cart */}
+      <button
+        onClick={() => navigate("/cart")}
+        className="fixed right-4 bottom-5 sm:right-7 sm:bottom-7 z-50 group"
+        aria-label="Open cart"
+      >
+        <span className="absolute inset-0 rounded-[22px] bg-emerald-400/30 blur-xl group-hover:blur-2xl transition" />
+        <span className="relative flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-emerald-500 to-green-700 text-2xl shadow-[0_16px_40px_rgba(16,185,129,.35)] ring-4 ring-white">
+          🛒
+          {cartCount > 0 && (
+            <span className="absolute -right-1 -top-2 flex min-w-6 h-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-black text-white shadow-lg animate-bounce">
+              {cartCount}
+            </span>
+          )}
+        </span>
+      </button>
+
+      <div className="mx-auto max-w-[1500px] px-3 py-4 sm:px-5 lg:px-8 lg:py-7">
         {/* HERO */}
-        <div className="relative overflow-hidden rounded-[28px] border border-green-100 bg-gradient-to-br from-[#f7fff8] via-white to-[#eefaf0] px-4 sm:px-8 py-8 sm:py-10 shadow-[0_10px_40px_rgba(34,197,94,0.08)] mb-6 sm:mb-8">
-          <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20">
-            <button
-              onClick={() => navigate("/cart")}
-              className="relative flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/95 backdrop-blur-md border border-green-100 text-green-700 shadow-xl hover:scale-105 transition"
-            >
-              <span className="text-2xl">🛒</span>
+        <section className="relative overflow-hidden rounded-[32px] sm:rounded-[40px] bg-gradient-to-br from-[#063b24] via-[#087b45] to-[#11ad67] px-5 py-8 text-white shadow-[0_25px_70px_rgba(6,95,55,.22)] sm:px-9 sm:py-11 lg:px-14 lg:py-14">
+          <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl animate-pulse" />
+          <div className="absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-emerald-300/10 blur-3xl" />
+          <div className="absolute right-[18%] top-10 text-3xl opacity-60 animate-bounce">✦</div>
 
-              {cartCount > 0 && (
-                <span className="absolute -top-2 -right-2 min-w-[22px] h-6 px-1 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center shadow-md">
-                  {cartCount}
+          <div className="relative grid items-center gap-8 lg:grid-cols-[1fr_auto]">
+            <div className="max-w-3xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold backdrop-blur-md">
+                <span>🌿</span>
+                Farm Fresh • Pure • Delivered Daily
+              </div>
+
+              <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl">
+                Fresh dairy,
+                <span className="block text-emerald-100">made simple.</span>
+              </h1>
+
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-emerald-50 sm:text-base sm:leading-7">
+                Shop fresh milk, curd and everyday dairy essentials with
+                convenient sizes and doorstep delivery.
+              </p>
+
+              <div className="mt-7 flex flex-wrap gap-3 text-xs font-bold sm:text-sm">
+                <span className="rounded-2xl bg-white/10 px-4 py-2.5 ring-1 ring-white/10">
+                  🥛 Fresh Dairy
                 </span>
-              )}
-            </button>
-          </div>
-
-          <div className="relative z-10 text-center">
-            <div className="inline-flex items-center justify-center gap-2 rounded-full border border-green-100 bg-white/90 px-4 sm:px-5 py-2 text-xs sm:text-sm font-semibold text-green-700 shadow-sm backdrop-blur-md">
-              <span>🌿</span>
-              <span>100% Natural & Fresh Dairy</span>
+                <span className="rounded-2xl bg-white/10 px-4 py-2.5 ring-1 ring-white/10">
+                  🚚 Home Delivery
+                </span>
+                <span className="rounded-2xl bg-white/10 px-4 py-2.5 ring-1 ring-white/10">
+                  🔒 Secure Checkout
+                </span>
+              </div>
             </div>
 
-            <h1 className="mt-4 text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight text-green-950">
-              Fresh Dairy Products
-            </h1>
+            <div className="hidden lg:flex h-44 w-44 items-center justify-center rounded-[38px] border border-white/20 bg-white/10 text-7xl shadow-2xl backdrop-blur-md">
+              🥛
+            </div>
+          </div>
+        </section>
 
-            <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base leading-relaxed text-slate-600">
-              Pure, fresh and healthy dairy products delivered daily with quality you can trust.
+        {/* SEARCH + CONTROLS */}
+        <section className="sticky top-2 z-30 mt-5 rounded-[26px] border border-emerald-100 bg-white/90 p-3 shadow-[0_12px_35px_rgba(15,118,80,.10)] backdrop-blur-xl sm:p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="relative flex-1">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg">
+                🔎
+              </span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search milk, curd, ghee, paneer..."
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-medium outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  onClick={() => setActiveCategory(category)}
+                  className={`shrink-0 rounded-2xl px-4 py-3 text-xs font-black transition-all duration-300 ${
+                    activeCategory === category
+                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-[1.02]"
+                      : "bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
+                  }`}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION TITLE */}
+        <div className="mt-8 mb-5 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[.2em] text-emerald-600">
+              Our collection
             </p>
-
-            <div className="mx-auto mt-5 h-1.5 w-20 sm:w-24 rounded-full bg-gradient-to-r from-green-500 to-emerald-400"></div>
+            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+              Fresh Dairy Products
+            </h2>
+          </div>
+          <div className="rounded-2xl bg-white px-4 py-2 text-xs font-bold text-slate-500 shadow-sm ring-1 ring-slate-100">
+            {visibleProducts.length} products
           </div>
         </div>
 
         {/* TOAST */}
         {toast && (
-          <div className="fixed top-24 right-4 z-50 rounded-2xl bg-green-600 text-white px-5 py-3 shadow-2xl font-bold">
-            {toast}
+          <div className="fixed left-1/2 top-24 z-[60] -translate-x-1/2 animate-[fadeIn_.25s_ease-out]">
+            <div className="flex items-center gap-3 rounded-2xl border border-emerald-100 bg-white px-5 py-3 text-sm font-black text-emerald-700 shadow-2xl">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100">
+                ✓
+              </span>
+              {toast}
+            </div>
           </div>
         )}
 
-        {/* PRODUCTS GRID */}
-        <Categories
-          categories={categories}
-          selectedCategory={selectedCategory}
-          setSelectedCategory={(category) =>
-            navigate(`/products?category=${encodeURIComponent(category)}`)
-          }
-        />
-        <div className="max-w-xl mx-auto mt-6">
-        <input
-          type="text"
-          placeholder="🔍 Search products..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full rounded-2xl border border-green-200 px-5 py-3 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200"
-        />
-      </div>
-        {loading && (
-          <div className="bg-white rounded-3xl shadow-lg p-10 text-center mt-8">
+        {/* PRODUCT GRID */}
+        {visibleProducts.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
+            {visibleProducts.map((product, index) => {
+              const currentSize = selectedSizes[product.id] || "1L";
+              const currentQty = quantities[product.id] || 1;
+              const currentPrice = getPrice(product.price, currentSize);
+              const stock = toNumber(product.stock, 0);
+              const lowStock = stock > 0 && stock <= 5;
 
-            <div className="animate-spin rounded-full h-14 w-14 border-4 border-green-200 border-t-green-600 mx-auto"></div>
+              return (
+                <article
+                  key={product.id || index}
+                  className={`group relative overflow-hidden rounded-[26px] border bg-white shadow-[0_8px_30px_rgba(15,23,42,.07)] transition-all duration-500 hover:-translate-y-1.5 hover:shadow-[0_20px_45px_rgba(16,120,75,.16)] ${
+                    stock === 0
+                      ? "border-slate-200 opacity-75"
+                      : "border-emerald-100"
+                  }`}
+                >
+                  {/* IMAGE */}
+                  <div className="relative aspect-[1.05/1] overflow-hidden bg-gradient-to-br from-emerald-50 to-slate-100 sm:aspect-[1.12/1]">
+                    <img
+                      src={product.image || FALLBACK_IMAGE}
+                      alt={product.name}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = FALLBACK_IMAGE;
+                      }}
+                      className="h-full w-full object-cover transition duration-700 group-hover:scale-110"
+                    />
 
-            <p className="mt-5 text-lg font-semibold text-gray-600">
-              Loading products...
-            </p>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-          </div>
-        )}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-3xl p-8 text-center mt-8">
-
-            <h2 className="text-2xl font-bold text-red-700">
-              {error}
-            </h2>
-
-            <button
-              onClick={loadProducts}
-              className="mt-5 bg-red-600 text-white px-6 py-3 rounded-xl font-bold"
-            >
-              Retry
-            </button>
-
-          </div>
-        )}
-
-        {/* EMPTY */}
-        {!loading && !error && filteredProducts.length === 0 ? (
-                <div className="bg-white rounded-3xl shadow-lg p-10 text-center mt-8">
-                  <div className="text-6xl mb-4">🥛</div>
-
-                  <h2 className="text-2xl font-black text-gray-700">
-                    {searchTerm
-                      ? `No products found for "${searchTerm}"`
-                      : "No products found"}
-                  </h2>
-                </div>
-              ) : (
-           
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4 mt-6">
-
-                {filteredProducts.map((product) => {
-                  const qty = quantities[product.id] || 1;
-                const price = getCalculatedPrice(product);
-
-                  return (
-                    <div
-                      key={product.id}
-                      className="bg-white rounded-3xl shadow-lg border border-green-100 overflow-hidden hover:shadow-2xl transition-all duration-300 hover:-translate-y-2"
-                    >
-                      <img
-                        src={product.image?.trim() || FALLBACK_IMAGE}
-                        onError={(e) => {
-                          e.target.src = FALLBACK_IMAGE;
-                        }}
-                        alt={product.name}
-                        className="w-full h-36 object-cover"
-                      />
-
-                      <div className="p-3">
-                        <h3 className="text-lg font-bold text-green-800">
-                          {product.name}
-                        </h3>
-
-                        <p className="text-xl font-bold text-green-600 mt-1">
-                          ₹{getCalculatedPrice(product)}
-                          
-                        </p>
-                        {/* Size Selection */}
-
-                         <div className="mt-3">
-
-                            <p className="text-sm font-semibold text-gray-700 mb-2">
-                              Size
-                            </p>
-
-                            <div className="flex flex-wrap gap-2">
-
-                             {(product.product_sizes || []).map((size) => {
-
-                              const isSelected =
-                                (selectedSizes[product.id] ||
-                                  product.product_sizes?.[0]?.label) === size.label;
-
-                              return (
-                                <button
-                                  key={size.id}
-                                  type="button"
-
-                                  disabled={!size.available}
-
-                                  onClick={() => {
-
-                                    if (!size.available) return;
-
-                                    setSelectedSizes(prev => ({
-                                      ...prev,
-                                      [product.id]: size.label,
-                                    }));
-
-                                  }}
-
-                                  className={`
-
-                                    px-3
-                                    py-1.5
-                                    rounded-full
-                                    text-sm
-                                    font-semibold
-                                    border
-                                    transition-all
-                                    duration-300
-
-                                    ${
-                                      !size.available
-                                        ? "bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed"
-                                        : isSelected
-                                        ? "bg-green-600 text-white border-green-600 shadow"
-                                        : "bg-white text-gray-700 border-gray-300 hover:border-green-500 hover:text-green-600"
-                                    }
-
-                                  `}
-                                >
-                                  {size.label}
-
-                                  {!size.available && (
-                                    <div className="text-[10px]">
-                                      Out
-                                    </div>
-                                  )}
-
-                                </button>
-                              );
-
-                            })}
-
-                            </div>
-
-                          </div>
-
-                       <p
-                            className={`mt-2 font-semibold ${
-                              product.stock <= 0
-                                ? "text-red-600"
-                                : product.stock <= 5
-                                ? "text-yellow-600"
-                                : "text-green-600"
-                            }`}
-                          >
-                            {product.stock <= 0
-                              ? "🔴 Out of Stock"
-                              : product.stock <= 5
-                              ? `🟡 Only ${product.stock} Left`
-                              : `🟢 In Stock (${product.stock})`}
-                              
-                          </p>
-
-                       <div
-                          className={
-                            product.is_subscription
-                              ? "grid grid-cols-2 gap-2 mt-3"
-                              : "mt-3"
-                          }
-                        >
-                          <button
-                            disabled={Number(product.stock) === 0}
-                            onClick={() => handleAddToCart(product)}
-                            className={`rounded-2xl py-3 font-bold transition-all duration-300 ${
-                              Number(product.stock) === 0
-                                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                                : addedProduct === product.id
-                                ? "bg-green-700 text-white scale-105 shadow-lg"
-                                : "bg-green-600 hover:bg-green-700 text-white"
-                            } ${
-                              product.is_subscription ? "" : "w-full"
-                            }`}
-                          >
-                            {Number(product.stock) === 0
-                              ? "Out of Stock"
-                              : addedProduct === product.id
-                              ? "✓ Added"
-                              : "Add To Cart"}
-                          </button>
-
-                          {product.is_subscription && (
-                            <button
-                              disabled={Number(product.stock) === 0}
-                              onClick={() => navigate("/subscription")}
-                              className={`rounded-2xl py-3 font-bold ${
-                                Number(product.stock) === 0
-                                  ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-                                  : "bg-green-50 hover:bg-green-100 text-green-700"
-                              }`}
-                            >
-                              Subscribe
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                    <div className="absolute left-3 top-3">
+                      <span
+                        className={`rounded-full px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide shadow-lg backdrop-blur-md sm:px-3 sm:text-[10px] ${
+                          stock > 0
+                            ? "bg-white/95 text-emerald-700"
+                            : "bg-red-500 text-white"
+                        }`}
+                      >
+                        {stock > 0 ? "● In Stock" : "Out of Stock"}
+                      </span>
                     </div>
-                  );
-                })}
 
-              </div>
-            )}
+                    {lowStock && (
+                      <div className="absolute bottom-3 left-3 rounded-full bg-amber-400 px-2.5 py-1.5 text-[9px] font-black text-amber-950 shadow-lg">
+                        ⚡ Only {stock} left
+                      </div>
+                    )}
 
+                    <div className="absolute right-3 top-3 rounded-full bg-black/50 px-2.5 py-1.5 text-[9px] font-bold text-white backdrop-blur-md">
+                      {stock} available
+                    </div>
                   </div>
-                </div>
+
+                  {/* CONTENT */}
+                  <div className="p-3.5 sm:p-5">
+                    <div className="min-h-[44px]">
+                      <h3 className="line-clamp-2 text-sm font-black leading-5 text-slate-900 sm:text-lg">
+                        {product.name}
+                      </h3>
+                    </div>
+
+                    <div className="mt-2 flex items-end justify-between gap-2">
+                      <div>
+                        <p className="text-xl font-black text-emerald-700 sm:text-2xl">
+                          ₹{currentPrice}
+                        </p>
+                        <p className="text-[9px] font-medium text-slate-400 sm:text-[11px]">
+                          Base ₹{toNumber(product.price)}/L
+                        </p>
+                      </div>
+                      <span className="rounded-xl bg-emerald-50 px-2 py-1 text-[9px] font-bold text-emerald-700">
+                        Fresh
+                      </span>
+                    </div>
+
+                    <div className="mt-4">
+                      <label className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-slate-400">
+                        Select size
+                      </label>
+                      <select
+                        value={currentSize}
+                        onChange={(e) =>
+                          setSelectedSizes((prev) => ({
+                            ...prev,
+                            [product.id]: e.target.value,
+                          }))
+                        }
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+                      >
+                        <option value="250ml">250 ml</option>
+                        <option value="500ml">500 ml</option>
+                        <option value="1L">1 Liter</option>
+                        <option value="2L">2 Liter</option>
+                        <option value="3L">3 Liter</option>
+                        <option value="5L">5 Liter</option>
+                      </select>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 p-1.5 ring-1 ring-slate-100">
+                      <button
+                        disabled={stock === 0 || currentQty <= 1}
+                        onClick={() => decreaseQty(product)}
+                        className="h-9 w-9 rounded-xl bg-white text-lg font-black text-slate-700 shadow-sm transition hover:bg-red-50 hover:text-red-500 active:scale-90 disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        −
+                      </button>
+                      <div className="text-center">
+                        <span className="block text-sm font-black text-slate-900">
+                          {currentQty}
+                        </span>
+                        <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">
+                          Quantity
+                        </span>
+                      </div>
+                      <button
+                        disabled={stock === 0 || currentQty >= stock}
+                        onClick={() => increaseQty(product)}
+                        className="h-9 w-9 rounded-xl bg-emerald-600 text-lg font-black text-white shadow-sm transition hover:bg-emerald-700 active:scale-90 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <button
+                      disabled={stock === 0}
+                      onClick={() => handleAddToCart(product)}
+                      className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-xs font-black transition-all duration-300 active:scale-[.97] sm:text-sm ${
+                        stock === 0
+                          ? "cursor-not-allowed bg-slate-200 text-slate-400"
+                          : "bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-lg shadow-emerald-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-300"
+                      }`}
+                    >
+                      <span>{stock === 0 ? "Unavailable" : "Add to Cart"}</span>
+                      {stock > 0 && <span className="text-base">→</span>}
+                    </button>
+                  </div>
+                </article>
               );
-            }
-            
-            
-          
+            })}
+          </div>
+        ) : (
+          <div className="rounded-[32px] border border-emerald-100 bg-white px-6 py-16 text-center shadow-lg">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-50 text-4xl">
+              🥛
+            </div>
+            <h3 className="mt-5 text-2xl font-black text-slate-900">
+              No products found
+            </h3>
+            <p className="mt-2 text-sm text-slate-500">
+              Try another search or category.
+            </p>
+            <button
+              onClick={() => {
+                setSearch("");
+                setActiveCategory("All");
+              }}
+              className="mt-5 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-lg"
+            >
+              Show All Products
+            </button>
+          </div>
+        )}
+
+        {/* TRUST STRIP */}
+        <section className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            ["🥛", "Fresh Products"],
+            ["🚚", "Daily Delivery"],
+            ["💳", "Easy Payment"],
+            ["💚", "Quality First"],
+          ].map(([icon, title]) => (
+            <div
+              key={title}
+              className="rounded-2xl border border-emerald-100 bg-white p-4 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+            >
+              <div className="text-2xl">{icon}</div>
+              <p className="mt-2 text-[10px] font-black text-slate-600 sm:text-xs">
+                {title}
+              </p>
+            </div>
+          ))}
+        </section>
+      </div>
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translate(-50%, -8px); }
+          to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            scroll-behavior: auto !important;
+            transition-duration: 0.01ms !important;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}

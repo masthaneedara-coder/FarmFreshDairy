@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   fetchProducts,
@@ -18,9 +18,12 @@ const PRICE_MAP = {
 
 export default function CreateSubscription() {
   const navigate = useNavigate();
+  const initialLoadStarted = useRef(false);
  
 
   const [loading, setLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [addressesLoading, setAddressesLoading] = useState(true);
 
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -72,23 +75,19 @@ const monthlyAmount = useMemo(() => {
 ]);
 
   useEffect(() => {
+    if (initialLoadStarted.current) return;
+    initialLoadStarted.current = true;
     loadPage();
   }, []);
 
   async function loadPage() {
-    try {
-      setLoading(true);
+    setLoading(true);
 
-      await Promise.all([
-        loadProducts(),
-        loadAddresses(),
-      ]);
+    // Load independently so one slow/failing request cannot keep the
+    // entire subscription screen stuck on a global loading state.
+    await Promise.allSettled([loadProducts(), loadAddresses()]);
 
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    setLoading(false);
   }
 function handleAddAddress() {
   setEditingAddress(null);
@@ -197,28 +196,40 @@ async function loadProducts() {
 }
 
   async function loadAddresses() {
-    const customer = JSON.parse(
-      localStorage.getItem("customer")
-    );
+    setAddressesLoading(true);
+    try {
+      const customer = JSON.parse(
+        localStorage.getItem("customer")
+      );
 
-    if (!customer?.id) return;
+      if (!customer?.id) {
+        return;
+      }
 
-    const res = await fetchCustomerAddresses(
-      customer.id
-    );
+      const res = await Promise.race([
+        fetchCustomerAddresses(customer.id),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Address request timed out")), 10000)
+        ),
+      ]);
 
     const list = res.addresses || [];
 
     setAddresses(list);
 
-    if (list.length > 0) {
-      const defaultAddress =
-        list.find((a) => a.is_default) || list[0];
+      if (list.length > 0) {
+        const defaultAddress =
+          list.find((a) => a.is_default) || list[0];
 
-      setForm((prev) => ({
-        ...prev,
-        addressId: defaultAddress.id,
-      }));
+        setForm((prev) => ({
+          ...prev,
+          addressId: defaultAddress.id,
+        }));
+      }
+    } catch (err) {
+      console.error("Subscription address error:", err);
+    } finally {
+      setAddressesLoading(false);
     }
   }
 
@@ -282,509 +293,623 @@ async function loadProducts() {
     );
   }
 
-  return (<div className="min-h-screen bg-slate-50">
+  return (
+    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_8%_8%,rgba(16,185,129,.14),transparent_28%),radial-gradient(circle_at_92%_24%,rgba(132,204,22,.12),transparent_24%),linear-gradient(180deg,#f0fdf4_0%,#ffffff_46%,#ecfdf5_100%)]">
+      <style>{`
+        @keyframes createSubFadeUp {
+          from { opacity: 0; transform: translateY(18px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
 
-  <div className="max-w-6xl mx-auto px-6 py-10">
+        @keyframes createSubFloat {
+          0%, 100% { transform: translate3d(0,0,0); }
+          50% { transform: translate3d(10px,-10px,0); }
+        }
 
-    <h1 className="text-4xl font-black text-green-700 mb-8">
-      Create Subscription
-    </h1>
+        @keyframes createSubPulse {
+          0%, 100% { transform: scale(1); opacity: .45; }
+          50% { transform: scale(1.12); opacity: .8; }
+        }
 
-    <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+        @keyframes createSubShimmer {
+          0% { transform: translateX(-130%) skewX(-18deg); }
+          100% { transform: translateX(170%) skewX(-18deg); }
+        }
 
-      {/* Product */}
+        .create-sub-stagger > * {
+          animation: createSubFadeUp .55s ease-out both;
+        }
 
-      <div className="border-b p-8 flex flex-col lg:flex-row gap-8">
+        .create-sub-stagger > *:nth-child(2) { animation-delay: .06s; }
+        .create-sub-stagger > *:nth-child(3) { animation-delay: .12s; }
+        .create-sub-stagger > *:nth-child(4) { animation-delay: .18s; }
 
-        <img
-        src={selectedProduct.image}
-        alt={selectedProduct.name}
-        className="w-56 h-56 rounded-2xl object-cover border"
-        />
+        .create-sub-card {
+          transition:
+            transform .3s cubic-bezier(.2,.8,.2,1),
+            box-shadow .3s ease,
+            border-color .3s ease;
+        }
 
-        <div className="flex-1">
+        .create-sub-card:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 22px 60px rgba(15,118,110,.12);
+          border-color: rgba(16,185,129,.3);
+        }
 
-          <h2 className="text-3xl font-bold">
-            {selectedProduct.name}
-          </h2>
+        @media (prefers-reduced-motion: reduce) {
+          .create-sub-stagger > *,
+          .create-sub-card,
+          [class*="animate-"] {
+            animation: none !important;
+            transition: none !important;
+          }
+        }
+      `}</style>
 
-          <p className="text-gray-500 mt-3">
-            Fresh farm milk delivered directly to your doorstep.
-          </p>
+      <div className="relative mx-auto max-w-7xl px-3 pb-28 pt-5 sm:px-5 sm:pb-10 sm:pt-7 lg:px-8">
 
-        </div>
+        {/* Premium Hero */}
+        <section className="relative isolate mb-6 overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#043b2d] via-[#047857] to-[#16a34a] text-white shadow-[0_25px_80px_rgba(4,120,87,.22)] sm:rounded-[2.5rem]">
+          <div className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full bg-lime-300/15 blur-3xl animate-[createSubFloat_7s_ease-in-out_infinite]" />
+          <div className="pointer-events-none absolute -bottom-28 -left-24 h-80 w-80 rounded-full bg-white/10 blur-3xl animate-[createSubFloat_8s_ease-in-out_infinite_reverse]" />
+          <div className="pointer-events-none absolute right-[18%] top-8 hidden h-28 w-28 rounded-full border border-white/10 animate-[createSubPulse_4s_ease-in-out_infinite] sm:block" />
+          <div className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-white/10 blur-2xl animate-[createSubShimmer_8s_ease-in-out_infinite]" />
 
-      </div>
-      <div className="mt-8">
+          <div className="relative p-5 sm:p-7 lg:p-9">
+            <div className="flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-2xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-2 text-[11px] font-black uppercase tracking-[.16em] backdrop-blur-xl">
+                  <span className="h-2 w-2 rounded-full bg-lime-300 animate-pulse" />
+                  Fresh Daily Subscription
+                </div>
 
-  <h3 className="text-lg font-bold mb-4">
-    Choose Product
-  </h3>
+                <h1 className="mt-4 text-[2.45rem] font-black leading-[.96] tracking-tight sm:text-5xl lg:text-6xl">
+                  Build Your
+                  <span className="block text-lime-200">Perfect Milk Plan</span>
+                </h1>
 
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <p className="mt-4 max-w-xl text-sm leading-relaxed text-emerald-50 sm:text-base">
+                  Choose your dairy product, quantity, delivery schedule and
+                  doorstep address — all in one simple plan.
+                </p>
 
-    {products.map((item) => {
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {[
+                    ["🥛", "Fresh Dairy"],
+                    ["🚚", "Home Delivery"],
+                    ["🔄", "Flexible Plan"],
+                  ].map(([icon, label]) => (
+                    <span
+                      key={label}
+                      className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-2 text-xs font-bold backdrop-blur"
+                    >
+                      <span>{icon}</span>
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
 
-      const active =
-        selectedProduct?.id === item.id;
+              <div className="relative mx-auto w-full max-w-[270px] lg:mx-0">
+                <div className="absolute inset-5 rounded-[2rem] bg-lime-200/20 blur-2xl" />
+                <div className="relative overflow-hidden rounded-[2rem] border border-white/20 bg-white/10 p-3 shadow-2xl backdrop-blur-xl">
+                  <div className="overflow-hidden rounded-[1.5rem] bg-white/10">
+                    <img
+                      src={selectedProduct.image}
+                      alt={selectedProduct.name}
+                      className="h-52 w-full object-cover transition duration-700 hover:scale-105 sm:h-60"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between px-2 pb-1 pt-4">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">
+                        Selected
+                      </p>
+                      <p className="mt-1 text-lg font-black">
+                        {selectedProduct.name}
+                      </p>
+                    </div>
+                    <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lime-300 text-xl shadow-lg">
+                      🥛
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
-      return (
+          <div className="h-1 bg-gradient-to-r from-lime-300 via-white to-emerald-200 opacity-80" />
+        </section>
 
-        <button
-          key={item.id}
-          type="button"
-          onClick={() => setSelectedProduct(item)}
-          className={`rounded-2xl border-2 p-4 transition ${
-            active
-              ? "border-green-600 bg-green-50"
-              : "border-gray-300 hover:border-green-400"
-          }`}
-        >
-
-          <img
-            src={item.image}
-            alt={item.name}
-            className="w-24 h-24 object-cover rounded-xl mx-auto"
-          />
-
-          <h4 className="mt-3 text-lg font-bold">
-            {item.name}
-          </h4>
-
-          <p className="text-gray-500">
-            ₹{item.price}/Litre
-          </p>
-
-        </button>
-
-      );
-
-    })}
-
-  </div>
-
-</div>
-
-      <div className="p-8 space-y-8">
-
-        {/* Product Size */}
-
-        <div>
-
-          <label className="block font-semibold mb-3">
-            Product Size
-          </label>
-
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-
-            {["500ml","1L","2L","3L","5L"].map((size)=>{
-
-              const active=form.size===size;
-
-              return(
-
-                <button
-                  key={size}
-                  type="button"
-                  onClick={()=>updateForm("size",size)}
-                  className={`rounded-xl py-4 border-2 font-bold transition ${
-                    active
-                      ? "bg-green-600 border-green-600 text-white"
-                      : "bg-white border-gray-300 hover:border-green-500"
+        {/* Step Indicator */}
+        <div className="mb-6 grid grid-cols-4 gap-2">
+          {[
+            ["01", "Product"],
+            ["02", "Plan"],
+            ["03", "Delivery"],
+            ["04", "Review"],
+          ].map(([number, label], index) => (
+            <div key={number} className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-emerald-100 bg-white/90 px-2.5 py-3 shadow-sm backdrop-blur sm:px-4">
+                <span
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-black ${
+                    index === 0
+                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
+                      : "bg-emerald-50 text-emerald-700"
                   }`}
                 >
-                  {size}
+                  {number}
+                </span>
+                <span className="truncate text-[10px] font-black uppercase tracking-wide text-slate-600 sm:text-xs">
+                  {label}
+                </span>
+              </div>
+              {index < 3 && (
+                <span className="hidden text-emerald-300 sm:block">→</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="create-sub-stagger grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+
+          {/* Main Form */}
+          <div className="space-y-5">
+
+            {/* Product Selection */}
+            <section className="create-sub-card overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/95 shadow-[0_14px_50px_rgba(15,118,110,.075)]">
+              <div className="border-b border-emerald-50 bg-gradient-to-r from-emerald-50/80 via-white to-lime-50/60 px-4 py-5 sm:px-6">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-xl text-white shadow-lg shadow-emerald-600/20">
+                    🥛
+                  </span>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[.18em] text-emerald-600">
+                      Step 01
+                    </p>
+                    <h2 className="text-xl font-black text-slate-800 sm:text-2xl">
+                      Choose Your Product
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
+                      Pick the dairy product you want delivered regularly.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-6">
+                {products.map((item) => {
+                  const active = selectedProduct?.id === item.id;
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelectedProduct(item)}
+                      className={`group relative overflow-hidden rounded-[1.5rem] border-2 p-3 text-left transition-all duration-300 ${
+                        active
+                          ? "border-emerald-500 bg-emerald-50 shadow-[0_15px_40px_rgba(16,185,129,.14)]"
+                          : "border-slate-200 bg-white hover:-translate-y-1 hover:border-emerald-300 hover:shadow-xl"
+                      }`}
+                    >
+                      {active && (
+                        <span className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-sm font-black text-white shadow-lg">
+                          ✓
+                        </span>
+                      )}
+
+                      <div className="overflow-hidden rounded-[1.2rem] bg-slate-50">
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="h-36 w-full object-cover transition duration-500 group-hover:scale-105 sm:h-44"
+                        />
+                      </div>
+
+                      <div className="flex items-end justify-between gap-3 px-1 pb-1 pt-4">
+                        <div>
+                          <h3 className="text-lg font-black text-slate-800">
+                            {item.name}
+                          </h3>
+                          <p className="mt-1 text-sm font-semibold text-slate-500">
+                            Fresh & delivered to your doorstep
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-black text-emerald-700">
+                          ₹{item.price}/L
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Plan Configuration */}
+            <section className="create-sub-card overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/95 shadow-[0_14px_50px_rgba(15,118,110,.075)]">
+              <div className="border-b border-emerald-50 bg-gradient-to-r from-slate-50 via-white to-emerald-50/50 px-4 py-5 sm:px-6">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-xl text-white">
+                    ⚙️
+                  </span>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[.18em] text-emerald-600">
+                      Step 02
+                    </p>
+                    <h2 className="text-xl font-black text-slate-800 sm:text-2xl">
+                      Build Your Plan
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
+                      Select size, quantity, timing and frequency.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-7 p-4 sm:p-6">
+
+                {/* Size */}
+                <div>
+                  <div className="mb-3 flex items-end justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-600">
+                        Quantity per delivery
+                      </p>
+                      <h3 className="mt-1 text-base font-black text-slate-800">
+                        Choose Size
+                      </h3>
+                    </div>
+                    <span className="text-xs font-bold text-slate-400">
+                      {form.size}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {["500ml", "1L", "2L", "3L", "5L"].map((size) => {
+                      const active = form.size === size;
+
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => updateForm("size", size)}
+                          className={`rounded-2xl border-2 px-3 py-3.5 text-sm font-black transition-all duration-300 ${
+                            active
+                              ? "border-emerald-600 bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
+                              : "border-slate-200 bg-white text-slate-700 hover:-translate-y-0.5 hover:border-emerald-400 hover:text-emerald-700"
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Quantity */}
+                <div className="rounded-[1.5rem] border border-emerald-100 bg-emerald-50/60 p-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-600">
+                        Bottles / units
+                      </p>
+                      <h3 className="mt-1 text-base font-black text-slate-800">
+                        Daily Quantity
+                      </h3>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-2xl bg-white p-1.5 shadow-sm ring-1 ring-emerald-100 sm:justify-start">
+                      <button
+                        type="button"
+                        onClick={decreaseQuantity}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-xl font-black text-slate-700 transition hover:bg-slate-200 active:scale-95"
+                        aria-label="Decrease quantity"
+                      >
+                        −
+                      </button>
+                      <div className="min-w-[90px] text-center">
+                        <span className="text-3xl font-black text-emerald-700">
+                          {form.quantity}
+                        </span>
+                        <span className="ml-1 text-xs font-bold text-slate-400">
+                          {form.size}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={increaseQuantity}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-xl font-black text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-95"
+                        aria-label="Increase quantity"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Delivery + Frequency */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-2 block text-[10px] font-black uppercase tracking-[.16em] text-emerald-600">
+                      Delivery Time
+                    </span>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg">
+                        🌅
+                      </span>
+                      <select
+                        value={form.deliveryTime}
+                        onChange={(e) =>
+                          updateForm("deliveryTime", e.target.value)
+                        }
+                        className="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-11 py-4 font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      >
+                        <option>Morning</option>
+                        <option>Evening</option>
+                      </select>
+                    </div>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-[10px] font-black uppercase tracking-[.16em] text-emerald-600">
+                      Frequency
+                    </span>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg">
+                        🔄
+                      </span>
+                      <select
+                        value={form.frequency}
+                        onChange={(e) =>
+                          updateForm("frequency", e.target.value)
+                        }
+                        className="w-full appearance-none rounded-2xl border border-slate-200 bg-white px-11 py-4 font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      >
+                        <option>Daily</option>
+                        <option>Alternate Days</option>
+                        <option>Weekly</option>
+                      </select>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Start Date */}
+                <label className="block">
+                  <span className="mb-2 block text-[10px] font-black uppercase tracking-[.16em] text-emerald-600">
+                    Start Date
+                  </span>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg">
+                      📅
+                    </span>
+                    <input
+                      type="date"
+                      value={form.startDate}
+                      onChange={(e) =>
+                        updateForm("startDate", e.target.value)
+                      }
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-11 py-4 font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                    />
+                  </div>
+                </label>
+              </div>
+            </section>
+
+            {/* Address */}
+            <section className="create-sub-card overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/95 shadow-[0_14px_50px_rgba(15,118,110,.075)]">
+              <div className="border-b border-emerald-50 bg-gradient-to-r from-emerald-50/80 via-white to-lime-50/60 px-4 py-5 sm:px-6">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-xl">
+                    📍
+                  </span>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[.18em] text-emerald-600">
+                      Step 03
+                    </p>
+                    <h2 className="text-xl font-black text-slate-800 sm:text-2xl">
+                      Delivery Address
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
+                      Where should we deliver your fresh dairy?
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 sm:p-6">
+                <select
+                  value={form.addressId}
+                  onChange={(e) => updateForm("addressId", e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 font-semibold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                >
+                  <option value="">Select Delivery Address</option>
+                  {addresses.map((address) => (
+                    <option key={address.id} value={address.id}>
+                      {[
+                        address.house_no,
+                        address.street,
+                        address.area,
+                        address.city,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={handleAddAddress}
+                    className="group flex items-center justify-center gap-2 rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-4 py-3.5 font-black text-emerald-700 transition hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-100 active:scale-[.98]"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-lg shadow-sm transition group-hover:rotate-90">
+                      +
+                    </span>
+                    Add New Address
+                  </button>
+
+                  <LocationButton onLocationFound={handleLocationFound} />
+                </div>
+
+                {form.addressId &&
+                  (() => {
+                    const selected = addresses.find(
+                      (a) => String(a.id) === String(form.addressId)
+                    );
+
+                    if (!selected) return null;
+
+                    return (
+                      <div className="mt-4 rounded-[1.5rem] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-lg text-white shadow-lg shadow-emerald-600/20">
+                            ✓
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-black uppercase tracking-wider text-emerald-700">
+                              Selected Delivery Address
+                            </p>
+                            <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-600">
+                              {[
+                                selected.house_no,
+                                selected.street,
+                                selected.area,
+                                selected.city,
+                                selected.state,
+                                selected.pincode,
+                              ]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                {addresses.length === 0 && (
+                  <div className="mt-4 rounded-[1.5rem] border border-amber-200 bg-amber-50 p-4">
+                    <p className="font-black text-amber-800">
+                      No delivery address found.
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-amber-700">
+                      Add your address to continue with the subscription.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {/* Sticky Summary */}
+          <aside className="xl:sticky xl:top-24 xl:self-start">
+            <section className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/95 shadow-[0_20px_65px_rgba(15,118,110,.12)] backdrop-blur">
+              <div className="relative overflow-hidden bg-gradient-to-br from-[#064e3b] via-[#047857] to-[#10b981] p-5 text-white sm:p-6">
+                <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+                <div className="relative">
+                  <p className="text-[10px] font-black uppercase tracking-[.18em] text-emerald-100">
+                    Step 04 · Review
+                  </p>
+                  <h2 className="mt-1 text-2xl font-black">
+                    Your Subscription
+                  </h2>
+                  <p className="mt-1 text-xs text-emerald-100">
+                    Everything ready for your doorstep.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 p-4 sm:p-5">
+                <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 p-3">
+                  <img
+                    src={selectedProduct.image}
+                    alt={selectedProduct.name}
+                    className="h-16 w-16 rounded-2xl object-cover shadow-sm"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">
+                      Product
+                    </p>
+                    <p className="truncate text-base font-black text-slate-800">
+                      {selectedProduct.name}
+                    </p>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {form.quantity} × {form.size}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <SummaryMini icon="📅" label="Frequency" value={form.frequency} />
+                  <SummaryMini icon="🌅" label="Delivery" value={form.deliveryTime} />
+                  <SummaryMini icon="▶️" label="Starts" value={form.startDate} />
+                  <SummaryMini
+                    icon="📍"
+                    label="Address"
+                    value={form.addressId ? "Selected" : "Required"}
+                    danger={!form.addressId}
+                  />
+                </div>
+
+                <div className="rounded-[1.5rem] border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5">
+                  <p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-600">
+                    Estimated Monthly Amount
+                  </p>
+                  <div className="mt-2 flex items-end justify-between gap-3">
+                    <span className="text-4xl font-black tracking-tight text-emerald-800">
+                      ₹{monthlyAmount.toLocaleString("en-IN")}
+                    </span>
+                    <span className="pb-1 text-xs font-bold text-slate-400">
+                      / month
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-xs font-semibold text-slate-500">
+                  <div className="flex justify-between gap-4">
+                    <span>Product</span>
+                    <span className="text-right font-black text-slate-700">
+                      {selectedProduct.name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span>Size × Quantity</span>
+                    <span className="font-black text-slate-700">
+                      {form.size} × {form.quantity}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span>Frequency</span>
+                    <span className="font-black text-slate-700">
+                      {form.frequency}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleContinue}
+                  className="group relative w-full overflow-hidden rounded-2xl bg-emerald-600 py-4 text-base font-black text-white shadow-xl shadow-emerald-600/20 transition-all duration-300 hover:-translate-y-1 hover:bg-emerald-700 hover:shadow-2xl active:scale-[.98]"
+                >
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    Continue to Review
+                    <span className="text-xl transition-transform duration-300 group-hover:translate-x-1">
+                      →
+                    </span>
+                  </span>
+                  <span className="absolute inset-y-0 -left-1/3 w-1/3 bg-white/20 blur-xl transition-transform duration-700 group-hover:translate-x-[430%]" />
                 </button>
 
-              );
-
-            })}
-
-          </div>
-
-        </div>
-
-        {/* Quantity */}
-
-        <div>
-
-          <label className="block font-semibold mb-3">
-            Quantity
-          </label>
-
-          <div className="flex items-center gap-6">
-
-            <button
-              type="button"
-              onClick={decreaseQuantity}
-              className="w-12 h-12 rounded-full bg-red-500 text-white text-2xl"
-            >
-              −
-            </button>
-
-            <span className="text-3xl font-bold">
-              {form.quantity}
-            </span>
-
-            <button
-              type="button"
-              onClick={increaseQuantity}
-              className="w-12 h-12 rounded-full bg-green-600 text-white text-2xl"
-            >
-              +
-            </button>
-
-          </div>
-
-        </div>
-
-        {/* Delivery Time */}
-
-        <div>
-
-          <label className="block font-semibold mb-3">
-            Delivery Time
-          </label>
-
-          <select
-            value={form.deliveryTime}
-            onChange={(e)=>updateForm("deliveryTime",e.target.value)}
-            className="w-full rounded-xl border px-4 py-3"
-          >
-            <option>Morning</option>
-            <option>Evening</option>
-          </select>
-
-        </div>
-
-        {/* Frequency */}
-
-        <div>
-
-          <label className="block font-semibold mb-3">
-            Frequency
-          </label>
-
-          <select
-            value={form.frequency}
-            onChange={(e)=>updateForm("frequency",e.target.value)}
-            className="w-full rounded-xl border px-4 py-3"
-          >
-            <option>Daily</option>
-            <option>Alternate Days</option>
-            <option>Weekly</option>
-          </select>
-
-        </div>
-
-        {/* Start Date */}
-
-        <div>
-
-          <label className="block font-semibold mb-3">
-            Start Date
-          </label>
-
-          <input
-            type="date"
-            value={form.startDate}
-            onChange={(e)=>updateForm("startDate",e.target.value)}
-            className="w-full rounded-xl border px-4 py-3"
-          />
-
-        </div>
-
-        {/* Address */}
-
-       {/* =====================================
-    DELIVERY ADDRESS
-===================================== */}
-
-<div>
-
-  <label className="block font-semibold mb-3">
-    Delivery Address
-  </label>
-
-
-  {/* Existing Addresses */}
-
-  <select
-    value={form.addressId}
-    onChange={(e) =>
-      updateForm(
-        "addressId",
-        e.target.value
-      )
-    }
-    className="
-      w-full
-      rounded-2xl
-      border
-      border-gray-200
-      px-4
-      py-4
-      bg-white
-      text-gray-700
-      outline-none
-      focus:ring-2
-      focus:ring-green-200
-      focus:border-green-500
-    "
-  >
-
-    <option value="">
-      Select Delivery Address
-    </option>
-
-    {addresses.map((address) => (
-
-      <option
-        key={address.id}
-        value={address.id}
-      >
-
-        {[
-          address.house_no,
-          address.street,
-          address.area,
-          address.city,
-        ]
-          .filter(Boolean)
-          .join(", ")}
-
-      </option>
-
-    ))}
-
-  </select>
-
-
-  {/* =====================================
-      ADDRESS ACTIONS
-  ====================================== */}
-
-  <div
-    className="
-      grid
-      grid-cols-1
-      sm:grid-cols-2
-      gap-3
-      mt-3
-    "
-  >
-
-    {/* Add New Address */}
-
-    <button
-      type="button"
-      onClick={handleAddAddress}
-      className="
-        flex
-        items-center
-        justify-center
-        gap-2
-        px-4
-        py-3
-        rounded-2xl
-        border-2
-        border-green-200
-        bg-green-50
-        text-green-700
-        font-bold
-        hover:bg-green-100
-        active:scale-[0.98]
-        transition
-      "
-    >
-
-      <span className="text-lg">
-        +
-      </span>
-
-      Add New Address
-
-    </button>
-
-
-    {/* Current Location */}
-
-    <LocationButton
-      onLocationFound={
-        handleLocationFound
-      }
-    />
-
-  </div>
-
-
-  {/* Selected Address Preview */}
-
-  {form.addressId && (
-    <div
-      className="
-        mt-4
-        rounded-2xl
-        bg-green-50
-        border
-        border-green-200
-        p-4
-      "
-    >
-
-      {(() => {
-
-        const selected =
-          addresses.find(
-            (a) =>
-              String(a.id) ===
-              String(form.addressId)
-          );
-
-        if (!selected)
-          return null;
-
-        return (
-          <>
-
-            <div
-              className="
-                flex
-                items-start
-                gap-3
-              "
-            >
-
-              <div
-                className="
-                  w-10
-                  h-10
-                  rounded-xl
-                  bg-green-100
-                  flex
-                  items-center
-                  justify-center
-                  text-green-700
-                  shrink-0
-                "
-              >
-                📍
-              </div>
-
-              <div>
-
-                <p
-                  className="
-                    font-bold
-                    text-green-800
-                  "
-                >
-                  Delivery Address
+                <p className="text-center text-[10px] font-semibold leading-relaxed text-slate-400">
+                  You can review your plan and payment details on the next step.
                 </p>
-
-                <p
-                  className="
-                    text-sm
-                    text-gray-600
-                    mt-1
-                  "
-                >
-
-                  {[
-                    selected.house_no,
-                    selected.street,
-                    selected.area,
-                    selected.city,
-                    selected.state,
-                    selected.pincode,
-                  ]
-                    .filter(Boolean)
-                    .join(", ")}
-
-                </p>
-
               </div>
-
-            </div>
-
-          </>
-        );
-
-      })()}
-
-    </div>
-  )}
-
-
-  {/* No address */}
-
-  {addresses.length === 0 && (
-
-    <div
-      className="
-        mt-4
-        rounded-2xl
-        border
-        border-yellow-200
-        bg-yellow-50
-        p-4
-      "
-    >
-
-      <p
-        className="
-          text-yellow-800
-          font-semibold
-        "
-      >
-        No delivery address found.
-      </p>
-
-      <p
-        className="
-          text-yellow-700
-          text-sm
-          mt-1
-        "
-      >
-        Add your address to continue
-        with the subscription.
-      </p>
-
-    </div>
-
-  )}
-
-</div>
-
-        {/* Monthly Amount */}
-
-        <div className="rounded-2xl bg-green-50 border border-green-200 p-6">
-
-          <p className="text-lg font-semibold text-green-700">
-            Monthly Amount
-          </p>
-
-          <h2 className="text-5xl font-black mt-3">
-            ₹{monthlyAmount.toLocaleString()}
-          </h2>
-
+            </section>
+          </aside>
         </div>
-
-        {/* Continue */}
-
-        <button
-          onClick={handleContinue}
-          className="w-full rounded-xl bg-green-600 hover:bg-green-700 text-white py-4 text-xl font-bold"
-        >
-          Continue →
-        </button>
-
       </div>
 
-    </div>
-
-  </div>
   {showAddressForm && (
   <AddressForm
     customerId={
@@ -808,4 +933,30 @@ async function loadProducts() {
  
 
 );
+
+function SummaryMini({ icon, label, value, danger = false }) {
+  return (
+    <div
+      className={`rounded-2xl border p-3 ${
+        danger
+          ? "border-amber-200 bg-amber-50"
+          : "border-slate-100 bg-white"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-sm">{icon}</span>
+        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+          {label}
+        </span>
+      </div>
+      <p
+        className={`mt-1 truncate text-xs font-black ${
+          danger ? "text-amber-700" : "text-slate-700"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
 }

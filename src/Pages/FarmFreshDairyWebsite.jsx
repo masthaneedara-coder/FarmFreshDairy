@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import HeroCarousel from "../Components/home/HeroCarousel";
+import { useNavigate } from "react-router-dom";
+
 import Categories from "../Components/home/Categories";
+import HeroCarousel from "../Components/home/HeroCarousel";
 import Statistics from "../Components/home/Statistics";
-import Offers from "../Components/home/Offers";
 import Testimonials from "../Components/home/Testimonials";
 import FAQ from "../Components/home/FAQ";
 import FloatingButtons from "../Components/home/FloatingButtons";
-import TrustedBrands from "../Components/home/TrustedBrands";
-import InstagramGallery from "../Components/home/InstagramGallery";
 import ServiceAreas from "../Components/home/ServiceAreas";
 import MapSection from "../Components/home/MapSection";
 import MobileApp from "../Components/home/MobileApp";
@@ -16,51 +14,33 @@ import ReferEarn from "../Components/home/ReferEarn";
 import ProductsSection from "../Components/home/ProductsSection";
 
 import { fetchProducts } from "../config/api";
-import { getCartItemCount  } from "../config/cart";
-import {
-  isCustomerLoggedIn,
-  setRedirectAfterLogin,
-  getCustomerName,
-  logoutCustomer,
-} from "../config/auth";
+import { getCartItemCount } from "../config/cart";
+import { isCustomerLoggedIn } from "../config/auth";
 
 export default function FarmFreshDairyWebsite() {
   const navigate = useNavigate();
 
   const productsRef = useRef(null);
   const subscriptionRef = useRef(null);
-  const orderRef = useRef(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const [cartCount, setCartCount] = useState(0);
   const [featuredProducts, setFeaturedProducts] = useState([]);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [products, setProducts] = useState([]);
- useEffect(() => {
-  if (selectedCategory === "All") return;
 
-  productsRef.current?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
-}, [selectedCategory]);
   useEffect(() => {
     setCartCount(getCartItemCount());
-    setIsLoggedIn(isCustomerLoggedIn());
 
     const loadProducts = async () => {
       try {
+        isCustomerLoggedIn();
         const data = await fetchProducts();
-        console.log("Products:", data);
-        setProducts(data);
         const list = Array.isArray(data)
           ? data
           : Array.isArray(data?.products)
           ? data.products
           : [];
 
-       setFeaturedProducts(list);
-        console.log("Featured Products:", list);
+        setFeaturedProducts(list);
       } catch (error) {
         console.error("Home products load failed:", error);
         setFeaturedProducts([]);
@@ -69,293 +49,227 @@ export default function FarmFreshDairyWebsite() {
 
     loadProducts();
   }, []);
-useEffect(() => {
-  const updateCart = () => {
-    setCartCount(getCartItemCount());
-  };
 
-  updateCart();
+  useEffect(() => {
+    const updateCart = () => setCartCount(getCartItemCount());
+    window.addEventListener("cartUpdated", updateCart);
+    updateCart();
 
-  window.addEventListener("cartUpdated", updateCart);
+    return () => window.removeEventListener("cartUpdated", updateCart);
+  }, []);
 
-  return () => {
-    window.removeEventListener("cartUpdated", updateCart);
-  };
-}, []);
-  const customerName = useMemo(() => {
-    if (!isLoggedIn) return "";
-    return getCustomerName();
-  }, [isLoggedIn]);
+  useEffect(() => {
+    if (selectedCategory !== "All") {
+      productsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [selectedCategory]);
 
+  const filteredProducts = useMemo(() => {
+    if (selectedCategory === "All") return featuredProducts;
+
+    return featuredProducts.filter((product) => {
+      const name = String(product.name || "").toLowerCase();
+
+      if (selectedCategory === "Buffalo Milk") return name.includes("buffalo");
+      if (selectedCategory === "Cow Milk") return name.includes("cow");
+      if (selectedCategory === "Curd") return name.includes("curd");
+      if (selectedCategory === "Ghee") return name.includes("ghee") || name.includes("gee");
+      if (selectedCategory === "Paneer") return name.includes("paneer");
+      if (selectedCategory === "Eggs") return name.includes("egg");
+      if (selectedCategory === "Vegetables") {
+        return ["vegetable", "tomato", "onion", "potato", "carrot"].some((x) =>
+          name.includes(x)
+        );
+      }
+      if (selectedCategory === "Groceries") {
+        return ["rice", "oil", "sugar", "cashew", "badam", "dal", "atta", "flour"].some(
+          (x) => name.includes(x)
+        );
+      }
+
+      return true;
+    });
+  }, [featuredProducts, selectedCategory]);
 
   const goToSubscription = () => {
-  subscriptionRef.current?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
-};
-
-  const handleLogout = () => {
-    logoutCustomer();
-    setIsLoggedIn(false);
-    navigate("/");
+    subscriptionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   };
 
-const filteredProducts =
-  selectedCategory === "All"
-    ? featuredProducts
-    : featuredProducts.filter((product) => {
-        const name = (product.name || "").toLowerCase();
-
-        if (selectedCategory === "Buffalo Milk")
-          return name.includes("buffalo");
-
-        if (selectedCategory === "Cow Milk")
-          return name.includes("cow");
-
-        if (selectedCategory === "Curd")
-          return name.includes("curd");
-
-        if (selectedCategory === "Ghee")
-          return name.includes("ghee") || name.includes("gee");
-
-        if (selectedCategory === "Paneer")
-          return name.includes("paneer");
-
-        if (selectedCategory === "Eggs")
-          return name.includes("egg");
-
-        if (selectedCategory === "Vegetables")
-          return (
-            name.includes("vegetable") ||
-            name.includes("tomato") ||
-            name.includes("onion")
-          );
-
-        if (selectedCategory === "Groceries")
-          return (
-            name.includes("rice") ||
-            name.includes("oil") ||
-            name.includes("sugar") ||
-            name.includes("cashew")
-          );
-
-        return true;
-      });
-      console.log(filteredProducts);
-
-const goToOrder = () => {
-  orderRef.current?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
-};
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 via-white to-emerald-50 overflow-x-hidden">
-      {/* TOP ANNOUNCEMENT */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-green-700 via-emerald-600 to-green-700 text-white py-3 shadow">
-        <div className="animate-marquee-premium whitespace-nowrap text-sm sm:text-base font-semibold">
-          🥛 Fresh Cow Milk • 🐃 Fresh Buffalo Milk • 🥣 Fresh Curd • 🚚 Daily Morning Delivery • 🌿 Farm Fresh Dairy • 📞 Order Now
-        </div>
-      </div>
+    <div className="min-h-screen overflow-x-hidden bg-[#f7faf8] text-slate-900">
+      <style>{`
+        @keyframes ffFadeUp {
+          from { opacity: 0; transform: translateY(18px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes ffFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-7px); }
+        }
+        @keyframes ffPulse {
+          0%, 100% { opacity: .7; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.05); }
+        }
+        .ff-fade-up { animation: ffFadeUp .65s ease-out both; }
+        .ff-float { animation: ffFloat 4s ease-in-out infinite; }
+        .ff-pulse { animation: ffPulse 3s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .ff-fade-up, .ff-float, .ff-pulse { animation: none !important; }
+        }
+      `}</style>
 
-      {/* HEADER */}
+      {/* Main */}
+      <main className="mx-auto max-w-7xl px-3 sm:px-5 lg:px-8">
+        <section className="ff-fade-up pt-5 sm:pt-7">
+          <Categories
+            selectedCategory={selectedCategory}
+            setSelectedCategory={setSelectedCategory}
+          />
+        </section>
 
+        <section className="ff-fade-up mt-1">
+          <HeroCarousel />
+        </section>
 
-      {/* HERO */}
+        {/* Trust strip */}
+        <section className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            ["🥛", "Fresh daily", "Milk & dairy"],
+            ["🚚", "Morning delivery", "At your doorstep"],
+            ["🛡️", "Quality first", "Handled with care"],
+            ["🔄", "Easy subscription", "Pause anytime"],
+          ].map(([icon, title, text], index) => (
+            <div
+              key={title}
+              style={{ animationDelay: `${index * 80}ms` }}
+              className="ff-fade-up rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:p-4"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-lg">
+                  {icon}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-black sm:text-sm">{title}</p>
+                  <p className="truncate text-[10px] font-semibold text-slate-400 sm:text-xs">{text}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
 
-      <Categories
-        selectedCategory={selectedCategory}
-        setSelectedCategory={setSelectedCategory}
-      />
-      <HeroCarousel />
-      <Statistics />
-      {/* <Offers /> */}
-      <Testimonials />
-       {/* FEATURED PRODUCTS */}
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
+        <Statistics />
+
+        {/* Products */}
+        <div ref={productsRef} className="scroll-mt-24">
           <ProductsSection
-            productsRef={productsRef}
+            productsRef={null}
             filteredProducts={filteredProducts}
             goToSubscription={goToSubscription}
           />
-
         </div>
-      
-      <FloatingButtons />
-      {/* <TrustedBrands /> */}
 
-      
-      <ServiceAreas />
-      <MapSection />
-      <InstagramGallery />
-      <FAQ />
-      <MobileApp />
-      <ReferEarn />
+        {/* Subscription CTA */}
+        <section ref={subscriptionRef} className="scroll-mt-24 py-8 sm:py-10">
+          <div className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-6 text-white shadow-[0_24px_60px_rgba(4,120,87,.20)] sm:p-9 lg:p-11">
+            <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-300/15 blur-3xl" />
+            <div className="absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-white/5 blur-3xl" />
 
-      {/* WHY CHOOSE US */}
-      <section className="py-6 sm:py-8 lg:py-10">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
-          <div className="text-center mb-8">
-            <h3 className="text-3xl sm:text-4xl font-black text-green-800">
-              Why Choose Farm Fresh Dairy?
-            </h3>
-            <p className="mt-2 text-gray-500 max-w-2xl mx-auto">
-              Fresh from farm, delivered with care and trusted quality.
+            <div className="relative grid gap-7 lg:grid-cols-[1.2fr_.8fr] lg:items-center">
+              <div>
+                <span className="inline-flex rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[.18em] text-emerald-200">
+                  Daily milk subscription
+                </span>
+                <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
+                  Fresh milk, every morning.
+                </h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-white/65 sm:text-base">
+                  Choose your quantity and delivery schedule, then let Farm Fresh Dairy handle the daily routine.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold text-white/80">
+                  <span className="rounded-full bg-white/10 px-3 py-2">🥛 Fresh milk</span>
+                  <span className="rounded-full bg-white/10 px-3 py-2">🚚 Home delivery</span>
+                  <span className="rounded-full bg-white/10 px-3 py-2">⏸️ Pause when needed</span>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur-xl">
+                <p className="text-xs font-bold text-white/55">START YOUR ROUTINE</p>
+                <p className="mt-1 text-2xl font-black">Choose your milk plan</p>
+                <button
+                  onClick={() => navigate("/subscription/create/:productId")}
+                  className="mt-5 w-full rounded-2xl bg-white px-5 py-3.5 text-sm font-black text-emerald-800 shadow-lg transition hover:-translate-y-0.5"
+                >
+                  Start Subscription →
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <Testimonials />
+        <ServiceAreas />
+        <MapSection />
+        <MobileApp />
+        <ReferEarn />
+
+        {/* Why choose us */}
+        <section className="py-8 sm:py-10">
+          <div className="mb-6">
+            <p className="text-xs font-black uppercase tracking-[.18em] text-emerald-600">
+              Why Farm Fresh
             </p>
+            <h2 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
+              Simple, fresh and reliable.
+            </h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              {
-                icon: "🥛",
-                title: "Pure Fresh Milk",
-                desc: "Daily fresh cow and buffalo milk with hygienic handling.",
-              },
-              {
-                icon: "🚚",
-                title: "Fast Delivery",
-                desc: "Reliable daily delivery at your preferred time slot.",
-              },
-              {
-                icon: "📅",
-                title: "Easy Subscription",
-                desc: "Choose quantity, delivery type and monthly plan easily.",
-              },
-              {
-                icon: "💚",
-                title: "Trusted Quality",
-                desc: "Natural, clean and customer-focused dairy service.",
-              },
-            ].map((item, index) => (
+              ["🥛", "Pure fresh milk", "Daily fresh cow and buffalo milk with hygienic handling."],
+              ["🚚", "Morning delivery", "Reliable doorstep delivery for your daily routine."],
+              ["📅", "Easy subscription", "Choose quantity and delivery schedule with ease."],
+              ["💚", "Customer first", "Fresh products and service designed around your family."],
+            ].map(([icon, title, desc], index) => (
               <div
-                key={index}
-                className="group rounded-3xl bg-white border border-green-100 p-6 shadow-sm hover:shadow-xl transition hover:-translate-y-1"
+                key={title}
+                style={{ animationDelay: `${index * 70}ms` }}
+                className="ff-fade-up rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
               >
-                <div className="w-14 h-14 rounded-2xl bg-green-100 text-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition">
-                  {item.icon}
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-xl">
+                  {icon}
                 </div>
-                <h4 className="text-xl font-black text-green-800">{item.title}</h4>
-                <p className="mt-2 text-gray-500 text-sm leading-relaxed">
-                  {item.desc}
-                </p>
+                <h3 className="mt-4 text-base font-black">{title}</h3>
+                <p className="mt-2 text-xs font-medium leading-5 text-slate-500">{desc}</p>
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-     
-    <section
-      ref={subscriptionRef}
-      className="py-9 sm:py-10 lg:py-12"
-    ></section>
+        <FAQ />
+      </main>
 
-      {/* SUBSCRIPTION CTA */}
-      <section className="py-9 sm:py-10 lg:py-12">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
-          <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-r from-green-700 via-emerald-600 to-green-700 px-5 sm:px-8 lg:px-10 py-10 sm:py-12 shadow-2xl text-white">
-            <div className="absolute -top-10 right-0 w-40 h-40 rounded-full bg-white/10 blur-3xl"></div>
-            <div className="absolute -bottom-10 left-0 w-40 h-40 rounded-full bg-white/10 blur-3xl"></div>
+      <FloatingButtons />
 
-            <div className="relative z-10 grid lg:grid-cols-2 gap-8 items-center">
-              <div>
-                <h3 className="text-3xl sm:text-4xl lg:text-5xl font-black leading-tight">
-                  Start Your Daily Milk Subscription
-                </h3>
-                <p className="mt-3 text-sm sm:text-base lg:text-lg text-white/90 max-w-2xl">
-                  Get fresh milk delivered every day with flexible plans for 500ml, 1L and more.
-                </p>
-
-                <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                  <button
-                    onClick={goToSubscription}
-                    className="px-7 py-4 rounded-2xl bg-white text-green-700 font-black shadow hover:scale-[1.02] transition"
-                  >
-                    Start Subscription
-                  </button>
-
-                  <Link
-                    to="/products"
-                    className="px-7 py-4 rounded-2xl border border-white/30 bg-white/10 hover:bg-white/20 text-white font-bold transition text-center"
-                  >
-                    Shop Products
-                  </Link>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-3xl bg-white/10 backdrop-blur-md p-5 border border-white/15">
-                  <p className="text-sm text-white/80">Cow Milk</p>
-                  <p className="text-3xl font-black mt-2">₹70/L</p>
-                </div>
-                <div className="rounded-3xl bg-white/10 backdrop-blur-md p-5 border border-white/15">
-                  <p className="text-sm text-white/80">Buffalo Milk</p>
-                  <p className="text-3xl font-black mt-2">₹90/L</p>
-                </div>
-                <div className="rounded-3xl bg-white/10 backdrop-blur-md p-5 border border-white/15 col-span-2">
-                  <p className="text-sm text-white/80">Flexible Plans</p>
-                  <p className="text-2xl font-black mt-2">
-                    Daily / Alternate Day Delivery
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section
-      ref={orderRef}
-    ></section>
-
-      {/* FOOTER */}
-      <footer className="mt-8 border-t border-green-100 bg-white">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-8">
-          <div className="grid md:grid-cols-3 gap-8 text-left">
-            <div>
-              <h4 className="text-2xl font-black text-green-800">
-                Farm Fresh Dairy
-              </h4>
-              <p className="mt-3 text-gray-500 text-sm leading-relaxed">
-                Fresh milk, buffalo milk and curd delivered daily with care,
-                quality and trust.
-              </p>
-            </div>
-
-            <div>
-              <h5 className="text-lg font-black text-green-800">Quick Links</h5>
-              <div className="mt-3 space-y-2 text-sm">
-                <Link to="/products" className="block text-gray-600 hover:text-green-700">
-                  Products
-                </Link>
-                <button
-                  onClick={goToSubscription}
-                  className="block text-left text-gray-600 hover:text-green-700"
-                >
-                  Subscription
-                </button>
-                <Link to="/cart" className="block text-gray-600 hover:text-green-700">
-                  Cart
-                </Link>
-              </div>
-            </div>
-
-            <div>
-              <h5 className="text-lg font-black text-green-800">Contact</h5>
-              <div className="mt-3 space-y-2 text-sm text-gray-600">
-                <p>📍 Dammaiguda / ECIL / Nearby Areas</p>
-                <p>📞 +91 9989663838</p>
-                <p>🚚 Daily Milk Delivery Available</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8 pt-5 border-t border-green-100 text-center text-sm text-gray-500">
-            © {new Date().getFullYear()} Farm Fresh Dairy. All rights reserved.
-          </div>
-        </div>
-      </footer>
     </div>
+  );
+}
+
+function MobileNav({ icon, label, active = false, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center justify-center rounded-2xl px-2 py-2 transition ${
+        active ? "bg-emerald-700 text-white shadow-lg" : "text-slate-500 hover:bg-slate-100"
+      }`}
+    >
+      <span className="text-base leading-none">{icon}</span>
+      <span className="mt-1 text-[9px] font-black">{label}</span>
+    </button>
   );
 }

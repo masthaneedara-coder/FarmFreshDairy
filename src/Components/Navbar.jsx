@@ -3,518 +3,382 @@ import { useEffect, useState } from "react";
 import logo from "../assets/logo.png";
 import NotificationBell from "./NotificationBell";
 import NotificationDrawer from "./NotificationDrawer";
-import {
-  getCart,
-  getCartItemCount,
-} from "../config/cart";
-import { getCurrentRole,} from "../config/auth";
+import { getCartItemCount } from "../config/cart";
+import { getCurrentRole } from "../config/auth";
 import { useAuthSession } from "../context/AuthSessionContext";
 
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
-const { customer, logout } = useAuthSession();
-const isCustomerLoggedIn = !!customer;
-const customerName =  customer?.name || "Customer";
-const role = getCurrentRole();
+  const { customer, logout } = useAuthSession();
+
+  const isCustomerLoggedIn = !!customer;
+  const customerName = customer?.name || "Customer";
+  const role = getCurrentRole();
+
   const [menuOpen, setMenuOpen] = useState(false);
-  const [dashboard, setDashboard] = useState(null);
- 
- const [cartCount, setCartCount] = useState(0);
-
-useEffect(() => {
-  const updateCart = () => {
-    setCartCount(getCartItemCount());
-  };
-
-  updateCart();
-
-  window.addEventListener("cartUpdated", updateCart);
-
-  return () => {
-    window.removeEventListener("cartUpdated", updateCart);
-  };
-}, []);
-
-
+  const [cartCount, setCartCount] = useState(0);
   const [notificationOpen, setNotificationOpen] = useState(false);
 
- 
+  useEffect(() => {
+    const updateCart = () => setCartCount(getCartItemCount());
+
+    updateCart();
+    window.addEventListener("cartUpdated", updateCart);
+
+    return () => {
+      window.removeEventListener("cartUpdated", updateCart);
+    };
+  }, []);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = async () => {
-  await logout();
-  navigate("/auth");
-};
+    await logout();
+    setMenuOpen(false);
+    navigate("/auth");
+  };
 
   const goToSubscription = () => {
     if (!isCustomerLoggedIn) {
-      localStorage.setItem("redirectAfterLogin", "/subscription/create/:productId");
-      window.dispatchEvent(new Event("cartUpdated"));
+      localStorage.setItem(
+        "redirectAfterLogin",
+        "/subscription/create/:productId"
+      );
+      setMenuOpen(false);
       navigate("/auth");
       return;
     }
+
+    setMenuOpen(false);
     navigate("/subscription/create/:productId");
   };
 
-  return (
-    <header className="fixed top-0 left-0 right-0 z-[9999] bg-white/95 backdrop-blur-xl border-b border-green-100 shadow-md transition-all duration-300">
-      {/* TOP BAR */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-green-700 via-emerald-600 to-green-700 shadow-lg border-b border-green-400/30">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.12),transparent_35%)]"></div>
+  const isActive = (path, startsWith = false) =>
+    startsWith
+      ? location.pathname.startsWith(path)
+      : location.pathname === path;
 
-        <div className="relative">
-          <div className="animate-marquee-premium whitespace-nowrap py-3 sm:py-3.5 text-white font-extrabold tracking-wide text-sm sm:text-base md:text-lg">
-            ✨ Fresh Farm Milk Delivered Every Morning • 🥛 Pure Cow Milk • 🐃 Fresh Buffalo Milk • 🥣 Fresh Curd Available • 🚚 Free Home Delivery • 📞 Subscribe Today • 🌿 100% Natural & Healthy •
+  return (
+    <>
+      <header className="fixed inset-x-0 top-0 z-[9999]">
+        {/* Premium announcement bar */}
+        <div className="relative overflow-hidden bg-slate-950 text-white">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_50%,rgba(16,185,129,.25),transparent_28%),radial-gradient(circle_at_85%_50%,rgba(45,212,191,.18),transparent_28%)]" />
+
+          <div className="relative mx-auto flex h-9 max-w-7xl items-center justify-center overflow-hidden px-4">
+            <div className="whitespace-nowrap text-[10px] font-bold tracking-wide text-white/85 sm:text-xs">
+              <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.8)]" />
+              Fresh dairy • Daily morning delivery • Farm fresh quality
+              <span className="mx-2 text-emerald-400">•</span>
+              Free home delivery
+              <span className="mx-2 text-emerald-400">•</span>
+              Subscribe today
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* NAV */}
-      <div className="bg-white/95 backdrop-blur-xl border-b border-green-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
-          <div className="min-h-[76px] sm:h-20 flex items-center justify-between gap-3 py-3 sm:py-0">
-            {/* LEFT */}
-            <Link to="/" className="flex items-center gap-3 min-w-0 group">
-              <div className="relative flex-shrink-0">
-                <img
-                  src={logo}
-                  alt="Farm Fresh Dairy"
-                  className="w-11 h-11 sm:w-14 sm:h-14 rounded-full border-2 border-green-100 shadow-md group-hover:scale-105 transition duration-300"
-                />
-                <span className="absolute inset-0 rounded-full bg-green-400/10 animate-ping"></span>
-              </div>
+        {/* Main navigation */}
+        <div className="border-b border-slate-200/80 bg-white/90 shadow-[0_8px_30px_rgba(15,23,42,.07)] backdrop-blur-2xl">
+          <div className="mx-auto max-w-7xl px-3 sm:px-5 lg:px-8">
+            <div className="flex min-h-[72px] items-center justify-between gap-3">
+              {/* Brand */}
+              <Link
+                to="/"
+                className="group flex min-w-0 items-center gap-2.5"
+              >
+                <div className="relative shrink-0">
+                  <div className="absolute -inset-1 rounded-full bg-emerald-400/15 opacity-0 blur-md transition duration-500 group-hover:opacity-100" />
+                  <img
+                    src={logo}
+                    alt="Farm Fresh Dairy"
+                    className="relative h-10 w-10 rounded-full border border-emerald-100 bg-white object-contain shadow-sm transition duration-300 group-hover:scale-105 sm:h-12 sm:w-12"
+                  />
+                </div>
 
-              <div className="min-w-0">
-                <h1 className="text-base sm:text-2xl font-black text-green-700 truncate leading-tight">
-                  FarmFreshDairy
-                </h1>
-                <p className="text-[10px] sm:text-sm text-gray-500 truncate">
-                  Pure Milk Delivered Daily
-                </p>
-              </div>
-            </Link>
-             <div className="hidden lg:flex items-center gap-2">
-             {role === "customer" && (
-                <>
-                  {/* Products */}
-                  <Link
+                <div className="min-w-0">
+                  <div className="text-[15px] font-black tracking-tight text-slate-900 sm:text-xl">
+                    FarmFresh<span className="text-emerald-600">Dairy</span>
+                  </div>
+                  <div className="hidden text-[10px] font-semibold text-slate-400 sm:block">
+                    Freshness delivered daily
+                  </div>
+                </div>
+              </Link>
+
+              {/* Desktop customer navigation */}
+              {role === "customer" && (
+                <nav className="hidden items-center gap-1.5 lg:flex">
+                  <NavItem
                     to="/products"
-                    className={`px-5 py-3 rounded-2xl font-semibold transition-all ${
-                      location.pathname === "/products"
-                        ? "bg-green-600 text-white shadow-md"
-                        : "bg-green-50 text-green-700 hover:bg-green-100"
-                    }`}
-                  >
-                    🛍️ Products
-                  </Link>
-                  {/* Dashbord */}
-                    <Link
-                        to="/dashboard"
-                        onClick={() => setMenuOpen(false)}
-                        className={`px-4 py-4 rounded-2xl font-bold transition ${
-                          location.pathname === "/dashboard"
-                            ? "bg-gradient-to-r from-green-600 to-emerald-500 text-white"
-                            : "bg-green-50 text-green-700 hover:bg-green-100"
-                        }`}
-                      >
-                        📊 Dashboard
-                      </Link>
+                    icon="🛍️"
+                    label="Shop"
+                    active={isActive("/products")}
+                  />
 
-                  {/* Subscription */}
+                  <NavItem
+                    to="/dashboard"
+                    icon="📊"
+                    label="Dashboard"
+                    active={isActive("/dashboard")}
+                  />
+
                   <button
                     onClick={goToSubscription}
-                    className={`px-5 py-3 rounded-2xl font-semibold transition-all ${
-                      location.pathname.startsWith("/subscription")
-                        ? "bg-purple-600 text-white shadow-md"
-                        : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                    className={`group relative flex items-center gap-2 rounded-2xl px-3.5 py-2.5 text-xs font-black transition-all duration-300 ${
+                      isActive("/subscription", true)
+                        ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200"
+                        : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
                     }`}
                   >
-                    🥛 Subscription
+                    <span>🥛</span>
+                    Subscription
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-black text-amber-700">
+                      POPULAR
+                    </span>
                   </button>
 
-                  {/* Orders */}
-                  <Link
+                  <NavItem
                     to="/order-history"
-                    className={`px-5 py-3 rounded-2xl font-semibold transition-all ${
-                      location.pathname === "/order-history"
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "bg-blue-50 text-blue-700 hover:bg-blue-100"
-                    }`}
+                    icon="📦"
+                    label="Orders"
+                    active={isActive("/order-history")}
+                  />
+                </nav>
+              )}
+
+              {/* Desktop admin navigation */}
+              {role === "admin" && (
+                <nav className="hidden items-center gap-1.5 lg:flex">
+                  <NavItem to="/admin" icon="📊" label="Dashboard" active={isActive("/admin")} />
+                  <NavItem to="/admin/products" icon="🛍️" label="Products" active={isActive("/admin/products")} />
+                  <NavItem to="/admin/orders" icon="📦" label="Orders" active={isActive("/admin/orders")} />
+                  <NavItem to="/admin/customers" icon="👥" label="Customers" active={isActive("/admin/customers")} />
+                  <NavItem to="/admin/subscriptions" icon="🔄" label="Subscriptions" active={isActive("/admin/subscriptions")} />
+                  <NavItem to="/admin/billing" icon="💰" label="Billing" active={isActive("/admin/billing")} />
+                </nav>
+              )}
+
+              {/* Desktop delivery navigation */}
+              {role === "delivery" && (
+                <nav className="hidden items-center gap-1.5 lg:flex">
+                  <NavItem to="/delivery" icon="📊" label="Dashboard" active={isActive("/delivery")} />
+                  <NavItem to="/delivery" icon="🚚" label="Deliveries" active={isActive("/delivery")} />
+                  <NavItem to="/delivery/history" icon="📋" label="History" active={isActive("/delivery/history")} />
+                </nav>
+              )}
+
+              {/* Right controls */}
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                {!role && (
+                  <button
+                    onClick={() => navigate("/auth")}
+                    className="hidden rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-700 sm:inline-flex"
                   >
-                    📦 Orders
-                  </Link>
+                    Login
+                  </button>
+                )}
+
+                {isCustomerLoggedIn && (
+                  <div className="hidden max-w-[150px] truncate rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 xl:block">
+                    👋 {customerName}
+                  </div>
+                )}
+
+                <div
+                  className="relative hidden h-10 w-10 items-center justify-center sm:flex"
+                  aria-label="Notifications"
+                >
+                  <NotificationBell onClick={() => setNotificationOpen(true)} />
+                </div>
+
+                <button
+                  onClick={() => navigate("/cart")}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-lg shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md sm:h-11 sm:w-11"
+                  aria-label="Cart"
+                >
+                  🛒
+                  {cartCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white shadow-md">
+                      {cartCount > 99 ? "99+" : cartCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setMenuOpen((prev) => !prev)}
+                  className={`flex h-10 w-10 items-center justify-center rounded-2xl border text-lg shadow-sm transition-all sm:h-11 sm:w-11 ${
+                    menuOpen
+                      ? "border-emerald-600 bg-emerald-600 text-white shadow-lg"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:text-emerald-700 hover:shadow-md"
+                  }`}
+                  aria-label="Open menu"
+                  aria-expanded={menuOpen}
+                >
+                  {menuOpen ? "✕" : "☰"}
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile quick actions */}
+            <div className="flex gap-2 overflow-x-auto pb-3 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:hidden">
+              {!role && (
+                <MobileChip icon="🔐" label="Login / Signup" onClick={() => navigate("/auth")} />
+              )}
+
+              {role === "customer" && (
+                <>
+                  <MobileChip icon="🛍️" label="Shop" active={isActive("/products")} onClick={() => navigate("/products")} />
+                  <MobileChip icon="📊" label="Dashboard" active={isActive("/dashboard")} onClick={() => navigate("/dashboard")} />
+                  <MobileChip icon="🥛" label="Subscription" active={isActive("/subscription", true)} onClick={goToSubscription} />
+                  <MobileChip icon="📦" label="Orders" active={isActive("/order-history")} onClick={() => navigate("/order-history")} />
                 </>
               )}
+
+              {role === "admin" && (
+                <>
+                  <MobileChip icon="📊" label="Dashboard" active={isActive("/admin")} onClick={() => navigate("/admin")} />
+                  <MobileChip icon="🛍️" label="Products" active={isActive("/admin/products")} onClick={() => navigate("/admin/products")} />
+                  <MobileChip icon="📦" label="Orders" active={isActive("/admin/orders")} onClick={() => navigate("/admin/orders")} />
+                  <MobileChip icon="👥" label="Customers" active={isActive("/admin/customers")} onClick={() => navigate("/admin/customers")} />
+                  <MobileChip icon="🔄" label="Subs" active={isActive("/admin/subscriptions")} onClick={() => navigate("/admin/subscriptions")} />
+                </>
+              )}
+
+              {role === "delivery" && (
+                <>
+                  <MobileChip icon="📊" label="Dashboard" active={isActive("/delivery")} onClick={() => navigate("/delivery")} />
+                  <MobileChip icon="🚚" label="Deliveries" onClick={() => navigate("/delivery")} />
+                  <MobileChip icon="📋" label="History" active={isActive("/delivery/history")} onClick={() => navigate("/delivery/history")} />
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Modern expandable menu */}
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            menuOpen ? "max-h-[620px] opacity-100" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="border-b border-slate-200 bg-white/95 shadow-2xl backdrop-blur-2xl">
+            <div className="mx-auto max-w-7xl px-3 py-4 sm:px-5 lg:px-8">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {role === "customer" && (
+                  <>
+                    <MenuCard icon="🛍️" title="Shop Products" subtitle="Fresh dairy & groceries" onClick={() => navigate("/products")} />
+                    <MenuCard icon="🥛" title="Subscriptions" subtitle="Manage daily milk" onClick={goToSubscription} />
+                    <MenuCard icon="📦" title="Order History" subtitle="Track your orders" onClick={() => navigate("/order-history")} />
+                    <MenuCard icon="📊" title="My Dashboard" subtitle="Account overview" onClick={() => navigate("/dashboard")} />
+                  </>
+                )}
+
                 {role === "admin" && (
-                    <>
-                      <Link to="/admin">
-                        Dashboard
-                      </Link>
+                  <>
+                    <MenuCard icon="📊" title="Admin Dashboard" subtitle="Business overview" onClick={() => navigate("/admin")} />
+                    <MenuCard icon="🛍️" title="Products" subtitle="Stock & pricing" onClick={() => navigate("/admin/products")} />
+                    <MenuCard icon="📦" title="Orders" subtitle="Manage customer orders" onClick={() => navigate("/admin/orders")} />
+                    <MenuCard icon="👥" title="Customers" subtitle="Customer management" onClick={() => navigate("/admin/customers")} />
+                    <MenuCard icon="🔄" title="Subscriptions" subtitle="Manage milk plans" onClick={() => navigate("/admin/subscriptions")} />
+                    <MenuCard icon="💰" title="Billing" subtitle="Invoices & payments" onClick={() => navigate("/admin/billing")} />
+                  </>
+                )}
 
-                      <Link to="/admin/products">
-                        Products
-                      </Link>
+                {role === "delivery" && (
+                  <>
+                    <MenuCard icon="📊" title="Dashboard" subtitle="Delivery overview" onClick={() => navigate("/delivery")} />
+                    <MenuCard icon="🚚" title="Today's Deliveries" subtitle="Assigned deliveries" onClick={() => navigate("/delivery")} />
+                    <MenuCard icon="📋" title="Delivery History" subtitle="Completed deliveries" onClick={() => navigate("/delivery/history")} />
+                    <MenuCard icon="🔒" title="Account" subtitle="Delivery account" onClick={() => navigate("/delivery")} />
+                  </>
+                )}
 
-                      <Link to="/admin/orders">
-                        Orders
-                      </Link>
-
-                      <Link to="/admin/customers">
-                        Customers
-                      </Link>
-                    </>
-                  )}
-                  {role === "delivery" && (
-  <>
-    <Link
-      to="/delivery"
-      className={`px-4 py-3 rounded-2xl font-semibold transition-all ${
-        location.pathname === "/delivery"
-          ? "bg-green-600 text-white shadow-md"
-          : "bg-green-50 text-green-700 hover:bg-green-100"
-      }`}
-    >
-      📊 Dashboard
-    </Link>
-
-    <Link
-      to="/delivery"
-      className={`px-4 py-3 rounded-2xl font-semibold transition-all ${
-        location.pathname === "/delivery"
-          ? "bg-blue-600 text-white shadow-md"
-          : "bg-blue-50 text-blue-700 hover:bg-blue-100"
-      }`}
-    >
-      🚚 Deliveries
-    </Link>
-
-    <Link
-      to="/delivery/history"
-      className={`px-4 py-3 rounded-2xl font-semibold transition-all ${
-        location.pathname === "/delivery/history"
-          ? "bg-purple-600 text-white shadow-md"
-          : "bg-purple-50 text-purple-700 hover:bg-purple-100"
-      }`}
-    >
-      📋 History
-    </Link>
-  </>
-)}
-
+                {!role && (
+                  <>
+                    <MenuCard icon="🏠" title="Home" subtitle="Farm Fresh Dairy" onClick={() => navigate("/")} />
+                    <MenuCard icon="🛍️" title="Shop Products" subtitle="Browse fresh products" onClick={() => navigate("/products")} />
+                    <MenuCard icon="🥛" title="Subscription" subtitle="Daily milk delivery" onClick={goToSubscription} />
+                    <MenuCard icon="🔐" title="Login / Signup" subtitle="Access your account" onClick={() => navigate("/auth")} />
+                  </>
+                )}
               </div>
-            {/* RIGHT */}
-            <NotificationBell
-                onClick={() => {
-                  // Drawer will be connected in Part 5
-                  console.log("Open Notification Drawer");
-                }}
-              />
-            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              {!role && (
+
+              {(role === "customer" || role === "admin" || role === "delivery") && (
                 <button
-                  onClick={() => navigate("/auth")}
-                  className="hidden sm:inline-flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-700 hover:to-emerald-600 text-white px-4 py-2.5 rounded-2xl font-bold text-sm shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5"
+                  onClick={handleLogout}
+                  className="mt-3 w-full rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-black text-rose-600 transition hover:bg-rose-100"
                 >
-                  🔐 Login
+                  🚪 Logout
                 </button>
               )}
-
-              {isCustomerLoggedIn && (
-                <div className="hidden lg:flex bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold text-sm shadow-sm">
-                  👋 {dashboard?.customer?.full_name || customer?.name}
-                </div>
-              )}
-
-              <button
-                onClick={() => navigate("/cart")}
-                className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-2xl border border-green-100 bg-white shadow-md hover:shadow-lg flex items-center justify-center text-lg sm:text-xl hover:scale-105 transition duration-300"
-              >
-                🛒
-                {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] sm:text-[11px] font-bold flex items-center justify-center shadow">
-                    {cartCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl border border-green-100 bg-white shadow-md hover:shadow-lg flex items-center justify-center text-xl sm:text-2xl text-green-700 hover:scale-105 transition duration-300"
-              >
-                {menuOpen ? "✕" : "☰"}
-              </button>
             </div>
           </div>
-
-          {!role && (
-            <div className="sm:hidden pb-3">
-              <button
-                onClick={() => navigate("/auth")}
-                className="w-full bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-700 hover:to-emerald-600 text-white py-3 rounded-2xl font-bold shadow-md transition duration-300"
-              >
-                🔐 Login / Signup
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      </header>
 
-      {/* DROPDOWN */}
-      {/* DROPDOWN */}
-<div
-  className={`overflow-hidden transition-all duration-300 ${
-    menuOpen
-      ? "max-h-[1000px] opacity-100"
-      : "max-h-0 opacity-0"
-  }`}
->
-  <div className="border-t border-gray-100 bg-white/95 backdrop-blur-xl shadow-lg">
-    <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col gap-3">
-
-      {/* ========================================= */}
-      {/* DELIVERY BOY MENU */}
-      {/* ========================================= */}
-
-      {role === "delivery" && (
-        <>
-          <div className="rounded-2xl bg-gradient-to-r from-orange-500 to-yellow-500 p-4 text-white shadow-md">
-            <p className="text-sm opacity-90">
-              🚚 Delivery Panel
-            </p>
-
-            <h2 className="text-xl font-black">
-              Welcome Delivery Boy
-            </h2>
-          </div>
-
-          <Link
-            to="/delivery"
-            onClick={() => setMenuOpen(false)}
-            className={`px-4 py-4 rounded-2xl font-bold transition ${
-              location.pathname === "/delivery"
-                ? "bg-gradient-to-r from-green-600 to-emerald-500 text-white"
-                : "bg-green-50 text-green-700 hover:bg-green-100"
-            }`}
-          >
-            📊 Dashboard
-          </Link>
-
-          <Link
-            to="/delivery"
-            onClick={() => setMenuOpen(false)}
-            className="px-4 py-4 rounded-2xl bg-blue-50 text-blue-700 font-bold hover:bg-blue-100 transition"
-          >
-            📦 Today's Deliveries
-          </Link>
-
-          <Link
-            to="/delivery/history"
-            onClick={() => setMenuOpen(false)}
-            className={`px-4 py-4 rounded-2xl font-bold transition ${
-              location.pathname === "/delivery/history"
-                ? "bg-gradient-to-r from-purple-600 to-pink-500 text-white"
-                : "bg-purple-50 text-purple-700 hover:bg-purple-100"
-            }`}
-          >
-            📋 Delivery History
-          </Link>
-
-          <button
-            type="button"
-            onClick={async () => {
-              setMenuOpen(false);
-              await logout();
-              navigate("/delivery/login");
-            }}
-            className="w-full text-left px-4 py-4 rounded-2xl bg-red-50 text-red-600 font-bold hover:bg-red-100 transition"
-          >
-            🚪 Logout
-          </button>
-        </>
-      )}
-
-      {/* ========================================= */}
-      {/* ADMIN MENU */}
-      {/* ========================================= */}
-
-      {role === "admin" && (
-        <>
-          <Link
-            to="/admin"
-            onClick={() => setMenuOpen(false)}
-            className="px-4 py-4 rounded-2xl bg-green-50 text-green-700 font-bold"
-          >
-            📊 Dashboard
-          </Link>
-
-          <Link
-            to="/admin/products"
-            onClick={() => setMenuOpen(false)}
-            className="px-4 py-4 rounded-2xl bg-blue-50 text-blue-700 font-bold"
-          >
-            🛍 Products
-          </Link>
-
-          <Link
-            to="/admin/orders"
-            onClick={() => setMenuOpen(false)}
-            className="px-4 py-4 rounded-2xl bg-purple-50 text-purple-700 font-bold"
-          >
-            📦 Orders
-          </Link>
-
-          <Link
-            to="/admin/customers"
-            onClick={() => setMenuOpen(false)}
-            className="px-4 py-4 rounded-2xl bg-orange-50 text-orange-700 font-bold"
-          >
-            👥 Customers
-          </Link>
-        </>
-      )}
-
-     {/* ========================================= */}
-      {/* CUSTOMER MENU */}
-      {/* ========================================= */}
-
-      {role === "customer" && (
-        <>
-          {/* Customer Header */}
-          <div className="rounded-2xl bg-gradient-to-r from-green-600 to-emerald-500 p-4 text-white shadow-md">
-            <p className="text-sm opacity-90">
-              👋 Welcome back
-            </p>
-
-            <h2 className="text-xl font-black">
-              {dashboard?.customer?.full_name || customer?.name}
-            </h2>
-          </div>
-
-          {/* Products */}
-          <Link
-            to="/products"
-            onClick={() => setMenuOpen(false)}
-            className={`flex items-center justify-between px-5 py-4 rounded-2xl font-bold text-lg transition ${
-              location.pathname === "/products"
-                ? "bg-gradient-to-r from-green-600 to-emerald-500 text-white shadow-md"
-                : "bg-green-50 text-green-700 hover:bg-green-100"
-            }`}
-          >
-            <span>🛍️ Products</span>
-
-            <span>→</span>
-          </Link>
-          {/* Dashbord */}
-         <Link
-            to="/dashboard"
-            onClick={() => setMenuOpen(false)}
-            className={`px-4 py-4 rounded-2xl font-bold transition ${
-              location.pathname === "/dashboard"
-                ? "bg-gradient-to-r from-green-600 to-emerald-500 text-white"
-                : "bg-green-50 text-green-700 hover:bg-green-100"
-            }`}
-          >
-            📊 Dashboard
-          </Link>
-
-          {/* Subscription */}
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen(false);
-              goToSubscription();
-            }}
-            className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl font-bold text-lg text-left transition ${
-              location.pathname.startsWith("/subscription")
-                ? "bg-gradient-to-r from-purple-600 to-pink-500 text-white shadow-md"
-                : "bg-purple-50 text-purple-700 hover:bg-purple-100"
-            }`}
-          >
-            <span>🥛 Subscription</span>
-
-            <span className="text-xs px-3 py-1 rounded-full bg-white text-purple-700 font-extrabold">
-              POPULAR
-            </span>
-          </button>
-
-          {/* Orders */}
-          <Link
-            to="/order-history"
-            onClick={() => setMenuOpen(false)}
-            className={`flex items-center justify-between px-5 py-4 rounded-2xl font-bold text-lg transition ${
-              location.pathname === "/order-history"
-                ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md"
-                : "bg-blue-50 text-blue-700 hover:bg-blue-100"
-            }`}
-          >
-            <span>📦 Orders</span>
-
-            <span>→</span>
-          </Link>
-
-          {/* Logout */}
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center px-5 py-4 rounded-2xl bg-red-50 text-red-600 font-bold text-lg hover:bg-red-100 transition"
-          >
-            🚪 Logout
-          </button>
-        </>
-      )}
-
-      {/* ========================================= */}
-      {/* NO ROLE */}
-      {/* ========================================= */}
-
-      {!role && (
-        <>
-          <Link
-            to="/"
-            onClick={() => setMenuOpen(false)}
-            className="px-4 py-4 rounded-2xl bg-green-50 text-green-700 font-bold"
-          >
-            🏠 Home
-          </Link>
-
-          <Link
-            to="/products"
-            onClick={() => setMenuOpen(false)}
-            className="px-4 py-4 rounded-2xl bg-blue-50 text-blue-700 font-bold"
-          >
-            🛍 Products
-          </Link>
-
-          <button
-            onClick={goToSubscription}
-            className="w-full text-left px-4 py-4 rounded-2xl bg-purple-50 text-purple-700 font-bold"
-          >
-            🥛 Subscription
-
-            <span className="float-right text-xs px-3 py-1 rounded-full bg-white text-purple-700 font-extrabold">
-              POPULAR
-            </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setMenuOpen(false);
-              navigate("/auth");
-            }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-4 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-500 text-white font-bold"
-          >
-            🔐 Login / Signup
-          </button>
-        </>
-      )}
-
-    </div>
-  </div>
-</div>
       <NotificationDrawer
         open={notificationOpen}
         onClose={() => setNotificationOpen(false)}
       />
-    </header>
+    </>
+  );
+}
+
+function NavItem({ to, icon, label, active }) {
+  return (
+    <Link
+      to={to}
+      className={`flex items-center gap-2 rounded-2xl px-3.5 py-2.5 text-xs font-black transition-all duration-300 ${
+        active
+          ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200"
+          : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
+      }`}
+    >
+      <span>{icon}</span>
+      <span>{label}</span>
+    </Link>
+  );
+}
+
+function MobileChip({ icon, label, active = false, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-[10px] font-black transition ${
+        active
+          ? "border-emerald-600 bg-emerald-600 text-white shadow-md"
+          : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:text-emerald-700"
+      }`}
+    >
+      <span>{icon}</span>
+      {label}
+    </button>
+  );
+}
+
+function MenuCard({ icon, title, subtitle, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="group flex items-center gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:shadow-lg"
+    >
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-xl shadow-sm transition group-hover:scale-105">
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-black text-slate-800">
+          {title}
+        </span>
+        <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">
+          {subtitle}
+        </span>
+      </span>
+      <span className="ml-auto text-slate-300 transition group-hover:translate-x-1 group-hover:text-emerald-600">
+        →
+      </span>
+    </button>
   );
 }

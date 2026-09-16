@@ -25,23 +25,13 @@ export const createOrderItemsService = async (items) => {
 // ===============================
 // Get Customer Orders
 // ===============================
+// ===============================
+// Get Customer Orders
+// ===============================
 export const getCustomerOrdersService = async (customerId) => {
   return await supabaseAdmin
     .from("orders")
-    .select(`
-      *,
-      addresses(*),
-      delivery_boys(id, full_name, phone),
-      order_items(
-        *,
-        products(
-          id,
-          name,
-          image,
-          price
-        )
-      )
-    `)
+    .select("*")
     .eq("customer_id", customerId)
     .order("order_date", { ascending: false });
 };

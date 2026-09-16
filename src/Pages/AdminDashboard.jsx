@@ -45,38 +45,27 @@ const [notificationCount, setNotificationCount] = useState(0);
     loadNotifications();
   }, [navigate]);
   useEffect(() => {
+    const channel = supabase
+      .channel("notifications-channel")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+        },
+        (payload) => {
+          console.log("Realtime Notification:", payload);
+          playNotification();
+          loadNotifications();
+        }
+      )
+      .subscribe();
 
-  const channel = supabase
-    .channel("notifications-channel")
-
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "notifications",
-      },
-      (payload) => {
-
-        console.log("Realtime Notification:", payload);
-
-        playNotification();
-
-        loadNotifications();
-
-      }
-    )
-
-    .subscribe();
-
-  return () => {
-
-    supabase.removeChannel(channel);
-
-  };
-
-}, []);
-
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const totalProducts = useMemo(() => products.length, [products]);
 
@@ -91,30 +80,28 @@ const [notificationCount, setNotificationCount] = useState(0);
 
   const outOfStockProducts = useMemo(
     () =>
-      products.filter((p) => {
-        const stock = Number(p.stock || 0);
-        return stock === 0;
-      }),
+      products.filter((p) => Number(p.stock || 0) === 0),
     [products]
   );
 
   const totalStockUnits = useMemo(
-    () =>
-      products.reduce((sum, p) => sum + Number(p.stock || 0), 0),
+    () => products.reduce((sum, p) => sum + Number(p.stock || 0), 0),
     [products]
   );
 
   const totalInventoryValue = useMemo(
     () =>
       products.reduce(
-        (sum, p) =>
-          sum + Number(p.price || 0) * Number(p.stock || 0),
+        (sum, p) => sum + Number(p.price || 0) * Number(p.stock || 0),
         0
       ),
     [products]
   );
 
-  const recentLowStock = useMemo(() => lowStockProducts.slice(0, 6), [lowStockProducts]);
+  const recentLowStock = useMemo(
+    () => lowStockProducts.slice(0, 5),
+    [lowStockProducts]
+  );
 
   const handleLogout = () => {
     logoutAdmin();
@@ -132,410 +119,424 @@ const [notificationCount, setNotificationCount] = useState(0);
 
     if (qty === 0) {
       return {
-        label: "Out Of Stock",
-        className: "bg-red-100 text-red-600 border border-red-200",
+        label: "Out of stock",
+        className: "bg-red-50 text-red-600 border-red-100",
       };
     }
 
     if (qty < 5) {
       return {
-        label: "Low Stock",
-        className: "bg-yellow-100 text-yellow-700 border border-yellow-200",
+        label: "Low stock",
+        className: "bg-amber-50 text-amber-700 border-amber-100",
       };
     }
 
     return {
-      label: "In Stock",
-      className: "bg-green-100 text-green-700 border border-green-200",
+      label: "In stock",
+      className: "bg-emerald-50 text-emerald-700 border-emerald-100",
     };
   };
-async function loadNotifications() {
-  try {
-    const res = await fetch(
-      "https://farmfreshdairy.onrender.com/api/notifications"
-    );
 
-    const data = await res.json();
-
-    if (data.success) {
-      setNotifications(data.notifications);
-      setNotificationCount(
-        data.notifications.filter(n => !n.is_read).length
+  async function loadNotifications() {
+    try {
+      const res = await fetch(
+        "https://farmfreshdairy.onrender.com/api/notifications"
       );
+
+      const data = await res.json();
+
+      if (data.success) {
+        setNotifications(data.notifications || []);
+        setNotificationCount(
+          (data.notifications || []).filter((n) => !n.is_read).length
+        );
+      }
+    } catch (err) {
+      console.error("Notifications error:", err);
     }
-
-  } catch (err) {
-    console.error(err);
   }
-}
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
-      <div className="max-w-7xl mx-auto">
-        {/* HEADER */}
-        <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-700 p-6 sm:p-8 text-white shadow-2xl">
-          <div className="absolute top-0 right-0 w-44 h-44 rounded-full bg-white/10 blur-3xl"></div>
-          <div className="absolute bottom-0 left-0 w-44 h-44 rounded-full bg-white/10 blur-3xl"></div>
+    <>
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(14px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
 
-          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-            <div>
-              <p className="text-white/80 text-sm sm:text-base">Farm Fresh Dairy Admin</p>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black mt-1">
-                📊 Admin Dashboard
-              </h1>
-              <p className="mt-2 text-white/90 max-w-2xl">
-                Manage products, stock, orders, subscriptions and daily dairy operations from one place.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => navigate("/admin/products")}
-                className="px-5 py-3 rounded-2xl bg-white text-blue-700 font-bold shadow"
-              >
-                Manage Products
-              </button>
-              
-
-              <button
-                onClick={() => navigate("/products")}
-                className="px-5 py-3 rounded-2xl bg-white/15 border border-white/20 text-white font-bold"
-              >
-                View Store
-              </button>
-
-              <button
-                onClick={handleLogout}
-                className="px-5 py-3 rounded-2xl bg-red-500 text-white font-bold"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
+      <div className="min-h-screen bg-[#f6f8fb] text-slate-900">
+        <div className="pointer-events-none fixed inset-0 overflow-hidden">
+          <div className="absolute -right-32 -top-32 h-80 w-80 rounded-full bg-emerald-200/30 blur-3xl" />
+          <div className="absolute -left-40 top-1/3 h-96 w-96 rounded-full bg-blue-200/20 blur-3xl" />
         </div>
 
-        {/* STATS */}
-        <AdminNotifications />
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mt-6">
-          <StatCard
-            title="Total Products"
-            value={totalProducts}
-            subtitle="All listed products"
-            color="blue"
-            icon="🥛"
-          />
-          <StatCard
-            title="Low Stock"
-            value={lowStockProducts.length}
-            subtitle="Need refill soon"
-            color="yellow"
-            icon="⚠️"
-          />
-          <StatCard
-            title="Out Of Stock"
-            value={outOfStockProducts.length}
-            subtitle="Unavailable now"
-            color="red"
-            icon="📦"
-          />
-          <StatCard
-            title="Total Stock Units"
-            value={totalStockUnits}
-            subtitle="Current inventory"
-            color="green"
-            icon="📊"
-          />
-          <StatCard
-            title="Inventory Value"
-            value={formatMoney(totalInventoryValue)}
-            subtitle="Price × stock"
-            color="purple"
-            icon="💰"
-          />
-        </div>
-        
-       
+        <main className="relative mx-auto max-w-[1500px] px-3 pb-28 pt-3 sm:px-5 sm:pb-8 sm:pt-5 lg:px-8">
 
-        {/* QUICK ACTIONS */}
-        <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
-          <ActionCard
-            icon="🥛"
-            title="Products"
-            desc="Add, edit and manage stock, price and category."
-            color="green"
-            onClick={() => navigate("/admin/products")}
-          />
-          <ActionCard
-            icon="📦"
-            title="Orders"
-            desc="Track customer orders, status and payment updates."
-            color="blue"
-            onClick={() => navigate("/admin/orders")}
-          />
-          <ActionCard
-            icon="👥"
-            title="Customers"
-            desc="View customer details, order history and subscriptions."
-            color="purple"
-            onClick={() => navigate("/admin/customers")}
-          />
-          <ActionCard
-            icon="🔁"
-            title="Subscriptions"
-            desc="Manage active, paused and expired milk subscriptions."
-            color="orange"
-            onClick={() => navigate("/admin/subscriptions")}
-          />
-          <ActionCard
-            icon="📊"
-            title="Monthly Report"
-            desc="View delivered, missed, billing and payment reports."
-            color="blue"
-            onClick={() => navigate("/admin/monthly-report")}
-          />
-          <ActionCard
-               icon="🚚"
-              title="Today's Deliveries"
-              subtitle="Generate & Manage Subscription Deliveries"
-              color="green"             
-              onClick={() => navigate("/admin/subscription-deliveries")}
-            />
-            <ActionCard
-              icon="🥛"
-              title="Extra Milk"
-              desc="Approve, reject and manage customer extra milk requests."
-              color="green"
-              onClick={() => navigate("/admin/extra-milk")}
-            />
-        </div>
+          {/* MODERN HEADER */}
+          <header className="sticky top-2 z-40 mb-5 rounded-3xl border border-white/80 bg-white/90 px-4 py-3 shadow-lg backdrop-blur-xl sm:px-5">
+            <div className="flex items-center justify-between gap-3">
+              <button onClick={() => navigate("/admin")} className="flex items-center gap-3 text-left">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-2xl shadow-lg shadow-emerald-200 transition hover:scale-105">
+                  🥛
+                </div>
+                <div>
+                  <p className="font-black text-slate-900">Farm Fresh Dairy</p>
+                  <p className="text-[11px] font-semibold text-slate-400">Admin Control Center</p>
+                </div>
+              </button>
 
-        {/* LOW STOCK + PRODUCT TABLE */}
-        <div className="grid xl:grid-cols-3 gap-6 mt-6">
-          {/* LOW STOCK PANEL */}
-          <div className="bg-white rounded-3xl shadow-lg border border-yellow-100 p-5 sm:p-6 xl:col-span-1">
-            <div className="flex items-center justify-between gap-3 mb-5">
-              <div>
-                <h2 className="text-2xl font-black text-yellow-700">Low Stock Alert</h2>
-                <p className="text-gray-500 text-sm mt-1">
-                  Products that need stock refill
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-yellow-100 text-yellow-700 flex items-center justify-center text-2xl">
-                ⚠️
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => navigate("/admin/notifications")}
+                  className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-xl shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  🔔
+                  {notificationCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
+                      {notificationCount > 99 ? "99+" : notificationCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="hidden rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-black text-white transition hover:bg-slate-800 sm:block"
+                >
+                  Logout
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white sm:hidden"
+                >
+                  ↪
+                </button>
               </div>
             </div>
+          </header>
 
-            {loading ? (
-              <div className="text-center py-8 text-gray-500">Loading alerts...</div>
-            ) : recentLowStock.length === 0 ? (
-              <div className="rounded-2xl border border-green-100 bg-green-50 p-5 text-center">
-                <div className="text-4xl mb-2">✅</div>
-                <h3 className="font-black text-green-700 text-lg">All products look good</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  No low-stock items right now.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recentLowStock.map((product, index) => (
-                  <div
-                    key={product.id || index}
-                    className="rounded-2xl border border-yellow-100 bg-yellow-50 p-4 flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <h3 className="font-black text-yellow-800 break-words">
-                        {product.name || "Unnamed Product"}
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Price: ₹{product.price || 0}
-                      </p>
-                    </div>
+          {/* HERO */}
+          <section className="relative mb-6 overflow-hidden rounded-[32px] bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-5 text-white shadow-2xl sm:p-8 lg:p-10">
+            <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-400/20 blur-3xl" />
+            <div className="absolute bottom-[-100px] left-1/3 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" />
 
-                    <div className="text-right shrink-0">
-                      <p className="text-sm text-gray-500">Stock</p>
-                      <h4 className="text-2xl font-black text-yellow-700">
-                        {Number(product.stock || 0)}
-                      </h4>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button
-              onClick={() => navigate("/admin/products")}
-              className="mt-5 w-full px-5 py-3 rounded-2xl bg-yellow-500 hover:bg-yellow-600 text-white font-bold shadow"
-            >
-              Open Product Management
-            </button>
-          </div>
-
-          {/* PRODUCT TABLE */}
-          <div className="bg-white rounded-3xl shadow-lg border border-blue-100 p-5 sm:p-6 xl:col-span-2">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-              <div>
-                <h2 className="text-2xl font-black text-blue-700">Products & Stock</h2>
-                <p className="text-gray-500 text-sm mt-1">
-                  Current product inventory overview
+            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-3xl">
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-bold text-emerald-100 backdrop-blur">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+                  Dashboard is live
+                </span>
+                <p className="mt-4 text-sm font-semibold text-white/55">Farm Fresh Dairy Admin</p>
+                <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+                  Good morning, Admin 👋
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-white/65 sm:text-base">
+                  Monitor inventory and manage your daily dairy operations from one modern control center.
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => navigate("/admin/products")}
-                  className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 font-bold"
+                  className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-lg transition hover:-translate-y-1"
                 >
-                  Manage Products
+                  + Manage Products
+                </button>
+                <button
+                  onClick={() => navigate("/products")}
+                  className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white backdrop-blur transition hover:bg-white/15"
+                >
+                  View Store →
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* KPI */}
+          <section className="mb-6">
+            <div className="mb-3">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Business overview</p>
+              <h2 className="mt-1 text-xl font-black sm:text-2xl">Today at a glance</h2>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+              <Metric icon="🥛" label="Products" value={totalProducts} helper="Listed products" tone="emerald" />
+              <Metric icon="⚠️" label="Low stock" value={lowStockProducts.length} helper="Need refill" tone="amber" />
+              <Metric icon="📦" label="Out of stock" value={outOfStockProducts.length} helper="Unavailable" tone="red" />
+              <Metric icon="📊" label="Stock units" value={totalStockUnits} helper="Current quantity" tone="blue" />
+              <Metric icon="💰" label="Inventory value" value={formatMoney(totalInventoryValue)} helper="Price × stock" tone="purple" />
+            </div>
+          </section>
+
+          {/* NOTIFICATIONS */}
+          <section className="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-xl">🔔</div>
+                <div>
+                  <h2 className="font-black">Notifications</h2>
+                  <p className="text-xs font-medium text-slate-400">
+                    {notificationCount ? `${notificationCount} unread notification${notificationCount === 1 ? "" : "s"}` : "Everything is up to date"}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => navigate("/admin/notifications")} className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black">
+                View all
+              </button>
+            </div>
+            <div className="px-2 py-2 sm:px-3"><AdminNotifications /></div>
+          </section>
+
+          {/* QUICK ACTIONS */}
+          <section className="mb-6">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Operations</p>
+            <h2 className="mt-1 mb-4 text-xl font-black sm:text-2xl">Quick actions</h2>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              <Action icon="🥛" title="Products" desc="Manage products, prices and stock" color="emerald" path="/admin/products" />
+              <Action icon="📦" title="Orders" desc="Track orders and payments" color="blue" path="/admin/orders" />
+              <Action icon="👥" title="Customers" desc="Customers, addresses and history" color="purple" path="/admin/customers" />
+              <Action icon="🔁" title="Subscriptions" desc="Active, paused and expired plans" color="orange" path="/admin/subscriptions" />
+              <Action icon="📊" title="Monthly Report" desc="Delivery, billing and reports" color="cyan" path="/admin/monthly-report" />
+              <Action icon="🚚" title="Today's Deliveries" desc="Generate and manage deliveries" color="green" path="/admin/subscription-deliveries" />
+              <Action icon="🥛" title="Extra Milk" desc="Approve extra milk requests" color="lime" path="/admin/extra-milk" />
+              <Action icon="💰" title="Billing" desc="Invoices and payment records" color="pink" path="/admin/billing" />
+            </div>
+          </section>
+
+          {/* INVENTORY */}
+          <section className="grid gap-5 xl:grid-cols-[0.85fr_1.5fr]">
+
+            {/* LOW STOCK */}
+            <div className="overflow-hidden rounded-3xl border border-amber-100 bg-white shadow-lg">
+              <div className="border-b border-slate-100 p-5 sm:p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-xl">⚠️</div>
+                    <h2 className="text-xl font-black">Stock attention</h2>
+                    <p className="mt-1 text-sm text-slate-400">Products that need your attention</p>
+                  </div>
+                  <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">
+                    {lowStockProducts.length} items
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 sm:p-5">
+                {loading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((n) => <div key={n} className="h-16 animate-pulse rounded-2xl bg-slate-100" />)}
+                  </div>
+                ) : recentLowStock.length === 0 ? (
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-7 text-center">
+                    <div className="text-4xl">✅</div>
+                    <h3 className="mt-2 font-black text-emerald-700">Inventory looks healthy</h3>
+                    <p className="mt-1 text-sm text-slate-500">No low-stock products right now.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {recentLowStock.map((product, index) => (
+                      <div key={product.id || index} className="flex items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-3.5 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-xl shadow-sm">🥛</div>
+                          <div className="min-w-0">
+                            <p className="truncate font-black text-slate-800">{product.name || "Unnamed Product"}</p>
+                            <p className="mt-0.5 text-xs text-slate-400">₹{Number(product.price || 0)}</p>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Left</p>
+                          <p className="text-2xl font-black text-amber-600">{Number(product.stock || 0)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button onClick={() => navigate("/admin/products")} className="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-slate-800">
+                  Open Inventory →
                 </button>
               </div>
             </div>
 
-            {loading ? (
-              <div className="text-center py-10">
-                <div className="text-5xl mb-3 animate-pulse">⏳</div>
-                <p className="text-gray-500">Loading products...</p>
+            {/* PRODUCT TABLE */}
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
+              <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Inventory</p>
+                  <h2 className="mt-1 text-xl font-black">Products & stock</h2>
+                  <p className="mt-1 text-sm text-slate-400">Current inventory overview</p>
+                </div>
+                <button onClick={() => navigate("/admin/products")} className="self-start rounded-xl bg-blue-50 px-4 py-2.5 text-xs font-black text-blue-700">
+                  Manage products →
+                </button>
               </div>
-            ) : products.length === 0 ? (
-              <div className="text-center py-10">
-                <div className="text-5xl mb-3">📭</div>
-                <h3 className="text-xl font-bold text-gray-700">No products found</h3>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm sm:text-base">
-                  <thead>
-                    <tr className="text-left border-b border-slate-200">
-                      <th className="py-3 px-3 font-black text-gray-700">Product</th>
-                      <th className="py-3 px-3 font-black text-gray-700">Category</th>
-                      <th className="py-3 px-3 font-black text-gray-700">Price</th>
-                      <th className="py-3 px-3 font-black text-gray-700">Stock</th>
-                      <th className="py-3 px-3 font-black text-gray-700">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {products.map((product, index) => {
-                      const stock = Number(product.stock || 0);
-                      const status = getStockStatus(stock);
 
-                      return (
-                        <tr
-                          key={product.id || index}
-                          className="border-b border-slate-100 hover:bg-slate-50 transition"
-                        >
-                          <td className="py-3 px-3">
-                            <div>
-                              <p className="font-semibold text-gray-800 break-words">
-                                {product.name || "-"}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                ID: {product.id || "-"}
-                              </p>
+              <div className="p-3 sm:p-5">
+                {loading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3, 4, 5].map((n) => <div key={n} className="h-14 animate-pulse rounded-xl bg-slate-100" />)}
+                  </div>
+                ) : products.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <div className="text-4xl">📭</div>
+                    <h3 className="mt-2 font-black text-slate-700">No products found</h3>
+                  </div>
+                ) : (
+                  <>
+                    {/* Mobile */}
+                    <div className="space-y-2.5 md:hidden">
+                      {products.map((product, index) => {
+                        const stock = Number(product.stock || 0);
+                        const status = getStockStatus(stock);
+                        return (
+                          <div key={product.id || index} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate font-black text-slate-800">{product.name || "-"}</p>
+                                <p className="mt-1 text-xs text-slate-400">{product.category || "Uncategorized"}</p>
+                              </div>
+                              <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black ${status.className}`}>
+                                {status.label}
+                              </span>
                             </div>
-                          </td>
-                          <td className="py-3 px-3 text-gray-700">
-                            {product.category || "-"}
-                          </td>
-                          <td className="py-3 px-3 font-semibold text-gray-800">
-                            ₹{Number(product.price || 0)}
-                          </td>
-                          <td className="py-3 px-3 font-semibold text-gray-800">
-                            {stock}
-                          </td>
-                          <td className="py-3 px-3">
-                            <span
-                              className={`px-3 py-1 rounded-full font-bold text-xs sm:text-sm ${status.className}`}
-                            >
-                              {status.label}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            <div className="mt-3 flex justify-between">
+                              <div><p className="text-[10px] font-bold uppercase text-slate-400">Price</p><p className="font-black">₹{Number(product.price || 0)}</p></div>
+                              <div className="text-right"><p className="text-[10px] font-bold uppercase text-slate-400">Stock</p><p className={`text-xl font-black ${stock === 0 ? "text-red-600" : stock < 5 ? "text-amber-600" : "text-emerald-600"}`}>{stock}</p></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Desktop */}
+                    <div className="hidden overflow-x-auto md:block">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-left">
+                            <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">Product</th>
+                            <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">Category</th>
+                            <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">Price</th>
+                            <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">Stock</th>
+                            <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {products.map((product, index) => {
+                            const stock = Number(product.stock || 0);
+                            const status = getStockStatus(stock);
+                            return (
+                              <tr key={product.id || index} className="border-b border-slate-50 transition hover:bg-slate-50">
+                                <td className="px-3 py-3.5">
+                                  <p className="font-bold text-slate-800">{product.name || "-"}</p>
+                                  <p className="mt-0.5 text-[10px] text-slate-400">ID: {product.id || "-"}</p>
+                                </td>
+                                <td className="px-3 py-3.5 text-slate-500">{product.category || "-"}</td>
+                                <td className="px-3 py-3.5 font-bold">₹{Number(product.price || 0)}</td>
+                                <td className="px-3 py-3.5 font-black">{stock}</td>
+                                <td className="px-3 py-3.5">
+                                  <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${status.className}`}>{status.label}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* FOOTER ACTION STRIP */}
-        <div className="mt-6 rounded-3xl bg-gradient-to-r from-slate-900 to-slate-800 text-white p-5 sm:p-6 shadow-xl">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-black">Next Admin Modules</h2>
-              <p className="text-white/70 mt-1">
-                Orders, Customers, Subscriptions and Billing can now be connected to the same dashboard.
-              </p>
             </div>
+          </section>
 
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => navigate("/admin/orders")}
-                className="px-5 py-3 rounded-2xl bg-white text-slate-900 font-bold"
-              >
-                Orders
-              </button>
-              <button
-                onClick={() => navigate("/admin/customers")}
-                className="px-5 py-3 rounded-2xl bg-white/10 border border-white/15 text-white font-bold"
-              >
-                Customers
-              </button>
-              <button
-                onClick={() => navigate("/admin/subscriptions")}
-                className="px-5 py-3 rounded-2xl bg-white/10 border border-white/15 text-white font-bold"
-              >
-                Subscriptions
-              </button>
+          {/* FOOTER */}
+          <section className="mt-6 overflow-hidden rounded-3xl bg-slate-950 p-5 text-white shadow-xl sm:p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-300">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> System ready
+                </span>
+                <h2 className="mt-3 text-xl font-black sm:text-2xl">Keep your dairy operations moving.</h2>
+                <p className="mt-1 text-sm text-white/50">Jump directly into your most-used admin modules.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <DarkAction label="Orders" icon="📦" onClick={() => navigate("/admin/orders")} />
+                <DarkAction label="Customers" icon="👥" onClick={() => navigate("/admin/customers")} />
+                <DarkAction label="Subscriptions" icon="🔁" onClick={() => navigate("/admin/subscriptions")} />
+              </div>
             </div>
+          </section>
+        </main>
+
+        {/* MOBILE APP NAV */}
+        <nav className="fixed bottom-3 left-3 right-3 z-50 rounded-3xl border border-white/80 bg-white/90 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
+          <div className="grid grid-cols-4 gap-1">
+            <MobileNav icon="⌂" label="Home" active onClick={() => navigate("/admin")} />
+            <MobileNav icon="📦" label="Orders" onClick={() => navigate("/admin/orders")} />
+            <MobileNav icon="👥" label="Customers" onClick={() => navigate("/admin/customers")} />
+            <MobileNav icon="🔁" label="Subs" onClick={() => navigate("/admin/subscriptions")} />
           </div>
-        </div>
+        </nav>
       </div>
-    </div>
+    </>
   );
 }
 
-function StatCard({ title, value, subtitle, color = "blue", icon = "📊" }) {
+function Metric({ icon, label, value, helper, tone }) {
   const styles = {
-    blue: "border-blue-100 text-blue-700 bg-white",
-    yellow: "border-yellow-100 text-yellow-700 bg-white",
-    red: "border-red-100 text-red-700 bg-white",
-    green: "border-green-100 text-green-700 bg-white",
-    purple: "border-purple-100 text-purple-700 bg-white",
+    emerald: "from-emerald-50 to-white border-emerald-100",
+    amber: "from-amber-50 to-white border-amber-100",
+    red: "from-red-50 to-white border-red-100",
+    blue: "from-blue-50 to-white border-blue-100",
+    purple: "from-purple-50 to-white border-purple-100",
   };
 
   return (
-    <div
-      className={`rounded-3xl p-5 shadow-lg border ${styles[color] || styles.blue}`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-gray-500 text-sm">{title}</p>
-          <h3 className="text-3xl font-black mt-2 break-words">{value}</h3>
-          <p className="text-xs text-gray-500 mt-2">{subtitle}</p>
+    <div className={`group relative overflow-hidden rounded-3xl border bg-gradient-to-br p-4 shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl animate-[fadeUp_.55s_ease-out_both] ${styles[tone] || styles.blue}`}>
+      <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/70 blur-xl transition group-hover:scale-125" />
+      <div className="relative flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
+          <p className="mt-1.5 truncate text-2xl font-black tracking-tight sm:text-3xl">{value}</p>
+          <p className="mt-1 truncate text-[11px] font-semibold text-slate-400">{helper}</p>
         </div>
-
-        <div className="text-3xl">{icon}</div>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/80 text-xl shadow-sm transition group-hover:rotate-6 group-hover:scale-110">{icon}</div>
       </div>
     </div>
   );
 }
 
-function ActionCard({ icon, title, desc, color = "blue", onClick }) {
-  const styles = {
-    blue: "border-blue-100 text-blue-700",
-    green: "border-green-100 text-green-700",
-    purple: "border-purple-100 text-purple-700",
-    orange: "border-orange-100 text-orange-600",
+function Action({ icon, title, desc, color, path }) {
+  const colors = {
+    emerald: "from-emerald-500 to-teal-500",
+    blue: "from-blue-500 to-indigo-500",
+    purple: "from-violet-500 to-purple-500",
+    orange: "from-orange-500 to-amber-500",
+    cyan: "from-cyan-500 to-blue-500",
+    green: "from-green-500 to-emerald-500",
+    lime: "from-lime-500 to-green-500",
+    pink: "from-pink-500 to-rose-500",
   };
+
+  const navigate = useNavigate();
 
   return (
     <button
-      onClick={onClick}
-      className={`bg-white rounded-3xl p-6 shadow-lg border text-left hover:-translate-y-1 hover:shadow-xl transition-all duration-300 ${styles[color] || styles.blue}`}
+      onClick={() => navigate(path)}
+      className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-4 text-left shadow-lg transition duration-300 hover:-translate-y-1.5 hover:shadow-xl active:scale-[0.98] sm:p-5"
     >
-      <div className="text-4xl">{icon}</div>
-      <h2 className="text-xl font-black mt-3">{title}</h2>
-      <p className="text-gray-500 mt-2 text-sm">{desc}</p>
+      <div className={`absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br ${colors[color]} opacity-[0.08] blur-xl transition group-hover:scale-150`} />
+      <div className={`relative mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${colors[color]} text-xl text-white shadow-lg transition group-hover:scale-110 group-hover:rotate-3`}>{icon}</div>
+      <h3 className="relative text-base font-black sm:text-lg">{title}</h3>
+      <p className="relative mt-1.5 line-clamp-2 text-xs font-medium leading-5 text-slate-400 sm:text-sm">{desc}</p>
+      <p className="relative mt-3 text-xs font-black text-slate-500 group-hover:text-slate-900">Open module →</p>
     </button>
   );
+}
+
+function DarkAction({ label, icon, onClick }) {
+  return <button onClick={onClick} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs font-black text-white transition hover:-translate-y-0.5 hover:bg-white/10">{icon} {label}</button>;
+}
+
+function MobileNav({ icon, label, active, onClick }) {
+  return <button onClick={onClick} className={`flex flex-col items-center justify-center rounded-2xl px-2 py-2 transition ${active ? "bg-slate-900 text-white shadow-lg" : "text-slate-500 hover:bg-slate-100"}`}><span className="text-base leading-none">{icon}</span><span className="mt-1 text-[9px] font-black">{label}</span></button>;
 }

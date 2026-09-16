@@ -3,19 +3,111 @@ import AdminLayout from "../Components/AdminLayout";
 import { getAllCustomers } from "../services/adminCustomerService";
 import { useNavigate } from "react-router-dom";
 
-// ==========================================
-// Customer Subscription Status
-// ==========================================
+const CUSTOMERS_PER_PAGE = 10;
+
 function getCustomerSubscriptionStatus(customer) {
-  if (customer.pausedSubscriptions > 0) {
-    return "Paused";
-  }
-
-  if (customer.activeSubscriptions > 0) {
-    return "Active";
-  }
-
+  if (Number(customer.pausedSubscriptions || 0) > 0) return "Paused";
+  if (Number(customer.activeSubscriptions || 0) > 0) return "Active";
   return "None";
+}
+
+function formatMoney(value) {
+  const amount = Number(value || 0);
+  if (Number.isNaN(amount)) return "₹0";
+  return `₹${amount.toLocaleString("en-IN")}`;
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getInitials(name) {
+  const value = String(name || "Customer").trim();
+  if (!value) return "CU";
+
+  const parts = value.split(/\s+/).filter(Boolean);
+  return parts.length > 1
+    ? `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+    : value.slice(0, 2).toUpperCase();
+}
+
+function StatCard({ title, value, icon, tone, delay }) {
+  const tones = {
+    green: "from-emerald-50 to-green-100 text-emerald-700 border-emerald-100",
+    blue: "from-blue-50 to-indigo-100 text-blue-700 border-blue-100",
+    purple: "from-purple-50 to-fuchsia-100 text-purple-700 border-purple-100",
+    orange: "from-orange-50 to-amber-100 text-orange-700 border-orange-100",
+  };
+
+  return (
+    <div
+      className={`customer-stat group rounded-3xl border bg-gradient-to-br p-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+        tones[tone] || tones.green
+      }`}
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-wide opacity-70">
+            {title}
+          </p>
+          <p className="mt-2 truncate text-2xl font-black sm:text-3xl">
+            {value}
+          </p>
+        </div>
+
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-xl shadow-sm transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoBox({ label, value, icon }) {
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 transition-colors hover:border-emerald-200 hover:bg-emerald-50/40">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        {icon} {label}
+      </p>
+      <p className="mt-1 break-words text-sm font-black text-slate-800">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function CustomerSkeleton() {
+  return (
+    <div className="animate-pulse rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+      <div className="flex items-center gap-3">
+        <div className="h-14 w-14 rounded-2xl bg-slate-200" />
+        <div className="flex-1">
+          <div className="h-5 w-36 rounded bg-slate-200" />
+          <div className="mt-2 h-4 w-24 rounded bg-slate-100" />
+          <div className="mt-3 h-6 w-40 rounded-full bg-slate-100" />
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {[1, 2, 3, 4, 5].map((item) => (
+          <div key={item} className="h-16 rounded-2xl bg-slate-100" />
+        ))}
+      </div>
+
+      <div className="mt-4 h-16 rounded-2xl bg-slate-100" />
+      <div className="mt-3 h-11 rounded-2xl bg-slate-100" />
+    </div>
+  );
 }
 
 export default function AdminCustomers() {
@@ -23,752 +115,616 @@ export default function AdminCustomers() {
 
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // ==========================================
-  // Load Customers
-  // ==========================================
-  async function loadCustomers() {
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: CUSTOMERS_PER_PAGE,
+    total: 0,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  });
+
+  async function loadCustomers(showRefresh = false, page = currentPage) {
     try {
-      setLoading(true);
+      if (showRefresh) setRefreshing(true);
+      else setLoading(true);
 
-      const data = await getAllCustomers();
+      const data = await getAllCustomers({
+        page,
+        limit: CUSTOMERS_PER_PAGE,
+        search,
+        filter: filterType,
+      });
 
-      console.log("Customers:", data);
+      setCustomers(Array.isArray(data?.customers) ? data.customers : []);
 
-      setCustomers(data || []);
-    } catch (err) {
-      console.error("Load Customers Error:", err);
+      setPagination(
+        data?.pagination || {
+          page,
+          limit: CUSTOMERS_PER_PAGE,
+          total: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        }
+      );
+    } catch (error) {
+      console.error("Load Customers Error:", error);
+      setCustomers([]);
+      setPagination({
+        page: 1,
+        limit: CUSTOMERS_PER_PAGE,
+        total: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      });
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
   useEffect(() => {
-    loadCustomers();
-  }, []);
+    loadCustomers(false, currentPage);
+  }, [currentPage]);
 
-  // ==========================================
-  // Filter Customers
-  // ==========================================
-  const filteredCustomers = useMemo(() => {
-    const q = search.toLowerCase().trim();
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterType]);
 
-    return customers.filter((customer) => {
-      const name = String(
-        customer.name || ""
-      ).toLowerCase();
+  useEffect(() => {
+    if (currentPage === 1) {
+      loadCustomers(false, 1);
+    }
+  }, [search, filterType]);
 
-      const phone = String(
-        customer.phone || ""
-      ).toLowerCase();
+  const filteredCustomers = customers;
 
-      const area = String(
-        customer.area || ""
-      ).toLowerCase();
+  const totalPages = Number(pagination.totalPages || 0);
 
-      const matchesSearch =
-        !q ||
-        name.includes(q) ||
-        phone.includes(q) ||
-        area.includes(q);
+  const startIndex =
+    ((Number(pagination.page || currentPage) - 1) *
+      CUSTOMERS_PER_PAGE);
 
-      const matchesType =
-        filterType === "All" ||
+  const paginatedCustomers = customers;
 
-        (
-          filterType === "Subscribed" &&
-          customer.totalSubscriptions > 0
-        ) ||
-
-        (
-          filterType === "Only Orders" &&
-          customer.totalOrders > 0 &&
-          customer.totalSubscriptions === 0
-        ) ||
-
-        (
-          filterType === "Active Subscription" &&
-          customer.activeSubscriptions > 0
-        ) ||
-
-        (
-          filterType === "Paused Subscription" &&
-          customer.pausedSubscriptions > 0
-        );
-
-      return matchesSearch && matchesType;
-    });
-  }, [customers, search, filterType]);
-
-  // ==========================================
-  // Statistics
-  // ==========================================
   const stats = useMemo(() => {
-    const totalCustomers = customers.length;
-
-    const orderedCustomers =
-      customers.filter(
-        (c) => c.totalOrders > 0
-      ).length;
-
-    const subscribedCustomers =
-      customers.filter(
-        (c) => c.totalSubscriptions > 0
-      ).length;
-
-    const activeSubscribers =
-      customers.filter(
-        (c) => c.activeSubscriptions > 0
-      ).length;
-
-    const pausedSubscribers =
-      customers.filter(
-        (c) => c.pausedSubscriptions > 0
-      ).length;
-
-    const totalRevenue =
-      customers.reduce(
-        (sum, c) =>
-          sum + Number(c.totalSpent || 0),
-        0
-      );
-
     return {
-      totalCustomers,
-      orderedCustomers,
-      subscribedCustomers,
-      activeSubscribers,
-      pausedSubscribers,
-      totalRevenue,
+      totalCustomers: customers.length,
+      orderedCustomers: customers.filter(
+        (customer) => Number(customer.totalOrders || 0) > 0
+      ).length,
+      subscribedCustomers: customers.filter(
+        (customer) => Number(customer.totalSubscriptions || 0) > 0
+      ).length,
+      activeSubscribers: customers.filter(
+        (customer) => Number(customer.activeSubscriptions || 0) > 0
+      ).length,
+      pausedSubscribers: customers.filter(
+        (customer) => Number(customer.pausedSubscriptions || 0) > 0
+      ).length,
+      totalRevenue: customers.reduce(
+        (sum, customer) => sum + Number(customer.totalSpent || 0),
+        0
+      ),
     };
   }, [customers]);
 
-  // ==========================================
-  // Money
-  // ==========================================
-  const formatMoney = (value) => {
-    const num = Number(value || 0);
+  const pageNumbers = useMemo(() => {
+    if (totalPages <= 1) return [];
 
-    if (Number.isNaN(num)) {
-      return "₹0";
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
     }
 
-    return `₹${num.toLocaleString("en-IN")}`;
-  };
+    let start = Math.max(1, currentPage - 2);
+    let end = Math.min(totalPages, start + 4);
 
-  // ==========================================
-  // Date
-  // ==========================================
-  const formatDate = (dateValue) => {
-    if (!dateValue) {
-      return "-";
+    if (end - start < 4) {
+      start = Math.max(1, end - 4);
     }
 
-    const date = new Date(dateValue);
-
-    if (isNaN(date.getTime())) {
-      return dateValue;
-    }
-
-    return date.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
+    return Array.from(
+      { length: end - start + 1 },
+      (_, index) => start + index
+    );
+  }, [currentPage, totalPages]);
 
   return (
     <AdminLayout title="Customers">
+      <style>{`
+        @keyframes customersPageIn {
+          from { opacity: 0; transform: translateY(14px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
 
-      <div className="space-y-5 sm:space-y-6">
+        @keyframes customersHeroFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-3px); }
+        }
 
-        {/* ==========================================
-            HERO
-        ========================================== */}
-        <div className="rounded-[26px] sm:rounded-[30px] bg-gradient-to-r from-emerald-700 via-green-600 to-emerald-700 p-4 sm:p-6 text-white shadow-xl">
+        @keyframes customersStatIn {
+          from { opacity: 0; transform: translateY(18px) scale(.97); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
 
-          <div className="flex flex-col gap-4">
+        @keyframes customersCardIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
 
-            <div>
+        @keyframes customersPulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(.72); opacity: .55; }
+        }
 
-              <p className="text-white/80 text-xs sm:text-sm">
-                Admin Customer Control
+        @keyframes customersSpin {
+          to { transform: rotate(360deg); }
+        }
+
+        .customers-page {
+          animation: customersPageIn .45s ease-out both;
+        }
+
+        .customers-hero {
+          animation: customersHeroFloat 6s ease-in-out infinite;
+        }
+
+        .customer-stat {
+          animation: customersStatIn .5s ease-out both;
+        }
+
+        .customer-card {
+          animation: customersCardIn .5s ease-out both;
+        }
+
+        .customer-status-dot {
+          animation: customersPulse 2s ease-in-out infinite;
+        }
+
+        .customer-refresh-spin {
+          animation: customersSpin .8s linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .customers-page,
+          .customers-hero,
+          .customer-stat,
+          .customer-card,
+          .customer-status-dot,
+          .customer-refresh-spin {
+            animation: none !important;
+          }
+        }
+      `}</style>
+
+      <div className="customers-page mx-auto w-full space-y-5 pb-8 sm:space-y-6">
+        {/* HERO */}
+        <section className="customers-hero relative overflow-hidden rounded-[30px] bg-gradient-to-br from-emerald-900 via-green-700 to-emerald-500 p-5 text-white shadow-xl sm:p-7">
+          <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/10" />
+          <div className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-white/10" />
+          <div className="pointer-events-none absolute right-1/3 top-1/2 h-24 w-24 rounded-full bg-white/5" />
+
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[.18em] text-white/70">
+                Farm Fresh Admin
               </p>
 
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black mt-1">
-                👥 Customers Management
+              <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl lg:text-4xl">
+                👥 Customers
               </h1>
 
-              <p className="text-white/90 mt-2 text-sm sm:text-base">
-                View customer orders, subscriptions,
-                spending and subscription status.
+              <p className="mt-2 max-w-xl text-sm font-medium text-white/85 sm:text-base">
+                Manage customers, orders, subscriptions and spending in one
+                place.
               </p>
-
             </div>
 
-            <div className="grid grid-cols-2 sm:flex gap-3">
-
-              <button
-                onClick={loadCustomers}
-                disabled={loading}
-                className="px-4 py-3 rounded-2xl bg-white text-emerald-700 font-bold shadow text-sm sm:text-base disabled:opacity-50"
-              >
-                {loading
-                  ? "Loading..."
-                  : "Refresh Customers"}
-              </button>
-
-            </div>
-
+            <button
+              type="button"
+              onClick={() => loadCustomers(true, currentPage)}
+              disabled={loading || refreshing}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 font-black text-emerald-700 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              <span className={refreshing ? "customer-refresh-spin" : ""}>
+                🔄
+              </span>
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </button>
           </div>
+        </section>
 
-        </div>
-
-        {/* ==========================================
-            STATS
-        ========================================== */}
-        <div className="grid grid-cols-2 xl:grid-cols-6 gap-3 sm:gap-4">
-
+        {/* STATS */}
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           <StatCard
             title="Customers"
             value={stats.totalCustomers}
-            color="green"
             icon="👥"
+            tone="green"
+            delay={0}
           />
-
           <StatCard
             title="Ordered"
             value={stats.orderedCustomers}
-            color="blue"
             icon="📦"
+            tone="blue"
+            delay={70}
           />
-
           <StatCard
             title="Subscribed"
             value={stats.subscribedCustomers}
-            color="purple"
             icon="🥛"
+            tone="purple"
+            delay={140}
           />
-
           <StatCard
             title="Active"
             value={stats.activeSubscribers}
-            color="emerald"
             icon="✅"
+            tone="green"
+            delay={210}
           />
-
           <StatCard
             title="Paused"
             value={stats.pausedSubscribers}
-            color="orange"
             icon="⏸️"
+            tone="orange"
+            delay={280}
           />
-
           <StatCard
             title="Revenue"
             value={formatMoney(stats.totalRevenue)}
-            color="orange"
             icon="💰"
+            tone="green"
+            delay={350}
           />
+        </section>
 
-        </div>
-
-        {/* ==========================================
-            FILTERS
-        ========================================== */}
-        <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-4 sm:p-5">
-
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px_auto] gap-4">
-
+        {/* SEARCH / FILTER */}
+        <section className="rounded-[28px] border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+          <div className="grid gap-3 lg:grid-cols-[1fr_250px_auto] lg:items-end">
             <div>
-
-              <label className="block text-sm font-bold text-slate-700 mb-2">
+              <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-500">
                 Search Customer
               </label>
 
-              <input
-                type="text"
-                placeholder="Search by name / phone / area"
-                value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
-                className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm sm:text-base outline-none focus:border-green-500"
-              />
+              <div className="relative">
+                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg">
+                  🔍
+                </span>
 
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Name / phone / area"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm outline-none transition-all focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 sm:text-base"
+                />
+              </div>
             </div>
 
             <div>
-
-              <label className="block text-sm font-bold text-slate-700 mb-2">
+              <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-500">
                 Customer Type
               </label>
 
               <select
                 value={filterType}
-                onChange={(e) =>
-                  setFilterType(e.target.value)
-                }
-                className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm sm:text-base outline-none focus:border-green-500"
+                onChange={(event) => setFilterType(event.target.value)}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-all focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 sm:text-base"
               >
-
-                <option value="All">
-                  All
-                </option>
-
-                <option value="Subscribed">
-                  Subscribed
-                </option>
-
-                <option value="Only Orders">
-                  Only Orders
-                </option>
-
-                <option value="Active Subscription">
-                  Active Subscription
-                </option>
-
-                <option value="Paused Subscription">
-                  Paused Subscription
-                </option>
-
+                <option value="All">All Customers</option>
+                <option value="Subscribed">Subscribed</option>
+                <option value="Only Orders">Only Orders</option>
+                <option value="Active Subscription">Active Subscription</option>
+                <option value="Paused Subscription">Paused Subscription</option>
               </select>
-
             </div>
 
-            <div className="flex items-end">
-
-              <button
-                onClick={loadCustomers}
-                className="w-full lg:w-auto bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-2xl font-bold shadow"
-              >
-                Refresh
-              </button>
-
-            </div>
-
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setFilterType("All");
+              }}
+              className="h-[50px] rounded-2xl bg-emerald-600 px-5 font-black text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow-md active:scale-95"
+            >
+              Clear
+            </button>
           </div>
 
-        </div>
+          {!loading && (
+            <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-slate-500">
+                Showing{" "}
+                <span className="font-black text-slate-900">
+                  {pagination.total}
+                </span>{" "}
+                customers
+              </p>
 
-        {/* ==========================================
-            CONTENT
-        ========================================== */}
+              {search || filterType !== "All" ? (
+                <p className="font-semibold text-emerald-600">
+                  Filters active
+                </p>
+              ) : (
+                <p className="text-slate-400">All customers</p>
+              )}
+            </div>
+          )}
+        </section>
 
+        {/* CUSTOMER LIST */}
         {loading ? (
-
-          <div className="bg-slate-50 rounded-3xl p-10 text-center">
-
-            <div className="text-5xl mb-3 animate-pulse">
-              ⏳
-            </div>
-
-            <p className="text-lg font-semibold text-slate-600">
-              Loading customers...
-            </p>
-
+          <div className="grid gap-4">
+            {[1, 2, 3].map((item) => (
+              <CustomerSkeleton key={item} />
+            ))}
           </div>
-
-        ) : filteredCustomers.length === 0 ? (
-
-          <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-10 text-center">
-
-            <div className="text-6xl mb-4">
-              👥
-            </div>
-
-            <h2 className="text-2xl font-black text-slate-700">
+        ) : paginatedCustomers.length === 0 ? (
+          <section className="rounded-[28px] border border-slate-100 bg-white p-10 text-center shadow-sm">
+            <div className="text-6xl">👥</div>
+            <h2 className="mt-4 text-xl font-black text-slate-800 sm:text-2xl">
               No customers found
             </h2>
-
-            <p className="text-slate-500 mt-2">
-              Try changing search or customer type filter.
+            <p className="mt-2 text-sm text-slate-500">
+              Try changing your search or customer type filter.
             </p>
-
-          </div>
-
+          </section>
         ) : (
-
           <div className="grid gap-4">
+            {paginatedCustomers.map((customer, index) => {
+              const subscriptionStatus =
+                getCustomerSubscriptionStatus(customer);
 
-            {filteredCustomers.map(
-              (customer, index) => {
+              const statusClasses =
+                subscriptionStatus === "Active"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                  : subscriptionStatus === "Paused"
+                  ? "bg-orange-50 border-orange-200 text-orange-700"
+                  : "bg-slate-50 border-slate-200 text-slate-600";
 
-                const subscriptionStatus =
-                  getCustomerSubscriptionStatus(
-                    customer
-                  );
-
-                return (
-
-                  <div
-                    key={customer.id || index}
-                    className="bg-white rounded-3xl shadow-md border border-slate-100 p-4 sm:p-5 hover:shadow-xl transition"
-                  >
-
-                    <div className="flex flex-col gap-4">
-
-                      {/* ==========================================
-                          TOP
-                      ========================================== */}
-
-                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-
-                        <div className="flex items-start gap-4 min-w-0">
-
-                          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-green-100 text-green-700 flex items-center justify-center text-2xl sm:text-3xl font-bold shrink-0">
-                            👤
-                          </div>
-
-                          <div className="min-w-0">
-
-                            <h2 className="text-xl sm:text-2xl font-black text-slate-800 break-words">
-                              {customer.name || "Customer"}
-                            </h2>
-
-                            <p className="text-slate-500 mt-1 break-all">
-                              {customer.phone || "-"}
-                            </p>
-
-                            {/* ==========================================
-                                BADGES
-                            ========================================== */}
-
-                            <div className="flex flex-wrap gap-2 mt-3">
-
-                              {subscriptionStatus === "Paused" && (
-
-                                <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-4 py-2 text-sm font-semibold text-orange-700 border border-orange-200">
-                                  ⏸️ Paused Subscriber
-                                </span>
-
-                              )}
-
-                              {subscriptionStatus === "Active" && (
-
-                                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-4 py-2 text-sm font-semibold text-green-700 border border-green-200">
-                                  🟢 Active Subscriber
-                                </span>
-
-                              )}
-
-                              {customer.totalSubscriptions > 0 && (
-
-                                <span className="px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-xs sm:text-sm font-bold border border-purple-200">
-                                  Subscription Customer
-                                </span>
-
-                              )}
-
-                              {customer.totalOrders > 0 && (
-
-                                <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs sm:text-sm font-bold border border-blue-200">
-                                  Ordered Customer
-                                </span>
-
-                              )}
-
-                            </div>
-
-                          </div>
-
-                        </div>
-
-                        {/* TOTAL SPENT */}
-
-                        <div className="rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 text-white px-5 py-4 shadow w-full sm:w-auto">
-
-                          <p className="text-xs sm:text-sm text-white/80">
-                            Total Spent
-                          </p>
-
-                          <h3 className="text-2xl font-black mt-1">
-                            {formatMoney(
-                              customer.totalSpent
-                            )}
-                          </h3>
-
-                        </div>
-
+              return (
+                <article
+                  key={customer.id || `${customer.phone}-${index}`}
+                  className="customer-card group rounded-[28px] border border-slate-100 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-100 hover:shadow-xl sm:p-5"
+                  style={{ animationDelay: `${index * 70}ms` }}
+                >
+                  {/* HEADER */}
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-100 to-green-200 text-lg font-black text-emerald-700 shadow-inner sm:h-16 sm:w-16 sm:text-xl">
+                        {getInitials(customer.name)}
                       </div>
 
-                      {/* ==========================================
-                          CUSTOMER SUMMARY
-                      ========================================== */}
+                      <div className="min-w-0">
+                        <h2 className="truncate text-lg font-black text-slate-900 sm:text-xl">
+                          {customer.name || "Customer"}
+                        </h2>
 
-                      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-
-                        <InfoBox
-                          label="Area"
-                          value={
-                            customer.area || "-"
-                          }
-                        />
-
-                        <InfoBox
-                          label="Orders"
-                          value={
-                            customer.totalOrders || 0
-                          }
-                        />
-
-                        <InfoBox
-                          label="Subscriptions"
-                          value={
-                            customer.totalSubscriptions || 0
-                          }
-                        />
-
-                        <InfoBox
-                          label="Active Plans"
-                          value={
-                            customer.activeSubscriptions || 0
-                          }
-                        />
-
-                        <InfoBox
-                          label="Paused Plans"
-                          value={
-                            customer.pausedSubscriptions || 0
-                          }
-                        />
-
-                      </div>
-
-                      {/* ==========================================
-                          CURRENT SUBSCRIPTION STATUS
-                      ========================================== */}
-
-                      {customer.latestSubscription && (
-
-                        <div
-                          className={`rounded-2xl p-4 border ${
-                            subscriptionStatus === "Paused"
-                              ? "bg-orange-50 border-orange-200"
-                              : subscriptionStatus === "Active"
-                              ? "bg-green-50 border-green-200"
-                              : "bg-slate-50 border-slate-200"
-                          }`}
-                        >
-
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-
-                            <div>
-
-                              <p className="text-sm font-medium text-slate-500">
-                                Current Subscription
-                              </p>
-
-                              <p className="font-bold text-slate-800 mt-1">
-                                {subscriptionStatus ===
-                                "Paused"
-                                  ? "⏸️ Subscription Paused"
-                                  : subscriptionStatus ===
-                                    "Active"
-                                  ? "🟢 Subscription Active"
-                                  : "No Active Subscription"}
-                              </p>
-
-                            </div>
-
-                            {subscriptionStatus ===
-                              "Paused" && (
-
-                              <div className="text-sm text-orange-700 font-semibold">
-
-                                Pause:
-                                {" "}
-                                {formatDate(
-                                  customer.latestSubscription
-                                    .pause_from
-                                )}
-
-                                {" → "}
-
-                                {formatDate(
-                                  customer.latestSubscription
-                                    .pause_to
-                                )}
-
-                              </div>
-
-                            )}
-
-                          </div>
-
-                        </div>
-
-                      )}
-
-                      {/* ==========================================
-                          ADDRESS
-                      ========================================== */}
-
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-
-                        <p className="text-sm text-slate-500 font-medium">
-                          Address
+                        <p className="mt-1 text-sm font-medium text-slate-500">
+                          📱 {customer.phone || "-"}
                         </p>
 
-                        <p className="text-slate-800 font-semibold mt-1 break-words">
-                          {customer.address || "-"}
-                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-black ${statusClasses}`}
+                          >
+                            <span
+                              className={`customer-status-dot h-2 w-2 rounded-full ${
+                                subscriptionStatus === "Active"
+                                  ? "bg-emerald-500"
+                                  : subscriptionStatus === "Paused"
+                                  ? "bg-orange-500"
+                                  : "bg-slate-400"
+                              }`}
+                            />
+                            {subscriptionStatus}
+                          </span>
 
-                      </div>
+                          {Number(customer.totalSubscriptions || 0) > 0 && (
+                            <span className="rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-black text-purple-700">
+                              🥛 Subscriber
+                            </span>
+                          )}
 
-                      {/* ==========================================
-                          TIMELINE
-                      ========================================== */}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-
-                          <p className="text-sm text-slate-500 font-medium">
-                            Latest Order
-                          </p>
-
-                          <p className="text-slate-800 font-bold mt-1">
-                            {formatDate(
-                              customer.latestOrderDate
-                            )}
-                          </p>
-
+                          {Number(customer.totalOrders || 0) > 0 && (
+                            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">
+                              📦 Customer
+                            </span>
+                          )}
                         </div>
-
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-
-                          <p className="text-sm text-slate-500 font-medium">
-                            Latest Subscription
-                          </p>
-
-                          <p className="text-slate-800 font-bold mt-1">
-                            {formatDate(
-                              customer.latestSubscriptionDate
-                            )}
-                          </p>
-
-                        </div>
-
                       </div>
-
-                      {/* ==========================================
-                          ACTIONS
-                      ========================================== */}
-
-                      <div className="flex justify-end mt-5">
-
-                        <button
-                          onClick={() =>
-                            navigate(
-                              `/admin/customers/${customer.id}`
-                            )
-                          }
-                          className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-xl font-bold"
-                        >
-                          👁 View Details
-                        </button>
-
-                      </div>
-
                     </div>
 
+                    <div className="w-full shrink-0 rounded-2xl bg-gradient-to-br from-emerald-600 to-green-700 px-4 py-3 text-white shadow-lg sm:w-auto sm:min-w-[145px]">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-white/70">
+                        Total Spent
+                      </p>
+                      <p className="mt-1 text-xl font-black sm:text-2xl">
+                        {formatMoney(customer.totalSpent)}
+                      </p>
+                    </div>
                   </div>
 
-                );
-              }
-            )}
+                  {/* SUMMARY */}
+                  <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+                    <InfoBox label="Area" value={customer.area || "-"} icon="📍" />
+                    <InfoBox
+                      label="Orders"
+                      value={customer.totalOrders || 0}
+                      icon="📦"
+                    />
+                    <InfoBox
+                      label="Plans"
+                      value={customer.totalSubscriptions || 0}
+                      icon="🥛"
+                    />
+                    <InfoBox
+                      label="Active"
+                      value={customer.activeSubscriptions || 0}
+                      icon="✅"
+                    />
+                    <InfoBox
+                      label="Paused"
+                      value={customer.pausedSubscriptions || 0}
+                      icon="⏸️"
+                    />
+                  </div>
 
+                  {/* SUBSCRIPTION */}
+                  {customer.latestSubscription && (
+                    <div
+                      className={`mt-4 rounded-2xl border p-4 ${
+                        subscriptionStatus === "Paused"
+                          ? "border-orange-200 bg-orange-50"
+                          : subscriptionStatus === "Active"
+                          ? "border-emerald-200 bg-emerald-50"
+                          : "border-slate-200 bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                            Current Subscription
+                          </p>
+
+                          <p className="mt-1 font-black text-slate-900">
+                            {subscriptionStatus === "Paused"
+                              ? "⏸️ Subscription Paused"
+                              : subscriptionStatus === "Active"
+                              ? "🟢 Subscription Active"
+                              : "Subscription Inactive"}
+                          </p>
+                        </div>
+
+                        {subscriptionStatus === "Paused" && (
+                          <p className="text-xs font-bold text-orange-700 sm:text-sm">
+                            {formatDate(customer.latestSubscription.pause_from)}
+                            {" → "}
+                            {formatDate(customer.latestSubscription.pause_to)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ADDRESS */}
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      📍 Address
+                    </p>
+
+                    <p className="mt-1 break-words text-sm font-semibold leading-6 text-slate-800 sm:text-base">
+                      {customer.address || "-"}
+                    </p>
+                  </div>
+
+                  {/* TIMELINE */}
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-slate-100 bg-white p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        Latest Order
+                      </p>
+                      <p className="mt-1 text-sm font-black text-slate-800">
+                        {formatDate(customer.latestOrderDate)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-white p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        Latest Subscription
+                      </p>
+                      <p className="mt-1 text-sm font-black text-slate-800">
+                        {formatDate(customer.latestSubscriptionDate)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* ACTION */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(`/admin/customers/${customer.id}`)
+                    }
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 py-3 font-black text-white shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg active:scale-[.98]"
+                  >
+                    👁 View Customer Details
+                  </button>
+                </article>
+              );
+            })}
           </div>
-
         )}
 
-      </div>
+        {/* PAGINATION */}
+        {!loading && pagination.total > 0 && totalPages > 1 && (
+          <section className="rounded-[26px] border border-slate-100 bg-white p-4 shadow-sm">
+            <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
+              <p className="text-sm font-semibold text-slate-500">
+                Showing{" "}
+                <span className="font-black text-slate-900">
+                  {startIndex + 1}
+                </span>{" "}
+                –{" "}
+                <span className="font-black text-slate-900">
+                  {Math.min(
+                    startIndex + customers.length,
+                    Number(pagination.total || 0)
+                  )}
+                </span>{" "}
+                of{" "}
+                <span className="font-black text-slate-900">
+                  {pagination.total}
+                </span>
+              </p>
 
+              <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((page) => page - 1)}
+                  className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 bg-white text-lg font-black transition-all hover:border-emerald-200 hover:bg-emerald-50 active:scale-90 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  ‹
+                </button>
+
+                {pageNumbers.map((page) => (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`h-10 w-10 shrink-0 rounded-xl text-sm font-black transition-all active:scale-90 ${
+                      currentPage === page
+                        ? "scale-105 bg-emerald-600 text-white shadow-md"
+                        : "bg-slate-50 text-slate-700 hover:bg-emerald-50"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((page) => page + 1)}
+                  className="h-10 w-10 shrink-0 rounded-xl border border-slate-200 bg-white text-lg font-black transition-all hover:border-emerald-200 hover:bg-emerald-50 active:scale-90 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
     </AdminLayout>
-  );
-}
-
-// ==========================================
-// Stat Card
-// ==========================================
-function StatCard({
-  title,
-  value,
-  color = "green",
-  icon = "👥",
-}) {
-
-  const styles = {
-    green:
-      "border-green-100 text-green-700 bg-white",
-
-    blue:
-      "border-blue-100 text-blue-700 bg-white",
-
-    purple:
-      "border-purple-100 text-purple-700 bg-white",
-
-    emerald:
-      "border-emerald-100 text-emerald-700 bg-white",
-
-    orange:
-      "border-orange-100 text-orange-700 bg-white",
-  };
-
-  return (
-
-    <div
-      className={`rounded-3xl p-4 sm:p-5 shadow-lg border ${
-        styles[color] || styles.green
-      }`}
-    >
-
-      <div className="flex items-start justify-between gap-2">
-
-        <div className="min-w-0">
-
-          <p className="text-slate-500 text-xs sm:text-sm">
-            {title}
-          </p>
-
-          <h3 className="text-xl sm:text-3xl font-black mt-2 break-words">
-            {value}
-          </h3>
-
-        </div>
-
-        <div className="text-2xl sm:text-3xl shrink-0">
-          {icon}
-        </div>
-
-      </div>
-
-    </div>
-  );
-}
-
-// ==========================================
-// Info Box
-// ==========================================
-function InfoBox({ label, value }) {
-
-  return (
-
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 min-w-0">
-
-      <p className="text-xs sm:text-sm text-slate-500 font-medium">
-        {label}
-      </p>
-
-      <h3 className="text-sm sm:text-lg font-black text-slate-800 mt-1 break-words">
-        {value}
-      </h3>
-
-    </div>
-
   );
 }
