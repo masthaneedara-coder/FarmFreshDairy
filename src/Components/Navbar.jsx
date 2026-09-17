@@ -1,5 +1,23 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import {
+  Bell,
+  Boxes,
+  ChartNoAxesColumn,
+  ChevronRight,
+  CircleUserRound,
+  LayoutDashboard,
+  Menu,
+  Milk,
+  Package,
+  ShoppingBag,
+  Sparkles,
+  Users,
+  X,
+  LogIn,
+  CreditCard,
+  Truck,
+} from "lucide-react";
 import logo from "../assets/logo.png";
 import NotificationBell from "./NotificationBell";
 import NotificationDrawer from "./NotificationDrawer";
@@ -11,10 +29,9 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { customer, logout } = useAuthSession();
-
+  const role = getCurrentRole();
   const isCustomerLoggedIn = !!customer;
   const customerName = customer?.name || "Customer";
-  const role = getCurrentRole();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
@@ -22,18 +39,26 @@ export default function Navbar() {
 
   useEffect(() => {
     const updateCart = () => setCartCount(getCartItemCount());
-
     updateCart();
     window.addEventListener("cartUpdated", updateCart);
-
-    return () => {
-      window.removeEventListener("cartUpdated", updateCart);
-    };
+    return () => window.removeEventListener("cartUpdated", updateCart);
   }, []);
 
   useEffect(() => {
     setMenuOpen(false);
   }, [location.pathname]);
+
+  const isActive = (path, startsWith = false) =>
+    startsWith ? location.pathname.startsWith(path) : location.pathname === path;
+
+  const goToSubscription = () => {
+    if (!isCustomerLoggedIn) {
+      localStorage.setItem("redirectAfterLogin", "/subscription/create/:productId");
+      navigate("/auth");
+      return;
+    }
+    navigate("/subscription/create/:productId");
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -41,142 +66,122 @@ export default function Navbar() {
     navigate("/auth");
   };
 
-  const goToSubscription = () => {
-    if (!isCustomerLoggedIn) {
-      localStorage.setItem(
-        "redirectAfterLogin",
-        "/subscription/create/:productId"
-      );
-      setMenuOpen(false);
-      navigate("/auth");
-      return;
-    }
+  const customerItems = [
+    { to: "/products", label: "Shop", icon: ShoppingBag },
+    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/subscription/create/:productId", label: "Subscription", icon: Milk, action: goToSubscription, activePath: "/subscription" },
+    { to: "/order-history", label: "Orders", icon: Package },
+  ];
 
-    setMenuOpen(false);
-    navigate("/subscription/create/:productId");
-  };
+  const adminItems = [
+    { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/admin/products", label: "Products", icon: ShoppingBag },
+    { to: "/admin/orders", label: "Orders", icon: Package },
+    { to: "/admin/customers", label: "Customers", icon: Users },
+    { to: "/admin/subscriptions", label: "Subscriptions", icon: Milk },
+    { to: "/admin/billing", label: "Billing", icon: CreditCard },
+  ];
 
-  const isActive = (path, startsWith = false) =>
-    startsWith
-      ? location.pathname.startsWith(path)
-      : location.pathname === path;
+  const deliveryItems = [
+    { to: "/delivery", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/delivery", label: "Deliveries", icon: Truck },
+    { to: "/delivery/history", label: "History", icon: Boxes },
+  ];
+
+  const items = role === "admin" ? adminItems : role === "delivery" ? deliveryItems : customerItems;
 
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-[9999]">
-        {/* Premium announcement bar */}
-        <div className="relative overflow-hidden bg-slate-950 text-white">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_50%,rgba(16,185,129,.25),transparent_28%),radial-gradient(circle_at_85%_50%,rgba(45,212,191,.18),transparent_28%)]" />
-
-          <div className="relative mx-auto flex h-9 max-w-7xl items-center justify-center overflow-hidden px-4">
-            <div className="whitespace-nowrap text-[10px] font-bold tracking-wide text-white/85 sm:text-xs">
-              <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.8)]" />
-              Fresh dairy • Daily morning delivery • Farm fresh quality
-              <span className="mx-2 text-emerald-400">•</span>
-              Free home delivery
-              <span className="mx-2 text-emerald-400">•</span>
-              Subscribe today
-            </div>
+        {/* slim animated top ribbon */}
+        <div className="relative h-8 overflow-hidden bg-[#031b17] text-white">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(16,185,129,.28),transparent_24%),radial-gradient(circle_at_80%_50%,rgba(45,212,191,.2),transparent_24%)]" />
+          <div className="relative flex h-full items-center justify-center overflow-hidden whitespace-nowrap px-3 text-[9px] font-black tracking-[.08em] text-white/80 sm:text-[10px]">
+            <span className="mr-2 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.9)] animate-pulse" />
+            FRESH DAIRY
+            <span className="mx-2 text-emerald-400">•</span>
+            DAILY MORNING DELIVERY
+            <span className="mx-2 text-emerald-400">•</span>
+            FARM FRESH QUALITY
+            <span className="mx-2 text-emerald-400">•</span>
+            FREE HOME DELIVERY
           </div>
         </div>
 
-        {/* Main navigation */}
-        <div className="border-b border-slate-200/80 bg-white/90 shadow-[0_8px_30px_rgba(15,23,42,.07)] backdrop-blur-2xl">
+        <div className="border-b border-slate-200/70 bg-white/88 shadow-[0_10px_35px_rgba(15,23,42,.07)] backdrop-blur-2xl">
           <div className="mx-auto max-w-7xl px-3 sm:px-5 lg:px-8">
-            <div className="flex min-h-[72px] items-center justify-between gap-3">
-              {/* Brand */}
-              <Link
-                to="/"
-                className="group flex min-w-0 items-center gap-2.5"
-              >
+            {/* Main row */}
+            <div className="flex h-[68px] items-center gap-3 sm:h-[76px]">
+              <Link to="/" className="group flex min-w-0 items-center gap-2.5">
                 <div className="relative shrink-0">
-                  <div className="absolute -inset-1 rounded-full bg-emerald-400/15 opacity-0 blur-md transition duration-500 group-hover:opacity-100" />
+                  <div className="absolute -inset-1 rounded-full bg-emerald-400/20 blur-md transition group-hover:opacity-100" />
                   <img
                     src={logo}
                     alt="Farm Fresh Dairy"
                     className="relative h-10 w-10 rounded-full border border-emerald-100 bg-white object-contain shadow-sm transition duration-300 group-hover:scale-105 sm:h-12 sm:w-12"
                   />
                 </div>
-
                 <div className="min-w-0">
-                  <div className="text-[15px] font-black tracking-tight text-slate-900 sm:text-xl">
+                  <div className="truncate text-[15px] font-black tracking-[-.04em] text-slate-900 sm:text-xl">
                     FarmFresh<span className="text-emerald-600">Dairy</span>
                   </div>
-                  <div className="hidden text-[10px] font-semibold text-slate-400 sm:block">
-                    Freshness delivered daily
+                  <div className="hidden text-[9px] font-bold tracking-wide text-slate-400 sm:block">
+                    FRESHNESS DELIVERED DAILY
                   </div>
                 </div>
               </Link>
 
-              {/* Desktop customer navigation */}
-              {role === "customer" && (
-                <nav className="hidden items-center gap-1.5 lg:flex">
-                  <NavItem
-                    to="/products"
-                    icon="🛍️"
-                    label="Shop"
-                    active={isActive("/products")}
-                  />
+              {/* Desktop navigation */}
+              <nav className="ml-auto hidden items-center gap-1 lg:flex">
+                {items.map(({ to, label, icon: Icon, action, activePath }) => {
+                  const active = isActive(activePath || to, !!activePath);
+                  const content = (
+                    <>
+                      <Icon size={15} strokeWidth={2.5} />
+                      <span>{label}</span>
+                      {label === "Subscription" && (
+                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[7px] font-black text-amber-700">
+                          POPULAR
+                        </span>
+                      )}
+                    </>
+                  );
 
-                  <NavItem
-                    to="/dashboard"
-                    icon="📊"
-                    label="Dashboard"
-                    active={isActive("/dashboard")}
-                  />
+                  return action ? (
+                    <button
+                      key={label}
+                      onClick={action}
+                      className={`relative flex items-center gap-2 rounded-2xl px-3.5 py-2.5 text-xs font-black transition-all duration-300 ${
+                        active
+                          ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200"
+                          : "text-slate-600 hover:-translate-y-0.5 hover:bg-emerald-50 hover:text-emerald-700"
+                      }`}
+                    >
+                      {content}
+                    </button>
+                  ) : (
+                    <Link
+                      key={label}
+                      to={to}
+                      className={`flex items-center gap-2 rounded-2xl px-3.5 py-2.5 text-xs font-black transition-all duration-300 ${
+                        active
+                          ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200"
+                          : "text-slate-600 hover:-translate-y-0.5 hover:bg-emerald-50 hover:text-emerald-700"
+                      }`}
+                    >
+                      {content}
+                    </Link>
+                  );
+                })}
+              </nav>
 
-                  <button
-                    onClick={goToSubscription}
-                    className={`group relative flex items-center gap-2 rounded-2xl px-3.5 py-2.5 text-xs font-black transition-all duration-300 ${
-                      isActive("/subscription", true)
-                        ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200"
-                        : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
-                    }`}
-                  >
-                    <span>🥛</span>
-                    Subscription
-                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-black text-amber-700">
-                      POPULAR
-                    </span>
-                  </button>
-
-                  <NavItem
-                    to="/order-history"
-                    icon="📦"
-                    label="Orders"
-                    active={isActive("/order-history")}
-                  />
-                </nav>
-              )}
-
-              {/* Desktop admin navigation */}
-              {role === "admin" && (
-                <nav className="hidden items-center gap-1.5 lg:flex">
-                  <NavItem to="/admin" icon="📊" label="Dashboard" active={isActive("/admin")} />
-                  <NavItem to="/admin/products" icon="🛍️" label="Products" active={isActive("/admin/products")} />
-                  <NavItem to="/admin/orders" icon="📦" label="Orders" active={isActive("/admin/orders")} />
-                  <NavItem to="/admin/customers" icon="👥" label="Customers" active={isActive("/admin/customers")} />
-                  <NavItem to="/admin/subscriptions" icon="🔄" label="Subscriptions" active={isActive("/admin/subscriptions")} />
-                  <NavItem to="/admin/billing" icon="💰" label="Billing" active={isActive("/admin/billing")} />
-                </nav>
-              )}
-
-              {/* Desktop delivery navigation */}
-              {role === "delivery" && (
-                <nav className="hidden items-center gap-1.5 lg:flex">
-                  <NavItem to="/delivery" icon="📊" label="Dashboard" active={isActive("/delivery")} />
-                  <NavItem to="/delivery" icon="🚚" label="Deliveries" active={isActive("/delivery")} />
-                  <NavItem to="/delivery/history" icon="📋" label="History" active={isActive("/delivery/history")} />
-                </nav>
-              )}
-
-              {/* Right controls */}
-              <div className="ml-auto flex shrink-0 items-center gap-2">
+              <div className="ml-auto flex shrink-0 items-center gap-2 lg:ml-3">
                 {!role && (
                   <button
                     onClick={() => navigate("/auth")}
                     className="hidden rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-700 sm:inline-flex"
                   >
+                    <LogIn size={14} className="mr-1.5" />
                     Login
                   </button>
                 )}
@@ -187,131 +192,98 @@ export default function Navbar() {
                   </div>
                 )}
 
-                <div
-                  className="relative hidden h-10 w-10 items-center justify-center sm:flex"
-                  aria-label="Notifications"
-                >
+                <div className="hidden sm:flex">
                   <NotificationBell onClick={() => setNotificationOpen(true)} />
                 </div>
 
                 <button
                   onClick={() => navigate("/cart")}
-                  className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-lg shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md sm:h-11 sm:w-11"
-                  aria-label="Cart"
+                  aria-label="Open cart"
+                  className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:text-emerald-700 hover:shadow-lg sm:h-11 sm:w-11"
                 >
-                  🛒
+                  <ShoppingBag size={19} strokeWidth={2.3} />
                   {cartCount > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white shadow-md">
+                    <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white shadow-md">
                       {cartCount > 99 ? "99+" : cartCount}
                     </span>
                   )}
                 </button>
 
                 <button
-                  onClick={() => setMenuOpen((prev) => !prev)}
-                  className={`flex h-10 w-10 items-center justify-center rounded-2xl border text-lg shadow-sm transition-all sm:h-11 sm:w-11 ${
-                    menuOpen
-                      ? "border-emerald-600 bg-emerald-600 text-white shadow-lg"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:text-emerald-700 hover:shadow-md"
-                  }`}
+                  onClick={() => setMenuOpen((v) => !v)}
                   aria-label="Open menu"
                   aria-expanded={menuOpen}
+                  className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-sm transition-all duration-300 sm:h-11 sm:w-11 ${
+                    menuOpen
+                      ? "border-emerald-600 bg-emerald-600 text-white shadow-lg shadow-emerald-200"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:text-emerald-700 hover:shadow-lg"
+                  }`}
                 >
-                  {menuOpen ? "✕" : "☰"}
+                  {menuOpen ? <X size={20} /> : <Menu size={20} />}
                 </button>
               </div>
             </div>
 
-            {/* Mobile quick actions */}
-            <div className="flex gap-2 overflow-x-auto pb-3 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:hidden">
-              {!role && (
-                <MobileChip icon="🔐" label="Login / Signup" onClick={() => navigate("/auth")} />
-              )}
-
-              {role === "customer" && (
-                <>
-                  <MobileChip icon="🛍️" label="Shop" active={isActive("/products")} onClick={() => navigate("/products")} />
-                  <MobileChip icon="📊" label="Dashboard" active={isActive("/dashboard")} onClick={() => navigate("/dashboard")} />
-                  <MobileChip icon="🥛" label="Subscription" active={isActive("/subscription", true)} onClick={goToSubscription} />
-                  <MobileChip icon="📦" label="Orders" active={isActive("/order-history")} onClick={() => navigate("/order-history")} />
-                </>
-              )}
-
-              {role === "admin" && (
-                <>
-                  <MobileChip icon="📊" label="Dashboard" active={isActive("/admin")} onClick={() => navigate("/admin")} />
-                  <MobileChip icon="🛍️" label="Products" active={isActive("/admin/products")} onClick={() => navigate("/admin/products")} />
-                  <MobileChip icon="📦" label="Orders" active={isActive("/admin/orders")} onClick={() => navigate("/admin/orders")} />
-                  <MobileChip icon="👥" label="Customers" active={isActive("/admin/customers")} onClick={() => navigate("/admin/customers")} />
-                  <MobileChip icon="🔄" label="Subs" active={isActive("/admin/subscriptions")} onClick={() => navigate("/admin/subscriptions")} />
-                </>
-              )}
-
-              {role === "delivery" && (
-                <>
-                  <MobileChip icon="📊" label="Dashboard" active={isActive("/delivery")} onClick={() => navigate("/delivery")} />
-                  <MobileChip icon="🚚" label="Deliveries" onClick={() => navigate("/delivery")} />
-                  <MobileChip icon="📋" label="History" active={isActive("/delivery/history")} onClick={() => navigate("/delivery/history")} />
-                </>
-              )}
+            {/* Mobile quick navigation — compact grid, no horizontal clipping */}
+            <div className="grid grid-cols-4 gap-1.5 pb-2.5 lg:hidden">
+              {items.slice(0, 4).map(({ to, label, icon: Icon, action, activePath }) => {
+                const active = isActive(activePath || to, !!activePath);
+                return (
+                  <button
+                    key={label}
+                    onClick={action || (() => navigate(to))}
+                    className={`flex min-w-0 items-center justify-center gap-1.5 rounded-2xl border px-2 py-2.5 text-[9px] font-black transition-all duration-300 ${
+                      active
+                        ? "border-emerald-600 bg-emerald-600 text-white shadow-md shadow-emerald-100"
+                        : "border-slate-200 bg-white text-slate-600 active:scale-95"
+                    }`}
+                  >
+                    <Icon size={14} strokeWidth={2.6} />
+                    <span className="truncate">{label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
-        {/* Modern expandable menu */}
-        <div
-          className={`overflow-hidden transition-all duration-300 ${
-            menuOpen ? "max-h-[620px] opacity-100" : "max-h-0 opacity-0"
-          }`}
-        >
-          <div className="border-b border-slate-200 bg-white/95 shadow-2xl backdrop-blur-2xl">
+        {/* Expandable menu */}
+        <div className={`overflow-hidden transition-all duration-400 ${menuOpen ? "max-h-[700px] opacity-100" : "max-h-0 opacity-0"}`}>
+          <div className="border-b border-slate-200 bg-white/96 shadow-2xl backdrop-blur-2xl">
             <div className="mx-auto max-w-7xl px-3 py-4 sm:px-5 lg:px-8">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {role === "customer" && (
-                  <>
-                    <MenuCard icon="🛍️" title="Shop Products" subtitle="Fresh dairy & groceries" onClick={() => navigate("/products")} />
-                    <MenuCard icon="🥛" title="Subscriptions" subtitle="Manage daily milk" onClick={goToSubscription} />
-                    <MenuCard icon="📦" title="Order History" subtitle="Track your orders" onClick={() => navigate("/order-history")} />
-                    <MenuCard icon="📊" title="My Dashboard" subtitle="Account overview" onClick={() => navigate("/dashboard")} />
-                  </>
-                )}
-
-                {role === "admin" && (
-                  <>
-                    <MenuCard icon="📊" title="Admin Dashboard" subtitle="Business overview" onClick={() => navigate("/admin")} />
-                    <MenuCard icon="🛍️" title="Products" subtitle="Stock & pricing" onClick={() => navigate("/admin/products")} />
-                    <MenuCard icon="📦" title="Orders" subtitle="Manage customer orders" onClick={() => navigate("/admin/orders")} />
-                    <MenuCard icon="👥" title="Customers" subtitle="Customer management" onClick={() => navigate("/admin/customers")} />
-                    <MenuCard icon="🔄" title="Subscriptions" subtitle="Manage milk plans" onClick={() => navigate("/admin/subscriptions")} />
-                    <MenuCard icon="💰" title="Billing" subtitle="Invoices & payments" onClick={() => navigate("/admin/billing")} />
-                  </>
-                )}
-
-                {role === "delivery" && (
-                  <>
-                    <MenuCard icon="📊" title="Dashboard" subtitle="Delivery overview" onClick={() => navigate("/delivery")} />
-                    <MenuCard icon="🚚" title="Today's Deliveries" subtitle="Assigned deliveries" onClick={() => navigate("/delivery")} />
-                    <MenuCard icon="📋" title="Delivery History" subtitle="Completed deliveries" onClick={() => navigate("/delivery/history")} />
-                    <MenuCard icon="🔒" title="Account" subtitle="Delivery account" onClick={() => navigate("/delivery")} />
-                  </>
-                )}
-
-                {!role && (
-                  <>
-                    <MenuCard icon="🏠" title="Home" subtitle="Farm Fresh Dairy" onClick={() => navigate("/")} />
-                    <MenuCard icon="🛍️" title="Shop Products" subtitle="Browse fresh products" onClick={() => navigate("/products")} />
-                    <MenuCard icon="🥛" title="Subscription" subtitle="Daily milk delivery" onClick={goToSubscription} />
-                    <MenuCard icon="🔐" title="Login / Signup" subtitle="Access your account" onClick={() => navigate("/auth")} />
-                  </>
-                )}
+              <div className="mb-3 flex items-center gap-2 text-[9px] font-black uppercase tracking-[.2em] text-emerald-600">
+                <Sparkles size={13} />
+                Quick menu
               </div>
 
-              {(role === "customer" || role === "admin" || role === "delivery") && (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {items.map(({ to, label, icon: Icon, action }) => (
+                  <button
+                    key={label}
+                    onClick={action || (() => navigate(to))}
+                    className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:shadow-lg"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700 shadow-sm transition group-hover:scale-105">
+                      <Icon size={18} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-black text-slate-800">{label}</span>
+                      <span className="mt-0.5 block text-[9px] font-semibold text-slate-400">
+                        Open {label.toLowerCase()}
+                      </span>
+                    </span>
+                    <ChevronRight size={15} className="ml-auto text-slate-300 transition group-hover:translate-x-1 group-hover:text-emerald-600" />
+                  </button>
+                ))}
+              </div>
+
+              {role && (
                 <button
                   onClick={handleLogout}
-                  className="mt-3 w-full rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-black text-rose-600 transition hover:bg-rose-100"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-black text-rose-600 transition hover:bg-rose-100"
                 >
-                  🚪 Logout
+                  <LogIn size={15} className="rotate-180" />
+                  Logout
                 </button>
               )}
             </div>
@@ -319,66 +291,30 @@ export default function Navbar() {
         </div>
       </header>
 
-      <NotificationDrawer
-        open={notificationOpen}
-        onClose={() => setNotificationOpen(false)}
-      />
+      {/* Mobile app-style bottom navigation */}
+      {role === "customer" && (
+        <div className="fixed inset-x-3 bottom-3 z-[9998] lg:hidden">
+          <div className="mx-auto flex max-w-md items-center justify-around rounded-[26px] border border-white/80 bg-white/92 p-2 shadow-[0_18px_50px_rgba(15,23,42,.18)] backdrop-blur-2xl">
+            {customerItems.map(({ to, label, icon: Icon, action, activePath }) => {
+              const active = isActive(activePath || to, !!activePath);
+              return (
+                <button
+                  key={label}
+                  onClick={action || (() => navigate(to))}
+                  className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[8px] font-black transition-all duration-300 ${
+                    active ? "bg-emerald-600 text-white shadow-md shadow-emerald-200" : "text-slate-500"
+                  }`}
+                >
+                  <Icon size={17} strokeWidth={2.5} />
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <NotificationDrawer open={notificationOpen} onClose={() => setNotificationOpen(false)} />
     </>
-  );
-}
-
-function NavItem({ to, icon, label, active }) {
-  return (
-    <Link
-      to={to}
-      className={`flex items-center gap-2 rounded-2xl px-3.5 py-2.5 text-xs font-black transition-all duration-300 ${
-        active
-          ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200"
-          : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
-      }`}
-    >
-      <span>{icon}</span>
-      <span>{label}</span>
-    </Link>
-  );
-}
-
-function MobileChip({ icon, label, active = false, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-[10px] font-black transition ${
-        active
-          ? "border-emerald-600 bg-emerald-600 text-white shadow-md"
-          : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:text-emerald-700"
-      }`}
-    >
-      <span>{icon}</span>
-      {label}
-    </button>
-  );
-}
-
-function MenuCard({ icon, title, subtitle, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className="group flex items-center gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:shadow-lg"
-    >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-xl shadow-sm transition group-hover:scale-105">
-        {icon}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-sm font-black text-slate-800">
-          {title}
-        </span>
-        <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">
-          {subtitle}
-        </span>
-      </span>
-      <span className="ml-auto text-slate-300 transition group-hover:translate-x-1 group-hover:text-emerald-600">
-        →
-      </span>
-    </button>
   );
 }
