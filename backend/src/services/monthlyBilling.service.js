@@ -268,37 +268,19 @@ export async function getMonthlyBillDetails(
   const numericMonth = Number(month);
   const numericYear = Number(year);
 
-  // ===============================
-  // Get Monthly Bill
-  // ===============================
-  const { data: bill, error: billError } = await supabaseAdmin
-    .from("monthly_bills")
-    .select(`
-      *,
-      customers(*),
-      subscriptions(*)
-    `)
-    .eq("subscription_id", subscriptionId)
-    .eq("month", numericMonth)
-    .eq("year", numericYear)
-    .maybeSingle();
-
-  console.log("Bill:", bill);
-  console.log("Bill Error:", billError);
-
-  if (billError) {
-    throw billError;
+  if (
+    !Number.isInteger(numericMonth) ||
+    numericMonth < 1 ||
+    numericMonth > 12 ||
+    !Number.isInteger(numericYear)
+  ) {
+    throw new Error("Invalid month or year");
   }
 
-  if (!bill) {
-    throw new Error(
-      `Monthly bill not found for subscription ${subscriptionId}, month ${numericMonth}, year ${numericYear}`
-    );
-  }
+  // ======================================
+  // DATE RANGE
+  // ======================================
 
-  // ===============================
-  // Date Range
-  // ===============================
   const fromDate =
     `${numericYear}-${String(numericMonth).padStart(2, "0")}-01`;
 
@@ -311,9 +293,33 @@ export async function getMonthlyBillDetails(
   console.log("From:", fromDate);
   console.log("To:", toDate);
 
-  // ===============================
-  // Get Deliveries
-  // ===============================
+  // ======================================
+  // GET EXISTING MONTHLY BILL
+  // ======================================
+
+  let { data: bill, error: billError } =
+    await supabaseAdmin
+      .from("monthly_bills")
+      .select(`
+        *,
+        customers(*),
+        subscriptions(*)
+      `)
+      .eq("subscription_id", subscriptionId)
+      .eq("month", numericMonth)
+      .eq("year", numericYear)
+      .maybeSingle();
+
+  if (billError) {
+    throw billError;
+  }
+
+  console.log("Existing Bill:", bill);
+
+  // ======================================
+  // GET DELIVERIES
+  // ======================================
+
   const {
     data: deliveries,
     error: deliveryError,
@@ -342,10 +348,177 @@ export async function getMonthlyBillDetails(
     deliveries?.length || 0
   );
 
+  // ======================================
+  // CREATE MISSING BILL
+  // ONLY WHEN DELIVERED DAYS > 0
+  // ======================================
+
+  if (!bill) {
+
+    let deliveredDays = 0;
+    let missedDays = 0;
+    let subtotal = 0;
+
+    (deliveries || []).forEach((delivery) => {
+
+      // -------------------------------
+      // Delivered
+      // -------------------------------
+
+      if (delivery.status === "Delivered") {
+
+        deliveredDays++;
+
+        (
+          delivery.subscription_delivery_items || []
+        ).forEach((item) => {
+
+          subtotal += Number(
+            item.total_price || 0
+          );
+
+        });
+      }
+
+      // -------------------------------
+      // Missed
+      // -------------------------------
+
+      if (delivery.status === "Missed") {
+        missedDays++;
+      }
+
+    });
+
+    console.log(
+      "Delivered Days:",
+      deliveredDays
+    );
+
+    console.log(
+      "Missed Days:",
+      missedDays
+    );
+
+    console.log(
+      "Subtotal:",
+      subtotal
+    );
+
+    // ==================================
+    // NO DELIVERIES = NO INVOICE
+    // ==================================
+
+    if (deliveredDays === 0) {
+
+      throw new Error(
+        `No invoice available for subscription ${subscriptionId}. No deliveries were completed for ${numericMonth}/${numericYear}.`
+      );
+    }
+
+    const discount = 0;
+
+    const totalAmount =
+      subtotal - discount;
+
+    // ==================================
+    // CUSTOMER ID
+    // ==================================
+
+    const customerId =
+      deliveries?.[0]?.customer_id;
+
+    if (!customerId) {
+      throw new Error(
+        "Customer ID not found for this subscription."
+      );
+    }
+
+    // ==================================
+    // CREATE MONTHLY BILL
+    // ==================================
+
+    const {
+      data: newBill,
+      error: createBillError,
+    } = await supabaseAdmin
+      .from("monthly_bills")
+      .insert({
+        customer_id: customerId,
+
+        subscription_id: subscriptionId,
+
+        month: numericMonth,
+
+        year: numericYear,
+
+        delivered_days: deliveredDays,
+
+        missed_days: missedDays,
+
+        subtotal: subtotal,
+
+        discount: discount,
+
+        total_amount: totalAmount,
+
+        payment_status: "Pending",
+      })
+      .select(`
+        *,
+        customers(*),
+        subscriptions(*)
+      `)
+      .single();
+
+    if (createBillError) {
+      throw createBillError;
+    }
+
+    bill = newBill;
+
+    console.log(
+      "================================="
+    );
+
+    console.log(
+      "NEW MONTHLY BILL CREATED"
+    );
+
+    console.log(
+      "Bill ID:",
+      bill.id
+    );
+
+    console.log(
+      "Amount:",
+      bill.total_amount
+    );
+
+    console.log(
+      "Delivered Days:",
+      bill.delivered_days
+    );
+
+    console.log(
+      "================================="
+    );
+  }
+
+  // ======================================
+  // RETURN BILL DETAILS
+  // ======================================
+
   return {
     bill,
-    customer: bill.customers,
-    subscription: bill.subscriptions,
-    deliveries: deliveries || [],
+
+    customer:
+      bill.customers,
+
+    subscription:
+      bill.subscriptions,
+
+    deliveries:
+      deliveries || [],
   };
 }

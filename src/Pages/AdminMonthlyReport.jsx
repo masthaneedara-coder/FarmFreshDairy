@@ -95,6 +95,15 @@ export default function AdminMonthlyReport() {
     subscriptionId
   ) {
     try {
+      const reportCustomer = customers.find(
+        (item) => item.subscriptionId === subscriptionId
+      );
+
+      if (Number(reportCustomer?.deliveredDays || 0) <= 0) {
+        alert("No invoice available. No deliveries were completed for this period.");
+        return;
+      }
+
       const data =
         await getMonthlyBillDetails(
           subscriptionId,
@@ -133,6 +142,15 @@ export default function AdminMonthlyReport() {
     subscriptionId
   ) {
     try {
+      const reportCustomer = customers.find(
+        (item) => item.subscriptionId === subscriptionId
+      );
+
+      if (Number(reportCustomer?.deliveredDays || 0) <= 0) {
+        alert("No invoice available. No deliveries were completed for this period.");
+        return;
+      }
+
       const data =
         await getMonthlyBillDetails(
           subscriptionId,
@@ -159,7 +177,7 @@ export default function AdminMonthlyReport() {
     } catch (err) {
       console.error(err);
       alert(
-        "Failed to generate invoice."
+        err?.message || "Failed to download invoice."
       );
     }
   }
@@ -172,6 +190,15 @@ export default function AdminMonthlyReport() {
     subscriptionId
   ) {
     try {
+      const reportCustomer = customers.find(
+        (item) => item.subscriptionId === subscriptionId
+      );
+
+      if (Number(reportCustomer?.deliveredDays || 0) <= 0) {
+        alert("No invoice available. No deliveries were completed for this period.");
+        return;
+      }
+
       const data =
         await getMonthlyBillDetails(
           subscriptionId,
@@ -204,6 +231,15 @@ export default function AdminMonthlyReport() {
     subscriptionId
   ) {
     try {
+      const reportCustomer = customers.find(
+        (item) => item.subscriptionId === subscriptionId
+      );
+
+      if (Number(reportCustomer?.deliveredDays || 0) <= 0) {
+        alert("No invoice available. No deliveries were completed for this period.");
+        return;
+      }
+
       const data =
         await getMonthlyBillDetails(
           subscriptionId,
@@ -267,6 +303,15 @@ export default function AdminMonthlyReport() {
     subscriptionId
   ) {
     try {
+      const reportCustomer = customers.find(
+        (item) => item.subscriptionId === subscriptionId
+      );
+
+      if (Number(reportCustomer?.deliveredDays || 0) <= 0) {
+        alert("No invoice available. No deliveries were completed for this period.");
+        return;
+      }
+
       const data =
         await getMonthlyBillDetails(
           subscriptionId,
@@ -921,6 +966,9 @@ export default function AdminMonthlyReport() {
                             status={
                               c.paymentStatus
                             }
+                            noInvoice={
+                              Number(c.deliveredDays || 0) <= 0
+                            }
                           />
 
                         </td>
@@ -955,6 +1003,9 @@ export default function AdminMonthlyReport() {
                                 text-gray-700
                                 hover:bg-gray-200
                               "
+                              disabled={
+                                Number(c.deliveredDays || 0) <= 0
+                              }
                             />
 
                             <ActionButton
@@ -970,6 +1021,9 @@ export default function AdminMonthlyReport() {
                                 text-white
                                 hover:bg-red-700
                               "
+                              disabled={
+                                Number(c.deliveredDays || 0) <= 0
+                              }
                             />
 
                             <ActionButton
@@ -985,6 +1039,9 @@ export default function AdminMonthlyReport() {
                                 text-white
                                 hover:bg-indigo-700
                               "
+                              disabled={
+                                Number(c.deliveredDays || 0) <= 0
+                              }
                             />
 
                             <ActionButton
@@ -1000,6 +1057,9 @@ export default function AdminMonthlyReport() {
                                 text-white
                                 hover:bg-green-700
                               "
+                              disabled={
+                                Number(c.deliveredDays || 0) <= 0
+                              }
                             />
 
                             {c.paymentStatus !==
@@ -1017,6 +1077,9 @@ export default function AdminMonthlyReport() {
                                   text-white
                                   hover:bg-emerald-800
                                 "
+                                disabled={
+                                  Number(c.deliveredDays || 0) <= 0
+                                }
                               />
                             )}
 
@@ -1075,6 +1138,10 @@ function MobileReportCard({
   onPaid,
 }) {
   const c = customer;
+
+  // No monthly invoice should be shown when there are no completed deliveries.
+  const hasBillableDelivery =
+    Number(c.deliveredDays || 0) > 0;
 
   return (
     <div
@@ -1303,11 +1370,30 @@ function MobileReportCard({
               status={
                 c.paymentStatus
               }
+              noInvoice={!hasBillableDelivery}
             />
 
           </div>
 
         </div>
+
+        {!hasBillableDelivery && (
+          <div className="
+            mt-3
+            rounded-2xl
+            border border-gray-200
+            bg-gray-50
+            px-4 py-3
+            text-center
+          ">
+            <p className="text-sm font-black text-gray-600">
+              No Invoice for this period
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              No deliveries were completed.
+            </p>
+          </div>
+        )}
 
       </div>
 
@@ -1340,6 +1426,7 @@ function MobileReportCard({
               text-gray-700
               hover:bg-gray-100
             "
+            disabled={!hasBillableDelivery}
           />
 
           <ActionButton
@@ -1355,6 +1442,7 @@ function MobileReportCard({
               text-white
               hover:bg-red-700
             "
+            disabled={!hasBillableDelivery}
           />
 
           <ActionButton
@@ -1370,6 +1458,7 @@ function MobileReportCard({
               text-white
               hover:bg-indigo-700
             "
+            disabled={!hasBillableDelivery}
           />
 
           <ActionButton
@@ -1385,6 +1474,7 @@ function MobileReportCard({
               text-white
               hover:bg-green-700
             "
+            disabled={!hasBillableDelivery}
           />
 
         </div>
@@ -1398,6 +1488,7 @@ function MobileReportCard({
                 c.subscriptionId
               )
             }
+            disabled={!hasBillableDelivery}
             className="
               w-full
               mt-2
@@ -1409,6 +1500,9 @@ function MobileReportCard({
               text-white
               font-black
               transition-all
+              disabled:opacity-45
+              disabled:cursor-not-allowed
+              disabled:active:scale-100
             "
           >
             ✓ Mark as Paid
@@ -1569,9 +1663,30 @@ function Metric({
 
 function PaymentBadge({
   status,
+  noInvoice = false,
 }) {
   const paid =
     status === "Paid";
+
+  if (noInvoice) {
+    return (
+      <span className="
+        inline-flex
+        items-center
+        gap-1.5
+        px-3
+        py-1.5
+        rounded-full
+        text-xs
+        font-black
+        bg-gray-100
+        text-gray-500
+      ">
+        <span>—</span>
+        No Invoice
+      </span>
+    );
+  }
 
   return (
     <span className={`
@@ -1643,11 +1758,13 @@ function ActionButton({
   icon,
   onClick,
   className,
+  disabled = false,
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={`
         px-3
         py-2.5
@@ -1657,6 +1774,7 @@ function ActionButton({
         transition-all
         duration-200
         active:scale-95
+        ${disabled ? "opacity-45 cursor-not-allowed active:scale-100" : ""}
         ${className}
       `}
     >
