@@ -124,6 +124,63 @@ export async function deleteDeliveryService(id) {
     .delete()
     .eq("id", id);
 }
+// ==========================================
+// SIZE-SPECIFIC PRODUCT PRICING
+// ==========================================
+
+function normalizeSizeLabel(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+async function getProductSizePrice(productId, size) {
+  if (!productId || !size) {
+    throw new Error(
+      `Product ID and size are required for pricing. productId=${productId}, size=${size}`
+    );
+  }
+
+  const { data: sizes, error } = await supabaseAdmin
+    .from("product_sizes")
+    .select(`
+      id,
+      product_id,
+      label,
+      price,
+      is_active
+    `)
+    .eq("product_id", productId)
+    .eq("is_active", true);
+
+  if (error) {
+    throw error;
+  }
+
+  const requestedSize = normalizeSizeLabel(size);
+
+  const matchingSize = (sizes || []).find(
+    (item) =>
+      normalizeSizeLabel(item.label) === requestedSize
+  );
+
+  if (!matchingSize) {
+    throw new Error(
+      `No active price found for product ${productId}, size "${size}".`
+    );
+  }
+
+  const price = Number(matchingSize.price);
+
+  if (!Number.isFinite(price) || price < 0) {
+    throw new Error(
+      `Invalid price for product ${productId}, size "${size}".`
+    );
+  }
+
+  return price;
+}
 export async function generateTodayDeliveriesService() {
   const today = new Date().toISOString().split("T")[0];
 
@@ -261,22 +318,43 @@ export async function generateTodayDeliveriesService() {
       // 5. Insert normal subscription items
       // ==========================================
 
-      const normalItems =
-        (subscription.subscription_items || []).map(
-          (item) => ({
-            delivery_id: delivery.id,
-            product_id: item.product_id,
-            quantity: item.quantity,
-            size: item.size,
-            unit_price:
-              item.unit_price ?? item.price ?? 0,
-            total_price:
-              Number(item.quantity) *
-              Number(item.unit_price ?? item.price ?? 0),
+   const normalItems = [];
 
-            is_extra: false,
-          })
-        );
+for (const item of subscription.subscription_items || []) {
+  const quantity = Number(item.quantity || 0);
+
+  if (quantity <= 0) {
+    console.log(
+      "Skipping subscription item - invalid quantity:",
+      item
+    );
+    continue;
+  }
+
+  // Get the actual price for the selected size
+  // from product_sizes.
+  const unitPrice = await getProductSizePrice(
+    item.product_id,
+    item.size
+  );
+
+  console.log(
+    "SIZE PRICE:",
+    item.size,
+    "₹",
+    unitPrice
+  );
+
+  normalItems.push({
+    delivery_id: delivery.id,
+    product_id: item.product_id,
+    quantity,
+    size: item.size,
+    unit_price: unitPrice,
+    total_price: quantity * unitPrice,
+    is_extra: false,
+  });
+}
 
       if (normalItems.length > 0) {
 
@@ -514,6 +592,7 @@ for (const request of extraMilkRequests || []) {
     skipped,
   };
 }
+
 function shouldGenerateDelivery(subscription, today) {
 
   console.log("----- ELIGIBILITY CHECK -----");
