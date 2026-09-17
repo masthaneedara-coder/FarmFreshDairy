@@ -815,7 +815,7 @@ console.log("Checkout Cart:", cart);
       {/* ================================
           MOBILE STICKY CTA
       ================================= */}
-      <div className="fixed inset-x-0 bottom-0 z-50 lg:hidden border-t border-emerald-100/80 bg-white/92 backdrop-blur-2xl px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2.5 shadow-[0_-14px_40px_rgba(5,150,105,.13)]">
+      <div className="fixed inset-x-0 bottom-[76px] z-[80] lg:hidden border-t border-emerald-100/80 bg-white/95 backdrop-blur-2xl px-3 pb-2.5 pt-2.5 shadow-[0_-14px_40px_rgba(5,150,105,.13)] sm:bottom-[82px]">
         <div className="mx-auto flex w-full max-w-2xl items-center gap-2.5">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
