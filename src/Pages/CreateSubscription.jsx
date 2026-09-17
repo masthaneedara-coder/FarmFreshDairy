@@ -423,7 +423,7 @@ async function loadProducts() {
         </section>
 
         {/* Step Indicator */}
-        <div className="mb-6 grid grid-cols-4 gap-2">
+        <div className="mb-6 grid grid-cols-4 gap-1.5 sm:gap-2">
           {[
             ["01", "Product"],
             ["02", "Plan"],
@@ -908,6 +908,18 @@ async function loadProducts() {
             </section>
           </aside>
         </div>
+      </div>
+
+  {/* Mobile sticky action */}
+      <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-emerald-100 bg-white/95 px-3 py-3 shadow-[0_-12px_35px_rgba(0,0,0,.10)] backdrop-blur-xl lg:hidden"
+        style={{ paddingBottom: "calc(.75rem + env(safe-area-inset-bottom))" }}>
+        <button
+          type="button"
+          onClick={handleContinue}
+          className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-green-600 py-3.5 text-sm font-black text-white shadow-lg shadow-emerald-200 transition active:scale-[.98]"
+        >
+          Continue to Review →
+        </button>
       </div>
 
   {showAddressForm && (

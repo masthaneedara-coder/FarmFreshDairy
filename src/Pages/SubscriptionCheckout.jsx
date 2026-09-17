@@ -200,21 +200,41 @@ export default function SubscriptionCheckout() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen w-full overflow-x-hidden bg-[radial-gradient(circle_at_10%_0%,rgba(16,185,129,.14),transparent_28%),linear-gradient(180deg,#f0fdf4_0%,#ffffff_48%,#f8fafc_100%)] px-3 py-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-4 sm:py-6 sm:pb-6 md:px-6">
+      <div className="subscription-checkout-page mx-auto w-full max-w-7xl"><style>{`
+        @media (max-width: 640px) {
+          .subscription-checkout-page input,
+          .subscription-checkout-page textarea,
+          .subscription-checkout-page button { min-height: 48px; }
+          .subscription-checkout-page textarea { min-height: 120px; }
+        }
+        @media (prefers-reduced-motion: no-preference) {
+          .subscription-checkout-card {
+            animation: subscriptionCheckoutIn .55s cubic-bezier(.22,1,.36,1) both;
+          }
+          @keyframes subscriptionCheckoutIn {
+            from { opacity: 0; transform: translateY(14px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        }
+      `}</style>
         {/* TITLE */}
-        <div className="text-center mb-6 sm:mb-8">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-green-700">
-            📅 Subscription Checkout
+        <div className="mb-5 text-left sm:mb-8 sm:text-center">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-1.5 text-[10px] font-black uppercase tracking-[.16em] text-emerald-700 shadow-sm backdrop-blur">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Farm Fresh Dairy
+          </div>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
+            Subscription Checkout
           </h1>
-          <p className="text-gray-500 mt-2 text-sm sm:text-base">
-            Complete your milk subscription
+          <p className="mt-2 text-sm font-medium text-slate-500 sm:text-base">
+            Complete your milk subscription securely.
           </p>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-5 sm:gap-6">
           {/* LEFT FORM */}
-          <div className="lg:col-span-2 bg-white rounded-3xl shadow-lg p-5 sm:p-6">
+          <div className="subscription-checkout-card lg:col-span-2 overflow-hidden rounded-[1.75rem] border border-emerald-100 bg-white/95 shadow-[0_18px_55px_rgba(15,118,110,.10)] p-4 sm:p-6">
             <h2 className="text-2xl font-black text-green-700 mb-5">
               Delivery Details
             </h2>
@@ -275,7 +295,7 @@ export default function SubscriptionCheckout() {
                 Payment Method
               </h3>
 
-              <div className="grid sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                 <button
                   onClick={() => setPaymentMethod(PAYMENT_METHODS.COD)}
                   className={`p-4 rounded-2xl border font-bold transition ${
@@ -316,7 +336,7 @@ export default function SubscriptionCheckout() {
               🎁 Offers & Coupons
             </h3>
 
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <input
                 type="text"
                 placeholder="Enter Coupon Code"
@@ -327,7 +347,7 @@ export default function SubscriptionCheckout() {
 
               <button
                 onClick={applyOffer}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 rounded-xl font-bold"
+                className="w-full rounded-xl bg-green-600 px-6 py-3 font-bold text-white transition hover:bg-green-700 active:scale-[.98] sm:w-auto"
               >
                 Apply
               </button>
@@ -343,7 +363,7 @@ export default function SubscriptionCheckout() {
           </div>
 
           {/* RIGHT SUMMARY */}
-          <div className="bg-white rounded-3xl shadow-lg p-5 sm:p-6 h-fit sticky top-24">
+          <div className="subscription-checkout-card h-fit overflow-hidden rounded-[1.75rem] border border-emerald-100 bg-white/95 shadow-[0_18px_55px_rgba(15,118,110,.10)] p-4 sm:p-6 lg:sticky lg:top-24">
             <h2 className="text-2xl font-black text-green-700 mb-5">
               Subscription Summary
             </h2>
@@ -409,6 +429,20 @@ export default function SubscriptionCheckout() {
               ← Back To Subscription
             </button>
           </div>
+        </div>
+
+        <div
+          className="fixed inset-x-0 bottom-0 z-[60] border-t border-emerald-100 bg-white/95 px-3 py-3 shadow-[0_-12px_35px_rgba(0,0,0,.10)] backdrop-blur-xl lg:hidden"
+          style={{ paddingBottom: "calc(.75rem + env(safe-area-inset-bottom))" }}
+        >
+          <button
+            type="button"
+            onClick={handleSaveSubscription}
+            disabled={loading}
+            className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-green-600 py-3.5 text-sm font-black text-white shadow-lg shadow-emerald-200 transition active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Processing..." : `Confirm Subscription • ₹${total.toFixed(0)}`}
+          </button>
         </div>
       </div>
     </div>

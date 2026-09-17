@@ -300,7 +300,7 @@ if (!selectedAddress) {
   
 console.log("Checkout Cart:", cart);
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-lime-50 px-3 sm:px-5 lg:px-8 py-4 sm:py-7 pb-28 lg:pb-8">
+    <div className="min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-emerald-50 via-white to-lime-50 px-3 sm:px-5 lg:px-8 py-4 sm:py-7 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-8">
       <div className="max-w-7xl mx-auto">
 
         {/* ================================

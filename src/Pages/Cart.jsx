@@ -116,7 +116,7 @@ export default function Cart() {
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#f4faf7] pb-10">
+    <div className="min-h-screen overflow-x-hidden bg-[#f4faf7] pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-10">
       <style>{`
         @keyframes cartReveal {
           from { opacity: 0; transform: translateY(18px); }
@@ -150,6 +150,12 @@ export default function Cart() {
           );
           background-size: 700px 100%;
           animation: shimmer 1.5s infinite linear;
+        }
+
+        @media (max-width: 640px) {
+          .cart-mobile-card { border-radius: 22px; }
+          .cart-mobile-image { width: 84px !important; height: 84px !important; }
+          .cart-mobile-title { font-size: 15px !important; line-height: 1.25 !important; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -278,11 +284,11 @@ export default function Cart() {
                     return (
                       <article
                         key={item.id}
-                        className="cart-reveal p-4 sm:p-6"
+                        className="cart-reveal cart-mobile-card p-4 sm:p-6"
                         style={{ animationDelay: `${180 + index * 60}ms` }}
                       >
                         <div className="flex gap-3 sm:gap-5">
-                          <div className="group relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-emerald-50 sm:h-32 sm:w-32">
+                          <div className="cart-mobile-image group relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-emerald-50 sm:h-32 sm:w-32">
                             <img
                               src={image}
                               alt={name}

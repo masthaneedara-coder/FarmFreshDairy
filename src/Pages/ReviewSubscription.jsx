@@ -162,9 +162,9 @@ export default function ReviewSubscription() {
         }
       `}</style>
 
-      <main className="mx-auto max-w-7xl px-3 pb-28 pt-5 sm:px-5 sm:pb-10 sm:pt-8 lg:px-8">
+      <main className="mx-auto w-full max-w-7xl px-3 pb-28 pt-3 sm:px-5 sm:pb-10 sm:pt-8 lg:px-8">
         {/* Hero */}
-        <section className="review-enter relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#043b2d] via-[#047857] to-[#16a34a] p-5 text-white shadow-[0_25px_80px_rgba(4,120,87,.22)] sm:rounded-[2.5rem] sm:p-8 lg:p-10">
+        <section className="review-enter relative isolate overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-[#043b2d] via-[#047857] to-[#16a34a] p-4 text-white shadow-[0_18px_55px_rgba(4,120,87,.20)] sm:rounded-[2.5rem] sm:p-8 lg:p-10">
           <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-lime-300/15 blur-3xl animate-[reviewFloat_7s_ease-in-out_infinite]" />
           <div className="pointer-events-none absolute -bottom-28 -left-20 h-72 w-72 rounded-full bg-white/10 blur-3xl animate-[reviewFloat_8s_ease-in-out_infinite_reverse]" />
           <div className="pointer-events-none absolute right-[15%] top-8 hidden h-24 w-24 rounded-full border border-white/10 animate-[reviewGlow_4s_ease-in-out_infinite] sm:block" />
@@ -176,18 +176,18 @@ export default function ReviewSubscription() {
                 Final Review
               </div>
 
-              <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl">
+              <h1 className="mt-3 text-[2rem] font-black leading-[1.02] tracking-tight sm:mt-4 sm:text-5xl lg:text-6xl">
                 Review Your
                 <span className="block text-lime-200">Milk Subscription</span>
               </h1>
 
-              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-emerald-50 sm:text-base">
+              <p className="mt-2 max-w-2xl text-[13px] leading-5 text-emerald-50 sm:mt-3 sm:text-base sm:leading-relaxed">
                 Check your product, delivery plan and address before activating
                 your fresh dairy subscription.
               </p>
             </div>
 
-            <div className="hidden shrink-0 rounded-[1.5rem] border border-white/15 bg-white/10 p-4 text-center backdrop-blur-xl sm:block">
+            <div className="shrink-0 self-start rounded-2xl border border-white/15 bg-white/10 p-2.5 text-center backdrop-blur-xl sm:rounded-[1.5rem] sm:p-4">
               <div className="text-3xl">✓</div>
               <p className="mt-1 text-xs font-black uppercase tracking-wider text-emerald-100">
                 Ready to Activate
@@ -197,7 +197,7 @@ export default function ReviewSubscription() {
         </section>
 
         {/* Progress */}
-        <div className="review-enter review-delay-1 my-5 grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="review-enter review-delay-1 my-3 grid grid-cols-3 gap-2 sm:my-5 sm:gap-3">
           {[
             ["✓", "Plan Selected"],
             ["✓", "Details Checked"],
@@ -205,7 +205,7 @@ export default function ReviewSubscription() {
           ].map(([icon, label], index) => (
             <div
               key={label}
-              className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-white/90 px-3 py-3 shadow-sm backdrop-blur sm:px-4"
+              className="flex min-w-0 items-center gap-2 rounded-2xl border border-emerald-100 bg-white/90 px-2.5 py-2.5 shadow-sm backdrop-blur sm:px-4 sm:py-3"
             >
               <span
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-black ${
@@ -223,11 +223,11 @@ export default function ReviewSubscription() {
           ))}
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           {/* Main */}
           <div className="space-y-5">
-            <section className="review-enter review-delay-1 review-card overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/95 shadow-[0_18px_60px_rgba(15,118,110,.08)]">
-              <div className="border-b border-emerald-50 bg-gradient-to-r from-emerald-50/80 via-white to-lime-50/60 p-4 sm:p-6">
+            <section className="review-enter review-delay-1 review-card overflow-hidden rounded-[1.5rem] border border-emerald-100 bg-white/95 shadow-[0_14px_45px_rgba(15,118,110,.08)] sm:rounded-[2rem]">
+              <div className="border-b border-emerald-50 bg-gradient-to-r from-emerald-50/90 via-white to-lime-50/60 p-4 sm:p-6">
                 <div className="flex items-center gap-3">
                   <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-xl text-white shadow-lg shadow-emerald-600/20">
                     🥛
@@ -243,20 +243,20 @@ export default function ReviewSubscription() {
                 </div>
               </div>
 
-              <div className="p-4 sm:p-6">
-                <div className="grid gap-5 lg:grid-cols-[230px_1fr]">
-                  <div className="relative mx-auto w-full max-w-[230px]">
+              <div className="p-3.5 sm:p-6">
+                <div className="grid gap-4 sm:gap-5 lg:grid-cols-[230px_1fr]">
+                  <div className="relative mx-auto w-full max-w-[190px] sm:max-w-[230px]">
                     <div className="absolute inset-3 rounded-[2rem] bg-emerald-200/40 blur-2xl" />
                     <div className="relative overflow-hidden rounded-[1.75rem] border border-emerald-100 bg-slate-50 p-2 shadow-lg">
                       <img
                         src={state.product.image}
                         alt={state.product.name}
-                        className="h-52 w-full rounded-[1.35rem] object-cover transition duration-700 hover:scale-105 sm:h-56"
+                        className="h-44 w-full rounded-[1.35rem] object-cover transition duration-700 hover:scale-105 sm:h-56"
                       />
                     </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                     <Info icon="🥛" label="Product Size" value={state.form.size} />
                     <Info icon="📦" label="Quantity" value={state.form.quantity} />
                     <Info icon="🌅" label="Delivery Time" value={state.form.deliveryTime} />
@@ -274,7 +274,7 @@ export default function ReviewSubscription() {
             </section>
 
             {/* Address highlight */}
-            <section className="review-enter review-delay-2 rounded-[2rem] border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4 shadow-[0_14px_50px_rgba(15,118,110,.06)] sm:p-5">
+            <section className="review-enter review-delay-2 rounded-[1.5rem] border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4 shadow-[0_14px_50px_rgba(15,118,110,.06)] sm:rounded-[2rem] sm:p-5">
               <div className="flex items-start gap-3">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-lg text-white shadow-lg shadow-emerald-600/20">
                   ✓
@@ -293,7 +293,7 @@ export default function ReviewSubscription() {
 
           {/* Summary */}
           <aside className="xl:sticky xl:top-24 xl:self-start">
-            <section className="review-enter review-delay-3 overflow-hidden rounded-[2rem] border border-emerald-100 bg-white/95 shadow-[0_22px_70px_rgba(15,118,110,.13)] backdrop-blur">
+            <section className="review-enter review-delay-3 overflow-hidden rounded-[1.5rem] border border-emerald-100 bg-white/95 shadow-[0_16px_55px_rgba(15,118,110,.12)] backdrop-blur sm:rounded-[2rem]">
               <div className="relative overflow-hidden bg-gradient-to-br from-[#064e3b] via-[#047857] to-[#10b981] p-5 text-white sm:p-6">
                 <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
                 <div className="relative">
@@ -306,7 +306,7 @@ export default function ReviewSubscription() {
                 </div>
               </div>
 
-              <div className="space-y-4 p-4 sm:p-5">
+              <div className="space-y-3.5 p-3.5 sm:space-y-4 sm:p-5">
                 <div className="rounded-[1.5rem] border border-emerald-100 bg-emerald-50 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -337,7 +337,7 @@ export default function ReviewSubscription() {
                     Monthly Amount
                   </p>
                   <div className="mt-2 flex items-end justify-between gap-2">
-                    <span className="text-4xl font-black tracking-tight text-emerald-800">
+                    <span className="text-[2.15rem] font-black tracking-tight text-emerald-800 sm:text-4xl">
                       ₹{Number(state.monthlyAmount || 0).toLocaleString("en-IN")}
                     </span>
                     <span className="pb-1 text-xs font-bold text-slate-400">
@@ -383,6 +383,28 @@ export default function ReviewSubscription() {
         </div>
       </main>
 
+      {/* Mobile sticky action bar */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-emerald-100/80 bg-white/90 px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2.5 shadow-[0_-12px_35px_rgba(15,118,110,.12)] backdrop-blur-xl xl:hidden">
+        <div className="mx-auto flex max-w-2xl items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            disabled={loading}
+            className="flex-1 rounded-2xl border border-slate-200 bg-white py-3 text-sm font-black text-slate-600 shadow-sm transition active:scale-[.98] disabled:opacity-50"
+          >
+            ← Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowPaymentModal(true)}
+            disabled={loading}
+            className="flex-[1.6] rounded-2xl bg-gradient-to-r from-emerald-600 to-green-600 py-3 text-sm font-black text-white shadow-lg shadow-emerald-600/20 transition active:scale-[.98] disabled:opacity-60"
+          >
+            {loading ? "Activating..." : "Activate • ₹" + Number(state.monthlyAmount || 0).toLocaleString("en-IN")}
+          </button>
+        </div>
+      </div>
+
       <SubscriptionPaymentModal
         open={showPaymentModal}
         amount={state.monthlyAmount}
@@ -396,7 +418,7 @@ export default function ReviewSubscription() {
 
 function Info({ icon, label, value, compact = false }) {
   return (
-    <div className="group rounded-[1.25rem] border border-slate-200 bg-white p-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg">
+    <div className="group min-w-0 rounded-[1.15rem] border border-slate-200 bg-white p-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg sm:rounded-[1.25rem] sm:p-4">
       <div className="flex items-center gap-2">
         <span className="text-base">{icon}</span>
         <p className="text-[10px] font-black uppercase tracking-[.12em] text-slate-400">
