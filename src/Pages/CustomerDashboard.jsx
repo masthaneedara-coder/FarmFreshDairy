@@ -223,7 +223,7 @@ export default function CustomerDashboard() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#f5faf7] px-3 pb-10 pt-28 sm:px-5 sm:pt-32 lg:px-8">
+    <div className="relative min-h-screen overflow-hidden bg-[#f5faf7] px-3 pb-24 pt-24 sm:px-5 sm:pb-10 sm:pt-32 lg:px-8">
       <style>{`
         @keyframes dashFadeUp {
           from { opacity: 0; transform: translateY(18px); }
@@ -254,7 +254,7 @@ export default function CustomerDashboard() {
 
       <main className="relative mx-auto max-w-7xl">
         {/* HERO */}
-        <section className="dash-fade relative overflow-hidden rounded-[30px] bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-5 text-white shadow-[0_24px_60px_rgba(4,120,87,.20)] sm:p-7 lg:p-9">
+        <section className="dash-fade relative overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-4 text-white shadow-[0_20px_50px_rgba(4,120,87,.18)] sm:rounded-[30px] sm:p-7 lg:p-9">
           <div className="absolute -right-28 -top-28 h-80 w-80 rounded-full bg-emerald-300/15 blur-3xl" />
           <div className="absolute -bottom-32 left-1/3 h-80 w-80 rounded-full bg-white/5 blur-3xl" />
 
@@ -265,7 +265,7 @@ export default function CustomerDashboard() {
                 Customer dashboard
               </div>
 
-              <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+              <h1 className="mt-3 text-[28px] leading-[1.05] font-black tracking-tight sm:text-4xl lg:text-5xl">
                 Welcome back,{" "}
                 <span className="text-emerald-200">
                   {dashboard?.customer?.full_name || customer?.name || "Customer"}
@@ -319,10 +319,10 @@ export default function CustomerDashboard() {
         </section>
 
         {/* STATS */}
-        <section className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard icon="📦" title="Total Orders" value={summary.totalOrders} tone="emerald" />
-          <StatCard icon="🔄" title="Subscriptions" value={summary.totalSubscriptions} tone="amber" />
-          <StatCard icon="🥛" title="Active Subs" value={summary.activeSubscriptions} tone="teal" />
+        <section className="mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-4">
+          <div className="min-w-[150px] snap-start sm:min-w-0"><StatCard icon="📦" title="Total Orders" value={summary.totalOrders} tone="emerald" /></div>
+          <div className="min-w-[150px] snap-start sm:min-w-0"><StatCard icon="🔄" title="Subscriptions" value={summary.totalSubscriptions} tone="amber" /></div>
+          <div className="min-w-[150px] snap-start sm:min-w-0"><StatCard icon="🥛" title="Active Subs" value={summary.activeSubscriptions} tone="teal" /></div>
           <StatCard
             icon={activeCount ? "●" : "○"}
             title="Current Status"
@@ -335,12 +335,12 @@ export default function CustomerDashboard() {
         <section className="dash-fade mt-4">
           <div className="group relative overflow-hidden rounded-[28px] border border-emerald-100 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl">
             <div className="absolute -right-20 -top-20 h-48 w-48 rounded-full bg-emerald-100/60 blur-3xl transition group-hover:scale-125" />
-            <div className="relative flex items-center justify-between gap-4 p-5 sm:p-6">
+            <div className="relative flex items-center justify-between gap-3 p-4 sm:gap-4 sm:p-6">
               <div>
                 <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[9px] font-black uppercase tracking-[.16em] text-emerald-700">
                   ✨ Extra milk
                 </span>
-                <h2 className="mt-2 text-xl font-black text-slate-900 sm:text-2xl">
+                <h2 className="mt-2 text-lg font-black text-slate-900 sm:text-2xl">
                   Need extra milk?
                 </h2>
                 <p className="mt-1 text-xs font-medium text-slate-500 sm:text-sm">
@@ -363,12 +363,12 @@ export default function CustomerDashboard() {
 
         {/* SUBSCRIPTIONS */}
         <section className="dash-fade mt-6 overflow-hidden rounded-[30px] border border-slate-200/80 bg-white shadow-sm">
-          <div className="flex items-center justify-between gap-4 bg-gradient-to-r from-emerald-800 to-teal-600 px-5 py-5 text-white sm:px-7">
+          <div className="flex items-center justify-between gap-3 bg-gradient-to-r from-emerald-800 to-teal-600 px-4 py-4 text-white sm:px-7 sm:py-5">
             <div>
               <p className="text-[9px] font-black uppercase tracking-[.18em] text-emerald-200">
                 Your daily routine
               </p>
-              <h2 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
+              <h2 className="mt-1 text-xl font-black tracking-tight sm:text-3xl">
                 My Subscriptions
               </h2>
               <p className="mt-1 text-[11px] font-medium text-white/60 sm:text-xs">
@@ -443,8 +443,30 @@ export default function CustomerDashboard() {
           )}
         </section>
 
+        {/* NEXT DELIVERY */}
+        {activeSubscriptions.length > 0 && (
+          <section className="dash-fade mt-5 sm:mt-6">
+            <div className="relative overflow-hidden rounded-[24px] border border-emerald-100 bg-white p-4 shadow-sm">
+              <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-emerald-100/60 blur-2xl" />
+              <div className="relative flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-2xl">🚚</div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[9px] font-black uppercase tracking-[.16em] text-emerald-600">Next delivery</p>
+                  <p className="mt-0.5 text-base font-black text-slate-900">
+                    {activeSubscriptions[0].size || "Milk"} • {activeSubscriptions[0].quantity || 1} bottle
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                    {activeSubscriptions[0].deliveryType || activeSubscriptions[0].deliveryTime || "Scheduled delivery"}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1.5 text-[9px] font-black text-emerald-700">✓ Scheduled</span>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* QUICK ACTIONS */}
-        <section className="mt-6 grid gap-3 sm:grid-cols-3">
+        <section className="mt-6 flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-3 sm:overflow-visible">
           <QuickCard icon="📦" title="Order History" desc="View your orders and status" onClick={() => navigate("/order-history")} />
           <QuickCard icon="🥛" title="Milk Subscription" desc="Start or manage daily delivery" onClick={() => navigate("/subscription/create/:productId")} />
           <QuickCard icon="🛍️" title="Shop Products" desc="Milk, curd and dairy products" onClick={() => navigate("/products")} />
@@ -513,6 +535,15 @@ export default function CustomerDashboard() {
         </section>
       </main>
 
+      {/* MOBILE BOTTOM NAV */}
+      <nav className="fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-[22px] border border-white/70 bg-white/90 px-2 py-2 shadow-[0_16px_45px_rgba(15,23,42,.16)] backdrop-blur-xl sm:hidden">
+        <MobileNavItem icon="⌂" label="Home" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} active />
+        <MobileNavItem icon="🛍️" label="Shop" onClick={() => navigate("/products")} />
+        <MobileNavItem icon="🥛" label="Subs" onClick={() => navigate("/subscription/create/:productId")} />
+        <MobileNavItem icon="📦" label="Orders" onClick={() => navigate("/order-history")} />
+        <MobileNavItem icon="☰" label="Menu" onClick={() => document.querySelector("button[aria-label='Menu']")?.click()} />
+      </nav>
+
       <PauseSubscriptionModal
         open={showPauseModal}
         subscription={selectedSubscription}
@@ -524,6 +555,18 @@ export default function CustomerDashboard() {
         onConfirm={handlePauseConfirm}
       />
     </div>
+  );
+}
+
+function MobileNavItem({ icon, label, onClick, active = false }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`flex min-w-[52px] flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 transition active:scale-95 ${
+        active ? "bg-emerald-50 text-emerald-700" : "text-slate-500"
+      }`}>
+      <span className="text-base leading-none">{icon}</span>
+      <span className="text-[8px] font-black uppercase tracking-wide">{label}</span>
+    </button>
   );
 }
 
@@ -582,9 +625,9 @@ function SubscriptionCard({
   return (
     <article
       style={{ animationDelay: `${index * 70}ms` }}
-      className="dash-fade w-[calc(100vw-2rem)] max-w-[390px] shrink-0 snap-start overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:w-[390px]"
+      className="dash-fade w-[calc(100vw-1.5rem)] max-w-[390px] shrink-0 snap-start overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:w-[390px]"
     >
-      <div className={`relative overflow-hidden p-5 text-white ${
+      <div className={`relative overflow-hidden p-4 text-white sm:p-5 ${
         isPaused
           ? "bg-gradient-to-br from-amber-600 to-orange-500"
           : "bg-gradient-to-br from-emerald-800 to-teal-600"
@@ -611,7 +654,7 @@ function SubscriptionCard({
       </div>
 
       <div className="space-y-3 p-4">
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2">
           <MiniInfoCard label="Delivery" value={sub.deliveryType || "N/A"} />
           <MiniInfoCard label="Monthly" value={formatMoney(sub.monthlyAmount)} />
           <MiniInfoCard label="Start" value={formatDate(sub.startDate)} />
@@ -725,7 +768,7 @@ function QuickCard({ icon, title, desc, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="group rounded-[24px] border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl"
+      className="group min-w-[240px] snap-start rounded-[24px] border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl sm:min-w-0"
     >
       <div className="flex items-center justify-between">
         <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-xl transition group-hover:scale-110">
@@ -744,7 +787,7 @@ function OrderRow({ order, formatMoney, formatDate }) {
   const status = order.status || "Pending";
 
   return (
-    <div className="flex flex-col gap-4 px-5 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+    <div className="flex flex-col gap-3 px-4 py-3.5 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-7 sm:py-4">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-black text-slate-900">
