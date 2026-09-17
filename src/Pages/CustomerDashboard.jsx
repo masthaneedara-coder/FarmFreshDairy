@@ -223,7 +223,7 @@ export default function CustomerDashboard() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#f5faf7] px-3 pb-24 pt-24 sm:px-5 sm:pb-10 sm:pt-32 lg:px-8">
+    <div className="relative min-h-screen w-full max-w-full overflow-x-hidden bg-[#f5faf7] px-3 pb-10 pt-24 sm:px-5 sm:pt-32 lg:px-8">
       <style>{`
         @keyframes dashFadeUp {
           from { opacity: 0; transform: translateY(18px); }
@@ -252,20 +252,20 @@ export default function CustomerDashboard() {
         <div className="absolute right-[9%] top-[28%] text-3xl opacity-10 dash-float" style={{ animationDelay: "1s" }}>🌿</div>
       </div>
 
-      <main className="relative mx-auto max-w-7xl">
+      <main className="relative mx-auto w-full max-w-7xl min-w-0">
         {/* HERO */}
         <section className="dash-fade relative overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-4 text-white shadow-[0_20px_50px_rgba(4,120,87,.18)] sm:rounded-[30px] sm:p-7 lg:p-9">
           <div className="absolute -right-28 -top-28 h-80 w-80 rounded-full bg-emerald-300/15 blur-3xl" />
           <div className="absolute -bottom-32 left-1/3 h-80 w-80 rounded-full bg-white/5 blur-3xl" />
 
-          <div className="relative grid gap-7 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="relative grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-7">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[.16em] text-emerald-200 backdrop-blur">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
                 Customer dashboard
               </div>
 
-              <h1 className="mt-3 text-[28px] leading-[1.05] font-black tracking-tight sm:text-4xl lg:text-5xl">
+              <h1 className="mt-3 max-w-full break-words text-[28px] leading-[1.05] font-black tracking-tight sm:text-4xl lg:text-5xl">
                 Welcome back,{" "}
                 <span className="text-emerald-200">
                   {dashboard?.customer?.full_name || customer?.name || "Customer"}
@@ -292,7 +292,7 @@ export default function CustomerDashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:max-w-[300px] lg:justify-end">
+            <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:max-w-[300px] lg:justify-end">
               <DashboardAction
                 icon="🛍️"
                 label="Shop"
@@ -319,7 +319,7 @@ export default function CustomerDashboard() {
         </section>
 
         {/* STATS */}
-        <section className="mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-4">
+        <section className="mt-4 flex min-w-0 max-w-full snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-4">
           <div className="min-w-[150px] snap-start sm:min-w-0"><StatCard icon="📦" title="Total Orders" value={summary.totalOrders} tone="emerald" /></div>
           <div className="min-w-[150px] snap-start sm:min-w-0"><StatCard icon="🔄" title="Subscriptions" value={summary.totalSubscriptions} tone="amber" /></div>
           <div className="min-w-[150px] snap-start sm:min-w-0"><StatCard icon="🥛" title="Active Subs" value={summary.activeSubscriptions} tone="teal" /></div>
@@ -466,7 +466,7 @@ export default function CustomerDashboard() {
         )}
 
         {/* QUICK ACTIONS */}
-        <section className="mt-6 flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-3 sm:overflow-visible">
+        <section className="mt-6 flex min-w-0 max-w-full snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-3 sm:overflow-visible">
           <QuickCard icon="📦" title="Order History" desc="View your orders and status" onClick={() => navigate("/order-history")} />
           <QuickCard icon="🥛" title="Milk Subscription" desc="Start or manage daily delivery" onClick={() => navigate("/subscription/create/:productId")} />
           <QuickCard icon="🛍️" title="Shop Products" desc="Milk, curd and dairy products" onClick={() => navigate("/products")} />
@@ -535,15 +535,6 @@ export default function CustomerDashboard() {
         </section>
       </main>
 
-      {/* MOBILE BOTTOM NAV */}
-      <nav className="fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-[22px] border border-white/70 bg-white/90 px-2 py-2 shadow-[0_16px_45px_rgba(15,23,42,.16)] backdrop-blur-xl sm:hidden">
-        <MobileNavItem icon="⌂" label="Home" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} active />
-        <MobileNavItem icon="🛍️" label="Shop" onClick={() => navigate("/products")} />
-        <MobileNavItem icon="🥛" label="Subs" onClick={() => navigate("/subscription/create/:productId")} />
-        <MobileNavItem icon="📦" label="Orders" onClick={() => navigate("/order-history")} />
-        <MobileNavItem icon="☰" label="Menu" onClick={() => document.querySelector("button[aria-label='Menu']")?.click()} />
-      </nav>
-
       <PauseSubscriptionModal
         open={showPauseModal}
         subscription={selectedSubscription}
@@ -558,23 +549,11 @@ export default function CustomerDashboard() {
   );
 }
 
-function MobileNavItem({ icon, label, onClick, active = false }) {
-  return (
-    <button type="button" onClick={onClick}
-      className={`flex min-w-[52px] flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 transition active:scale-95 ${
-        active ? "bg-emerald-50 text-emerald-700" : "text-slate-500"
-      }`}>
-      <span className="text-base leading-none">{icon}</span>
-      <span className="text-[8px] font-black uppercase tracking-wide">{label}</span>
-    </button>
-  );
-}
-
 function DashboardAction({ icon, label, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-xs font-black text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/15"
+      className="min-w-0 rounded-2xl border border-white/10 bg-white/10 px-3 py-3 text-[11px] font-black text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/15 sm:px-4 sm:text-xs"
     >
       {icon} {label}
     </button>
@@ -768,7 +747,7 @@ function QuickCard({ icon, title, desc, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="group min-w-[240px] snap-start rounded-[24px] border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl sm:min-w-0"
+      className="group min-w-[220px] snap-start rounded-[24px] border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl sm:min-w-0"
     >
       <div className="flex items-center justify-between">
         <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-xl transition group-hover:scale-110">
