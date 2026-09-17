@@ -300,26 +300,62 @@ if (!selectedAddress) {
   
 console.log("Checkout Cart:", cart);
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-emerald-50 via-white to-lime-50 px-3 sm:px-5 lg:px-8 py-4 sm:py-7 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="checkout-page min-h-screen w-full overflow-x-hidden bg-[radial-gradient(circle_at_8%_4%,rgba(16,185,129,.16),transparent_24%),radial-gradient(circle_at_92%_18%,rgba(132,204,22,.13),transparent_22%),linear-gradient(180deg,#effdf6_0%,#ffffff_46%,#ecfdf5_100%)] px-3 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:py-7 sm:pb-10 lg:px-8 lg:pb-8">
+          <style>{`
+            @keyframes checkoutFadeUp {
+              from { opacity: 0; transform: translateY(18px); }
+              to { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes checkoutFloat {
+              0%, 100% { transform: translate3d(0,0,0); }
+              50% { transform: translate3d(8px,-8px,0); }
+            }
+            @keyframes checkoutShine {
+              from { transform: translateX(-130%); }
+              to { transform: translateX(260%); }
+            }
+            .checkout-enter {
+              animation: checkoutFadeUp .55s cubic-bezier(.2,.8,.2,1) both;
+            }
+            .checkout-delay-1 { animation-delay: .08s; }
+            .checkout-delay-2 { animation-delay: .16s; }
+            .checkout-delay-3 { animation-delay: .24s; }
+            .checkout-card {
+              transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease;
+            }
+            .checkout-card:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 22px 55px rgba(5,150,105,.10);
+              border-color: rgba(16,185,129,.28);
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .checkout-enter,
+              .checkout-card,
+              .checkout-page [class*="animate-"] {
+                animation: none !important;
+                transition: none !important;
+              }
+            }
+          `}</style>
+      <div className="mx-auto w-full max-w-7xl">
 
         {/* ================================
             HERO / PROGRESS
         ================================= */}
-        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-green-700 via-emerald-600 to-green-500 text-white shadow-xl mb-5 sm:mb-7">
-          <div className="absolute -top-16 -right-12 w-44 h-44 rounded-full bg-white/10 blur-2xl animate-pulse" />
-          <div className="absolute -bottom-20 left-10 w-52 h-52 rounded-full bg-lime-300/10 blur-3xl" />
+        <div className="checkout-enter relative overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-[#064e3b] via-[#047857] to-[#10b981] text-white shadow-[0_18px_55px_rgba(4,120,87,.20)] mb-4 sm:mb-7 sm:rounded-[2rem]">
+          <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-lime-200/15 blur-3xl animate-[checkoutFloat_7s_ease-in-out_infinite]" />
+          <div className="pointer-events-none absolute -bottom-24 left-0 h-60 w-60 rounded-full bg-white/10 blur-3xl animate-[checkoutFloat_8s_ease-in-out_infinite_reverse]" />
 
-          <div className="relative p-5 sm:p-7 md:p-8">
+          <div className="relative p-4 sm:p-7 md:p-8">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.2em] text-green-100">
                   Farm Fresh Dairy
                 </p>
-                <h1 className="mt-1 text-3xl sm:text-4xl md:text-5xl font-black tracking-tight">
+                <h1 className="mt-1 text-[2rem] leading-none font-black tracking-tight sm:text-4xl md:text-5xl">
                   Checkout
                 </h1>
-                <p className="mt-2 text-sm sm:text-base text-green-50">
+                <p className="mt-2 max-w-md text-[13px] leading-5 text-green-50 sm:text-base">
                   Almost there — complete your order.
                 </p>
               </div>
@@ -329,7 +365,7 @@ console.log("Checkout Cart:", cart);
               </div>
             </div>
 
-            <div className="mt-6 flex items-center gap-2 sm:gap-3">
+            <div className="mt-5 flex items-center gap-1.5 sm:gap-3">
               {[
                 ["1", "Cart"],
                 ["2", "Address"],
@@ -339,7 +375,7 @@ console.log("Checkout Cart:", cart);
                 <div key={label} className="flex items-center flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <span
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black shadow-lg ${
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-black shadow-lg sm:h-9 sm:w-9 sm:text-xs ${
                         index < 2
                           ? "bg-white text-green-700"
                           : "bg-white/20 text-white ring-1 ring-white/30"
@@ -360,21 +396,21 @@ console.log("Checkout Cart:", cart);
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[1fr_380px] gap-5 sm:gap-7">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-7">
 
           {/* ================================
               LEFT: DETAILS
           ================================= */}
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5">
 
             {/* Customer details */}
-            <section className="rounded-[1.75rem] bg-white/90 backdrop-blur border border-green-100 shadow-[0_12px_40px_rgba(16,185,129,0.10)] p-5 sm:p-7">
-              <div className="flex items-start gap-3 mb-5">
-                <div className="h-11 w-11 shrink-0 rounded-2xl bg-green-100 flex items-center justify-center text-xl">
+            <section className="checkout-enter checkout-delay-1 checkout-card rounded-[1.5rem] bg-white/95 backdrop-blur border border-green-100 shadow-[0_12px_40px_rgba(16,185,129,0.10)] p-4 sm:rounded-[1.75rem] sm:p-7">
+              <div className="flex items-start gap-3 mb-4 sm:mb-5">
+                <div className="h-10 w-10 shrink-0 rounded-2xl bg-emerald-100 flex items-center justify-center text-lg sm:h-11 sm:w-11 sm:text-xl">
                   👤
                 </div>
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+                  <h2 className="text-lg font-black text-slate-900 sm:text-2xl">
                     Customer Details
                   </h2>
                   <p className="text-sm text-slate-500 mt-1">
@@ -383,7 +419,7 @@ console.log("Checkout Cart:", cart);
                 </div>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-2">
                     Customer Name
@@ -394,7 +430,7 @@ console.log("Checkout Cart:", cart);
                       type="text"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 py-3.5 font-semibold text-slate-800 outline-none transition focus:border-green-400 focus:bg-white focus:ring-4 focus:ring-green-100"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 py-3.5 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-green-400 focus:bg-white focus:ring-4 focus:ring-green-100 sm:text-base"
                       placeholder="Enter customer name"
                     />
                   </div>
@@ -410,7 +446,7 @@ console.log("Checkout Cart:", cart);
                       type="text"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 py-3.5 font-semibold text-slate-800 outline-none transition focus:border-green-400 focus:bg-white focus:ring-4 focus:ring-green-100"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 py-3.5 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-green-400 focus:bg-white focus:ring-4 focus:ring-green-100 sm:text-base"
                       placeholder="Enter phone number"
                     />
                   </div>
@@ -426,7 +462,7 @@ console.log("Checkout Cart:", cart);
                       type="text"
                       value={area}
                       onChange={(e) => setArea(e.target.value)}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 py-3.5 font-semibold text-slate-800 outline-none transition focus:border-green-400 focus:bg-white focus:ring-4 focus:ring-green-100"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 py-3.5 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-green-400 focus:bg-white focus:ring-4 focus:ring-green-100 sm:text-base"
                       placeholder="Enter area"
                     />
                   </div>
@@ -435,14 +471,14 @@ console.log("Checkout Cart:", cart);
             </section>
 
             {/* Address */}
-            <section className="rounded-[1.75rem] bg-white/90 backdrop-blur border border-green-100 shadow-[0_12px_40px_rgba(16,185,129,0.10)] p-5 sm:p-7">
+            <section className="checkout-enter checkout-delay-1 checkout-card rounded-[1.5rem] bg-white/95 backdrop-blur border border-green-100 shadow-[0_12px_40px_rgba(16,185,129,0.10)] p-4 sm:rounded-[1.75rem] sm:p-7">
               <div className="flex items-center justify-between gap-3 mb-5">
                 <div className="flex items-start gap-3">
                   <div className="h-11 w-11 shrink-0 rounded-2xl bg-emerald-100 flex items-center justify-center text-xl">
                     📍
                   </div>
                   <div>
-                    <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+                    <h2 className="text-lg font-black text-slate-900 sm:text-2xl">
                       Delivery Address
                     </h2>
                     <p className="text-sm text-slate-500 mt-1">
@@ -480,7 +516,7 @@ console.log("Checkout Cart:", cart);
                   </button>
                 </div>
               ) : (
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid gap-2.5 sm:grid-cols-2 sm:gap-3">
                   {addresses.map((address) => {
                     const selected = selectedAddress?.id === address.id;
 
@@ -530,13 +566,13 @@ console.log("Checkout Cart:", cart);
             </section>
 
             {/* Payment */}
-            <section className="rounded-[1.75rem] bg-white/90 backdrop-blur border border-green-100 shadow-[0_12px_40px_rgba(16,185,129,0.10)] p-5 sm:p-7">
-              <div className="flex items-start gap-3 mb-5">
+            <section className="checkout-enter checkout-delay-1 checkout-card rounded-[1.5rem] bg-white/95 backdrop-blur border border-green-100 shadow-[0_12px_40px_rgba(16,185,129,0.10)] p-4 sm:rounded-[1.75rem] sm:p-7">
+              <div className="flex items-start gap-3 mb-4 sm:mb-5">
                 <div className="h-11 w-11 shrink-0 rounded-2xl bg-blue-100 flex items-center justify-center text-xl">
                   💳
                 </div>
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+                  <h2 className="text-lg font-black text-slate-900 sm:text-2xl">
                     Payment Method
                   </h2>
                   <p className="text-sm text-slate-500 mt-1">
@@ -625,10 +661,10 @@ console.log("Checkout Cart:", cart);
           {/* ================================
               RIGHT: SUMMARY
           ================================= */}
-          <aside className="lg:sticky lg:top-5 h-fit">
-            <section className="overflow-hidden rounded-[1.75rem] bg-white border border-green-100 shadow-[0_16px_50px_rgba(16,185,129,0.14)]">
+          <aside className="order-first h-fit lg:order-none lg:sticky lg:top-5">
+            <section className="checkout-enter checkout-delay-3 checkout-card overflow-hidden rounded-[1.5rem] bg-white/95 border border-green-100 shadow-[0_16px_50px_rgba(16,185,129,0.14)] sm:rounded-[1.75rem]">
 
-              <div className="bg-gradient-to-r from-green-700 to-emerald-600 p-5 sm:p-6 text-white">
+              <div className="relative overflow-hidden bg-gradient-to-br from-[#064e3b] via-[#047857] to-[#10b981] p-4 text-white sm:p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-green-100">
@@ -644,8 +680,8 @@ console.log("Checkout Cart:", cart);
                 </div>
               </div>
 
-              <div className="p-4 sm:p-5">
-                <div className="space-y-3 max-h-[390px] overflow-y-auto pr-1">
+              <div className="p-3.5 sm:p-5">
+                <div className="space-y-2.5 max-h-[330px] overflow-y-auto pr-1 sm:max-h-[390px] sm:space-y-3">
                   {cart.map((item, index) => {
                     const itemPrice = Number(
                       item.price || item.products?.price || 0
@@ -656,14 +692,14 @@ console.log("Checkout Cart:", cart);
                     return (
                       <div
                         key={item.id || index}
-                        className="group rounded-2xl border border-slate-100 bg-slate-50 p-3 transition hover:border-green-200 hover:bg-green-50/50"
+                        className="group rounded-2xl border border-slate-100 bg-slate-50 p-2.5 transition duration-300 hover:-translate-y-0.5 hover:border-green-200 hover:bg-green-50/50 sm:p-3"
                       >
                         <div className="flex gap-3">
                           <div className="relative shrink-0">
                             <img
                               src={item.products?.image}
                               alt={item.products?.name || "Product"}
-                              className="h-16 w-16 rounded-2xl object-cover ring-1 ring-slate-200 transition duration-300 group-hover:scale-105"
+                              className="h-14 w-14 rounded-2xl object-cover ring-1 ring-slate-200 transition duration-300 group-hover:scale-105 sm:h-16 sm:w-16"
                             />
                             <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-black text-white shadow">
                               {item.quantity}
@@ -729,7 +765,7 @@ console.log("Checkout Cart:", cart);
                       <p className="text-xs font-bold uppercase tracking-wide text-green-600">
                         Total Amount
                       </p>
-                      <p className="text-3xl sm:text-4xl font-black text-green-700 mt-1">
+                      <p className="text-[2rem] font-black text-green-700 mt-1 sm:text-4xl">
                         ₹{total.toFixed(2)}
                       </p>
                     </div>
@@ -742,7 +778,7 @@ console.log("Checkout Cart:", cart);
                   type="button"
                   onClick={() => handlePlaceOrder()}
                   disabled={loading || cart.length === 0}
-                  className="hidden lg:flex group w-full mt-5 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 py-4 text-base font-black text-white shadow-xl shadow-green-200 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-2xl active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none"
+                  className="hidden lg:flex group relative w-full mt-5 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 py-4 text-base font-black text-white shadow-xl shadow-green-200 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-2xl active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none"
                 >
                   {loading ? (
                     <>
@@ -779,13 +815,13 @@ console.log("Checkout Cart:", cart);
       {/* ================================
           MOBILE STICKY CTA
       ================================= */}
-      <div className="fixed inset-x-0 bottom-0 z-50 lg:hidden border-t border-green-100 bg-white/95 backdrop-blur-xl px-3 py-3 shadow-[0_-10px_35px_rgba(0,0,0,0.10)]">
-        <div className="max-w-7xl mx-auto flex items-center gap-3">
+      <div className="fixed inset-x-0 bottom-0 z-50 lg:hidden border-t border-emerald-100/80 bg-white/92 backdrop-blur-2xl px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2.5 shadow-[0_-14px_40px_rgba(5,150,105,.13)]">
+        <div className="mx-auto flex w-full max-w-2xl items-center gap-2.5">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
               Total
             </p>
-            <p className="text-xl font-black text-green-700">
+            <p className="text-[1.35rem] leading-none font-black text-green-700 sm:text-xl">
               ₹{total.toFixed(2)}
             </p>
           </div>
@@ -794,7 +830,7 @@ console.log("Checkout Cart:", cart);
             type="button"
             onClick={() => handlePlaceOrder()}
             disabled={loading || cart.length === 0}
-            className="min-w-[170px] flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-green-200 transition active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:from-slate-400 disabled:to-slate-400"
+            className="min-w-0 flex-[1.45] flex items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 px-3 py-3.5 text-[13px] font-black text-white shadow-lg shadow-green-200 transition active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:from-slate-400 disabled:to-slate-400 sm:px-5 sm:text-sm"
           >
             {loading ? (
               <>
@@ -802,7 +838,10 @@ console.log("Checkout Cart:", cart);
                 Processing...
               </>
             ) : (
-              <>🛍️ Place Order →</>
+              <>
+                <span>🛍️ Place Order</span>
+                <span>→</span>
+              </>
             )}
           </button>
         </div>
