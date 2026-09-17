@@ -190,6 +190,22 @@ export default function AdminSubscriptionDeliveries() {
     }
   }
 
+  function handleSelectAllAndAssign() {
+    if (!selectableDeliveries.length) {
+      alert("No deliveries are available to assign.");
+      return;
+    }
+
+    if (allSelected) {
+      setSelectedDeliveries([]);
+      return;
+    }
+
+    setSelectedDeliveries(
+      selectableDeliveries.map((delivery) => delivery.id)
+    );
+  }
+
   function toggleDeliverySelection(id) {
     setSelectedDeliveries((previous) => {
       if (previous.includes(id)) {
@@ -726,6 +742,7 @@ export default function AdminSubscriptionDeliveries() {
         {selectedDeliveries.length > 0 && (
 
           <div className="
+            hidden md:block
             delivery-animation
             bg-green-50
             border border-green-200
@@ -844,6 +861,115 @@ export default function AdminSubscriptionDeliveries() {
 
             </div>
 
+          </div>
+        )}
+
+        {/* ==========================================
+            MOBILE BULK ASSIGN TOOLBAR
+        ========================================== */}
+
+        {selectableDeliveries.length > 0 && (
+          <div className="md:hidden sticky top-2 z-30 mb-4 rounded-3xl border border-emerald-100 bg-white/95 p-3 shadow-[0_12px_35px_rgba(15,23,42,.10)] backdrop-blur-xl">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleSelectAllAndAssign}
+                className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl px-3 text-xs font-black transition-all active:scale-[.97] ${
+                  allSelected
+                    ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "bg-slate-950 text-white shadow-lg shadow-slate-200"
+                }`}
+              >
+                <span className="text-base">
+                  {allSelected ? "✓" : "☑️"}
+                </span>
+                {allSelected ? "Deselect All" : `Select All (${selectableDeliveries.length})`}
+              </button>
+
+              {selectedDeliveries.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDelivery(null);
+                    setAssignOpen(false);
+                    document
+                      .getElementById("mobile-bulk-assign")
+                      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white shadow-lg shadow-emerald-200 transition-all active:scale-[.97]"
+                >
+                  🚚 Assign {selectedDeliveries.length}
+                </button>
+              )}
+            </div>
+
+            <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-bold text-slate-400">
+              <span>
+                {selectedDeliveries.length > 0
+                  ? `${selectedDeliveries.length} selected`
+                  : "Select deliveries to assign together"}
+              </span>
+              <span>{selectableDeliveries.length} available</span>
+            </div>
+          </div>
+        )}
+
+        {/* ==========================================
+            MOBILE BULK ASSIGN PANEL
+        ========================================== */}
+
+        {selectedDeliveries.length > 0 && (
+          <div
+            id="mobile-bulk-assign"
+            className="md:hidden delivery-animation mb-5 rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4 shadow-[0_16px_45px_rgba(16,185,129,.12)]"
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-base font-black text-emerald-900">
+                  🚚 Assign deliveries
+                </p>
+                <p className="mt-1 text-[11px] font-semibold text-emerald-700">
+                  {selectedDeliveries.length} deliveries selected
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-500 active:scale-95"
+              >
+                Clear
+              </button>
+            </div>
+
+            <select
+              value={selectedDeliveryBoy}
+              onChange={(e) => setSelectedDeliveryBoy(e.target.value)}
+              className="min-h-12 w-full rounded-2xl border border-emerald-200 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            >
+              <option value="">Select Delivery Boy</option>
+              {deliveryBoys.map((boy) => (
+                <option key={boy.id} value={boy.id}>
+                  {boy.full_name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={handleBulkAssign}
+              disabled={assigning || !selectedDeliveryBoy}
+              className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-sm font-black text-white shadow-lg shadow-emerald-200 transition-all active:scale-[.98] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+            >
+              {assigning ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  Assigning {selectedDeliveries.length}...
+                </>
+              ) : (
+                <>🚚 Assign All {selectedDeliveries.length} Deliveries</>
+              )}
+            </button>
           </div>
         )}
 
