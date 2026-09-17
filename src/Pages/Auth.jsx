@@ -247,88 +247,125 @@ export default function Auth() {
   ------------------------------*/
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#f6fbf8] px-3 pb-10 pt-28 sm:px-5 sm:pt-32">
+    <div className="relative min-h-[100dvh] overflow-x-hidden bg-[#f5fbf7] text-slate-900">
       <style>{`
-        @keyframes authFadeUp {
-          from { opacity: 0; transform: translateY(24px); }
+        @keyframes authPageIn {
+          from { opacity: 0; transform: translateY(18px); }
           to { opacity: 1; transform: translateY(0); }
         }
+
+        @keyframes authBlob {
+          0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+          50% { transform: translate3d(0, -12px, 0) scale(1.06); }
+        }
+
         @keyframes authFloat {
           0%, 100% { transform: translateY(0) rotate(0deg); }
-          50% { transform: translateY(-10px) rotate(2deg); }
+          50% { transform: translateY(-7px) rotate(2deg); }
         }
-        @keyframes authGlow {
-          0%, 100% { opacity: .45; transform: scale(1); }
-          50% { opacity: .8; transform: scale(1.08); }
+
+        @keyframes authShimmer {
+          0% { transform: translateX(-140%); }
+          100% { transform: translateX(260%); }
         }
-        @keyframes authShine {
-          0% { transform: translateX(-130%) rotate(12deg); }
-          100% { transform: translateX(230%) rotate(12deg); }
+
+        @keyframes authPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,.18); }
+          50% { box-shadow: 0 0 0 10px rgba(16,185,129,0); }
         }
-        .auth-fade-up { animation: authFadeUp .65s cubic-bezier(.22,1,.36,1) both; }
-        .auth-float { animation: authFloat 4.5s ease-in-out infinite; }
-        .auth-glow { animation: authGlow 4s ease-in-out infinite; }
+
+        .auth-page-in {
+          animation: authPageIn .55s cubic-bezier(.22,1,.36,1) both;
+        }
+
+        .auth-blob {
+          animation: authBlob 6s ease-in-out infinite;
+        }
+
+        .auth-float {
+          animation: authFloat 4s ease-in-out infinite;
+        }
+
+        .auth-pulse {
+          animation: authPulse 2.4s ease-out infinite;
+        }
+
         @media (prefers-reduced-motion: reduce) {
-          .auth-fade-up, .auth-float, .auth-glow { animation: none !important; }
+          .auth-page-in, .auth-blob, .auth-float, .auth-pulse {
+            animation: none !important;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .auth-compact {
+            padding-left: .75rem !important;
+            padding-right: .75rem !important;
+          }
         }
       `}</style>
 
-      {/* Decorative background */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="auth-glow absolute -left-28 top-20 h-72 w-72 rounded-full bg-emerald-200/45 blur-3xl" />
-        <div className="auth-glow absolute -right-28 bottom-10 h-80 w-80 rounded-full bg-teal-200/35 blur-3xl" />
-        <div className="absolute left-[18%] top-36 text-3xl opacity-20 auth-float">🥛</div>
-        <div className="absolute right-[15%] top-44 text-2xl opacity-15 auth-float" style={{ animationDelay: "1s" }}>🌿</div>
-        <div className="absolute bottom-24 left-[10%] text-2xl opacity-15 auth-float" style={{ animationDelay: "2s" }}>🥛</div>
+      {/* Soft animated background */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="auth-blob absolute -left-24 -top-20 h-72 w-72 rounded-full bg-emerald-200/40 blur-3xl" />
+        <div
+          className="auth-blob absolute -right-28 top-[35%] h-80 w-80 rounded-full bg-teal-200/30 blur-3xl"
+          style={{ animationDelay: "1.5s" }}
+        />
+        <div
+          className="auth-blob absolute -bottom-28 left-[20%] h-64 w-64 rounded-full bg-lime-100/45 blur-3xl"
+          style={{ animationDelay: "3s" }}
+        />
       </div>
 
-      <main className="relative mx-auto w-full max-w-6xl">
+      <main className="auth-compact relative mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col px-4 pb-8 pt-5 sm:px-6 sm:pt-8 lg:max-w-6xl lg:justify-center lg:py-10">
+        {/* Top bar */}
         <div className="mb-5 flex items-center justify-between sm:mb-7">
           <button
+            type="button"
             onClick={() => navigate("/")}
-            className="group inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3.5 py-2 text-xs font-black text-slate-600 shadow-sm backdrop-blur transition hover:-translate-x-0.5 hover:border-emerald-200 hover:text-emerald-700"
+            className="group inline-flex min-h-10 items-center gap-2 rounded-full border border-white/80 bg-white/75 px-3.5 text-xs font-extrabold text-slate-600 shadow-sm backdrop-blur-xl transition active:scale-95 hover:border-emerald-200 hover:text-emerald-700"
           >
-            <span className="transition-transform group-hover:-translate-x-1">←</span>
-            Back to home
+            <span className="transition-transform group-hover:-translate-x-0.5">←</span>
+            Home
           </button>
 
-          <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-white/70 px-3 py-2 text-[10px] font-black text-emerald-700 shadow-sm backdrop-blur sm:flex">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,.7)]" />
-            Farm Fresh Dairy
+          <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-white/75 px-3 py-2 text-[10px] font-black text-emerald-700 shadow-sm backdrop-blur-xl">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 auth-pulse" />
+            Fresh every day
           </div>
         </div>
 
-        <section className="grid overflow-hidden rounded-[32px] border border-white bg-white/75 shadow-[0_30px_90px_rgba(15,23,42,.12)] backdrop-blur-xl lg:grid-cols-[.9fr_1.1fr]">
-
-          {/* Brand panel */}
-          <div className="relative hidden overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-8 text-white lg:flex lg:min-h-[690px] lg:flex-col lg:justify-between lg:p-10">
+        <section className="auth-page-in overflow-hidden rounded-[30px] border border-white/90 bg-white/90 shadow-[0_24px_80px_rgba(15,23,42,.12)] backdrop-blur-xl lg:grid lg:grid-cols-[.85fr_1.15fr] lg:rounded-[38px]">
+          {/* Desktop brand panel */}
+          <aside className="relative hidden min-h-[680px] overflow-hidden bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-10 text-white lg:flex lg:flex-col lg:justify-between">
             <div className="absolute -right-28 -top-28 h-80 w-80 rounded-full bg-emerald-300/15 blur-3xl" />
-            <div className="absolute -bottom-24 -left-20 h-72 w-72 rounded-full bg-teal-300/10 blur-3xl" />
+            <div className="absolute -bottom-28 -left-20 h-80 w-80 rounded-full bg-teal-300/10 blur-3xl" />
 
             <div className="relative">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3.5 py-2 text-xs font-black backdrop-blur">
-                🌿 Farm Fresh Dairy
+                <span>🌿</span>
+                Farm Fresh Dairy
               </div>
 
-              <div className="mt-10 flex h-16 w-16 items-center justify-center rounded-3xl bg-white/10 text-4xl shadow-xl backdrop-blur">
+              <div className="auth-float mt-12 flex h-20 w-20 items-center justify-center rounded-[28px] bg-white/10 text-5xl shadow-2xl ring-1 ring-white/10 backdrop-blur">
                 🥛
               </div>
 
-              <h1 className="mt-6 max-w-lg text-5xl font-black leading-[1.02] tracking-tight">
+              <h1 className="mt-7 max-w-md text-5xl font-black leading-[1.02] tracking-tight">
                 Freshness
                 <span className="block text-emerald-200">delivered daily.</span>
               </h1>
 
               <p className="mt-5 max-w-md text-sm leading-6 text-white/65">
-                Fresh milk, groceries and subscriptions delivered to your doorstep with a simple, reliable experience.
+                Fresh milk, dairy products and subscriptions delivered to your doorstep.
               </p>
             </div>
 
-            <div className="relative mt-10 space-y-3">
+            <div className="relative space-y-3">
               {[
                 ["🥛", "Fresh dairy", "Milk, curd, ghee & paneer"],
                 ["🚚", "Daily delivery", "Freshness at your doorstep"],
-                ["🔄", "Easy subscription", "Manage your daily routine"],
+                ["🔄", "Easy subscription", "Pause, renew and manage easily"],
               ].map(([icon, title, description]) => (
                 <div
                   key={title}
@@ -344,30 +381,43 @@ export default function Auth() {
                 </div>
               ))}
             </div>
-          </div>
+          </aside>
 
-          {/* Form panel */}
-          <div className="relative bg-white p-5 sm:p-8 lg:p-10">
-            <div className="mx-auto max-w-xl">
-              {/* Mobile brand */}
-              <div className="mb-6 flex items-center gap-3 lg:hidden">
-                <div className="auth-float flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-2xl shadow-sm">
-                  🥛
+          {/* Mobile / desktop form */}
+          <div className="relative p-4 sm:p-7 lg:p-10">
+            <div className="mx-auto w-full max-w-xl">
+              {/* Mobile brand header */}
+              <div className="mb-6 flex items-center justify-between lg:hidden">
+                <div className="flex items-center gap-3">
+                  <div className="auth-float flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 text-2xl shadow-lg shadow-emerald-200/70">
+                    🥛
+                  </div>
+                  <div>
+                    <p className="text-[17px] font-black tracking-tight">
+                      FarmFresh<span className="text-emerald-600">Dairy</span>
+                    </p>
+                    <p className="text-[10px] font-bold text-slate-400">
+                      Freshness delivered daily
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-base font-black text-slate-900">
-                    FarmFresh<span className="text-emerald-600">Dairy</span>
-                  </p>
-                  <p className="text-[10px] font-semibold text-slate-400">Freshness delivered daily</p>
+
+                <div className="rounded-full bg-emerald-50 px-2.5 py-1.5 text-[9px] font-black text-emerald-700">
+                  100% Fresh
                 </div>
               </div>
 
+              {/* Heading */}
               <div className="text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[20px] bg-emerald-50 text-2xl shadow-sm ring-8 ring-emerald-50/50">
-                  {selectedRole === "customer" ? "🥛" : selectedRole === "admin" ? "🛡️" : "🚚"}
+                <div className="auth-pulse mx-auto flex h-14 w-14 items-center justify-center rounded-[20px] bg-emerald-50 text-2xl ring-8 ring-emerald-50/60">
+                  {selectedRole === "customer"
+                    ? "🥛"
+                    : selectedRole === "admin"
+                    ? "🛡️"
+                    : "🚚"}
                 </div>
 
-                <p className="mt-5 text-[10px] font-black uppercase tracking-[.22em] text-emerald-600">
+                <p className="mt-4 text-[9px] font-black uppercase tracking-[.24em] text-emerald-600">
                   {selectedRole === "customer"
                     ? isLogin
                       ? "Welcome back"
@@ -377,7 +427,7 @@ export default function Auth() {
                     : "Delivery portal"}
                 </p>
 
-                <h2 className="mt-1 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+                <h2 className="mt-1.5 text-[27px] font-black tracking-tight text-slate-950 sm:text-4xl">
                   {selectedRole === "customer"
                     ? isLogin
                       ? "Welcome back 👋"
@@ -387,7 +437,7 @@ export default function Auth() {
                     : "Delivery Login"}
                 </h2>
 
-                <p className="mt-2 text-xs font-medium text-slate-400 sm:text-sm">
+                <p className="mx-auto mt-2 max-w-xs text-[11px] font-semibold leading-5 text-slate-400 sm:text-sm">
                   {selectedRole === "customer"
                     ? isLogin
                       ? "Sign in to manage your dairy account."
@@ -399,7 +449,7 @@ export default function Auth() {
               </div>
 
               {/* Role switch */}
-              <div className="mt-7 grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1.5">
+              <div className="mt-6 grid grid-cols-3 gap-1 rounded-2xl bg-slate-100/90 p-1.5 shadow-inner">
                 {[
                   ["customer", "🥛", "Customer"],
                   ["admin", "🛡️", "Admin"],
@@ -409,6 +459,7 @@ export default function Auth() {
 
                   return (
                     <button
+                      type="button"
                       key={roleName}
                       onClick={() => {
                         setSelectedRole(roleName);
@@ -416,7 +467,7 @@ export default function Auth() {
                         setLoginId("");
                         setPassword("");
                       }}
-                      className={`relative flex items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-[10px] font-black transition-all duration-300 sm:text-xs ${
+                      className={`flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-1.5 text-[10px] font-black transition-all duration-300 active:scale-95 sm:text-xs ${
                         active
                           ? "bg-white text-emerald-700 shadow-md ring-1 ring-slate-200/70"
                           : "text-slate-500 hover:text-slate-800"
@@ -430,15 +481,15 @@ export default function Auth() {
               </div>
 
               {/* Form */}
-              <div className="mt-7 space-y-3.5">
-
+              <div className="mt-6 space-y-3">
                 {selectedRole === "customer" && !isLogin && (
                   <ModernInput
                     label="Full name"
                     icon="👤"
-                    placeholder="Enter your full name"
+                    placeholder="Your full name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    autoComplete="name"
                   />
                 )}
 
@@ -447,9 +498,10 @@ export default function Auth() {
                     label="Email address"
                     icon="✉️"
                     type="email"
-                    placeholder="Enter your email address"
+                    placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
                   />
                 )}
 
@@ -465,10 +517,11 @@ export default function Auth() {
                   }
                   icon={selectedRole === "admin" ? "✉️" : "📱"}
                   type={selectedRole === "admin" ? "email" : "text"}
+                  inputMode={selectedRole === "admin" ? "email" : "tel"}
                   placeholder={
                     selectedRole === "customer"
                       ? isLogin
-                        ? "Enter phone number or email"
+                        ? "Enter phone or email"
                         : "Enter mobile number"
                       : selectedRole === "admin"
                       ? "Enter admin email"
@@ -480,23 +533,20 @@ export default function Auth() {
                       ? setMobile(e.target.value)
                       : setLoginId(e.target.value)
                   }
+                  autoComplete={selectedRole === "admin" ? "username" : "tel"}
                 />
 
-                <ModernInput
-                  label="Password"
-                  icon="🔒"
-                  type="password"
-                  placeholder="Enter your password"
+                <PasswordInput
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
 
                 {selectedRole === "customer" && isLogin && (
-                  <div className="flex justify-end">
+                  <div className="flex justify-end px-1">
                     <button
                       type="button"
                       onClick={() => navigate("/forgot-password")}
-                      className="text-xs font-black text-emerald-700 transition hover:text-emerald-900 hover:underline"
+                      className="min-h-9 px-1 text-[11px] font-black text-emerald-700 transition active:scale-95 hover:text-emerald-900 hover:underline"
                     >
                       Forgot password?
                     </button>
@@ -504,58 +554,72 @@ export default function Auth() {
                 )}
 
                 <button
+                  type="button"
                   onClick={handleSubmit}
                   disabled={loading}
-                  className={`group relative mt-1 w-full overflow-hidden rounded-2xl py-3.5 text-sm font-black text-white shadow-lg transition-all duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
+                  className={`group relative mt-1 min-h-[52px] w-full overflow-hidden rounded-2xl text-sm font-black text-white shadow-lg transition-all duration-300 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-60 ${
                     selectedRole === "customer"
-                      ? "bg-emerald-600 shadow-emerald-200 hover:bg-emerald-700"
+                      ? "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-200 hover:from-emerald-700 hover:to-teal-700"
                       : selectedRole === "admin"
                       ? "bg-slate-900 shadow-slate-200 hover:bg-slate-800"
-                      : "bg-orange-500 shadow-orange-200 hover:bg-orange-600"
+                      : "bg-gradient-to-r from-orange-500 to-amber-500 shadow-orange-200 hover:from-orange-600 hover:to-amber-600"
                   }`}
                 >
-                  <span className="relative z-10">
-                    {loading
-                      ? "Please wait..."
-                      : selectedRole === "customer"
-                      ? isLogin
-                        ? "Login →"
-                        : "Create Account →"
-                      : "Continue →"}
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    {loading ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                        Please wait...
+                      </>
+                    ) : (
+                      <>
+                        {selectedRole === "customer"
+                          ? isLogin
+                            ? "Login"
+                            : "Create Account"
+                          : "Continue"}
+                        <span className="text-base">→</span>
+                      </>
+                    )}
                   </span>
-                  <span className="absolute inset-y-0 left-0 w-1/3 -translate-x-[130%] bg-white/20 blur-md transition-transform duration-700 group-hover:translate-x-[330%]" />
+
+                  <span className="absolute inset-y-0 left-0 w-1/3 -translate-x-[140%] skew-x-[-12deg] bg-white/20 blur-md transition-transform duration-700 group-hover:translate-x-[420%]" />
                 </button>
 
                 {selectedRole === "customer" && (
                   <button
+                    type="button"
                     onClick={() => setIsLogin(!isLogin)}
-                    className="w-full py-2 text-xs font-black text-slate-500 transition hover:text-emerald-700"
+                    className="min-h-11 w-full rounded-xl px-2 text-[11px] font-bold text-slate-500 transition active:scale-[.98] hover:bg-emerald-50 hover:text-emerald-700"
                   >
                     {isLogin ? (
                       <>
                         New to Farm Fresh?{" "}
-                        <span className="text-emerald-700">Create an account</span>
+                        <span className="font-black text-emerald-700">Create an account</span>
                       </>
                     ) : (
                       <>
                         Already have an account?{" "}
-                        <span className="text-emerald-700">Sign in</span>
+                        <span className="font-black text-emerald-700">Sign in</span>
                       </>
                     )}
                   </button>
                 )}
               </div>
 
-              {/* Trust footer */}
-              <div className="mt-7 grid grid-cols-3 gap-2 border-t border-slate-100 pt-5">
+              {/* Trust strip */}
+              <div className="mt-6 grid grid-cols-3 gap-2 border-t border-slate-100 pt-5">
                 {[
                   ["🥛", "Fresh"],
                   ["🚚", "Daily"],
                   ["💚", "Reliable"],
                 ].map(([icon, label]) => (
-                  <div key={label} className="text-center">
-                    <div className="text-lg">{icon}</div>
-                    <p className="mt-1 text-[9px] font-black uppercase tracking-wider text-slate-400">
+                  <div
+                    key={label}
+                    className="rounded-2xl bg-slate-50/80 py-2.5 text-center transition hover:bg-emerald-50"
+                  >
+                    <div className="text-base">{icon}</div>
+                    <p className="mt-1 text-[8px] font-black uppercase tracking-[.16em] text-slate-400">
                       {label}
                     </p>
                   </div>
@@ -563,14 +627,19 @@ export default function Auth() {
               </div>
 
               <button
+                type="button"
                 onClick={() => navigate("/")}
-                className="mt-5 w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 text-xs font-black text-slate-500 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                className="mt-4 min-h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 text-[11px] font-black text-slate-500 transition active:scale-[.98] hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
               >
                 ← Back to Farm Fresh Dairy
               </button>
             </div>
           </div>
         </section>
+
+        <p className="mt-4 text-center text-[9px] font-bold text-slate-400">
+          Fresh milk • Easy ordering • Doorstep delivery
+        </p>
       </main>
     </div>
   );
@@ -580,26 +649,68 @@ function ModernInput({
   label,
   icon,
   type = "text",
+  inputMode,
   placeholder,
   value,
   onChange,
+  autoComplete,
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-[.12em] text-slate-400">
+      <span className="mb-1.5 ml-1 block text-[9px] font-black uppercase tracking-[.14em] text-slate-400">
         {label}
       </span>
-      <div className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 transition-all duration-300 focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-50">
-        <span className="text-base opacity-70 transition group-focus-within:scale-110 group-focus-within:opacity-100">
+
+      <div className="group flex min-h-[52px] items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 transition-all duration-300 focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-50 focus-within:shadow-sm">
+        <span className="shrink-0 text-base opacity-70 transition duration-300 group-focus-within:scale-110 group-focus-within:opacity-100">
           {icon}
         </span>
+
         <input
           type={type}
+          inputMode={inputMode}
           placeholder={placeholder}
           value={value}
           onChange={onChange}
-          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+          autoComplete={autoComplete}
+          className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-slate-800 outline-none placeholder:text-slate-400"
         />
+      </div>
+    </label>
+  );
+}
+
+function PasswordInput({ value, onChange }) {
+  const [show, setShow] = useState(false);
+
+  return (
+    <label className="block">
+      <span className="mb-1.5 ml-1 block text-[9px] font-black uppercase tracking-[.14em] text-slate-400">
+        Password
+      </span>
+
+      <div className="group flex min-h-[52px] items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 transition-all duration-300 focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-50 focus-within:shadow-sm">
+        <span className="shrink-0 text-base opacity-70 transition duration-300 group-focus-within:scale-110 group-focus-within:opacity-100">
+          🔒
+        </span>
+
+        <input
+          type={show ? "text" : "password"}
+          placeholder="Enter your password"
+          value={value}
+          onChange={onChange}
+          autoComplete="current-password"
+          className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+        />
+
+        <button
+          type="button"
+          onClick={() => setShow((prev) => !prev)}
+          className="shrink-0 rounded-lg px-2 py-1.5 text-[10px] font-black text-slate-400 transition active:scale-95 hover:bg-white hover:text-emerald-700"
+          aria-label={show ? "Hide password" : "Show password"}
+        >
+          {show ? "Hide" : "Show"}
+        </button>
       </div>
     </label>
   );

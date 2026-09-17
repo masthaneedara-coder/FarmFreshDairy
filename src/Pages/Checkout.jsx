@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import {
   fetchCart,
   placeOrder,
+  createPaymentOrder,
+  verifyPayment,
 } from "../config/api";
 import {
   getCustomerName,
@@ -101,37 +103,92 @@ console.log("Cart Length:", res?.cart?.length);
   return cart.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 }, [cart]);
 
-    const openRazorpay = () => {
-  const options = {
-    key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+    const openRazorpay = async () => {
+      try {
+        if (!window.Razorpay) {
+          throw new Error(
+            "Razorpay Checkout is not loaded. Please refresh the page and try again."
+          );
+        }
 
-    amount: Math.round(total * 100),
+        const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
-    currency: "INR",
+        if (!key) {
+          throw new Error(
+            "Razorpay Key ID is missing. Please check VITE_RAZORPAY_KEY_ID."
+          );
+        }
 
-    name: "Farm Fresh Dairy",
+        setLoading(true);
 
-    description: "Milk & Grocery Order",
+        // Razorpay requires a server-created order_id for Standard Checkout.
+        const orderResponse = await createPaymentOrder(total);
+        const razorpayOrder = orderResponse?.order;
 
-    image: "/logo.png",
+        if (!razorpayOrder?.id) {
+          throw new Error(
+            "Unable to create Razorpay order. Please try again."
+          );
+        }
 
-    handler: function (response) {
-      alert("Payment Successful");
+        const options = {
+          key,
+          amount: razorpayOrder.amount,
+          currency: razorpayOrder.currency || "INR",
+          name: "Farm Fresh Dairy",
+          description: "Milk & Grocery Order",
+          image: "/logo.png",
+          order_id: razorpayOrder.id,
+          prefill: {
+            name: customerName,
+            contact: phone,
+            email: customer?.email || "",
+          },
+          theme: {
+            color: "#16a34a",
+          },
+          handler: async function (response) {
+            try {
+              console.log("Razorpay success:", response);
 
-      console.log(response);
+              const verification = await verifyPayment(response);
 
-      handlePlaceOrder(response.razorpay_payment_id);
-    },
+              if (!verification?.success) {
+                throw new Error("Payment verification failed.");
+              }
 
-    theme: {
-      color: "#16a34a",
-    },
-  };
+              await handlePlaceOrder(response.razorpay_payment_id);
+            } catch (error) {
+              console.error("Razorpay verification error:", error);
+              setLoading(false);
+              alert(error.message || "Payment verification failed.");
+            }
+          },
+          modal: {
+            ondismiss: function () {
+              setLoading(false);
+            },
+          },
+        };
 
-  const razor = new window.Razorpay(options);
+        const razor = new window.Razorpay(options);
 
-  razor.open();
-};
+        razor.on("payment.failed", function (response) {
+          console.error("Razorpay payment failed:", response.error);
+          setLoading(false);
+          alert(
+            response?.error?.description ||
+              "Payment failed. Please try again."
+          );
+        });
+
+        razor.open();
+      } catch (error) {
+        console.error("Razorpay checkout error:", error);
+        setLoading(false);
+        alert(error.message || "Unable to open Razorpay.");
+      }
+    };
 async function loadAddresses() {
   try {
     const customer = JSON.parse(
