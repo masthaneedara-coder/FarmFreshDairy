@@ -2,7 +2,6 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import logo from "../assets/logo.png";
 
-
 export async function generateMonthlyBillPDF(
   details,
   action = "download"
@@ -10,11 +9,33 @@ export async function generateMonthlyBillPDF(
   const doc = new jsPDF("p", "mm", "a4");
 
   const {
-    customer,
-    subscription,
-    bill,
-    deliveries,
-  } = details;
+    customer = {},
+    subscription = {},
+    bill = {},
+    deliveries = [],
+  } = details || {};
+
+  // =====================================================
+  // PAGE SETTINGS
+  // =====================================================
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const margin = 15;
+  const contentWidth = pageWidth - margin * 2;
+
+  // Farm Fresh colors
+  const GREEN = [22, 101, 52];
+  const DARK_GREEN = [20, 83, 45];
+  const LIGHT_GREEN = [220, 252, 231];
+  const VERY_LIGHT_GREEN = [240, 253, 244];
+
+  const DARK = [31, 41, 55];
+  const GRAY = [107, 114, 128];
+  const LIGHT_GRAY = [243, 244, 246];
+  const BORDER = [229, 231, 235];
+  const WHITE = [255, 255, 255];
 
   // =====================================================
   // LOGO
@@ -25,314 +46,635 @@ export async function generateMonthlyBillPDF(
 
   await new Promise((resolve) => {
     img.onload = resolve;
+    img.onerror = resolve;
   });
 
   // =====================================================
-  // PAGE SETTINGS
+  // HELPERS
   // =====================================================
 
-  const pageWidth =
-    doc.internal.pageSize.getWidth();
+  const money = (value) =>
+    `Rs. ${Number(value || 0).toFixed(2)}`;
 
-  const pageHeight =
-    doc.internal.pageSize.getHeight();
+  const formatDate = (value) => {
+    if (!value) return "-";
 
-  const leftMargin = 15;
-  const rightMargin = 15;
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return String(value);
+    }
+
+    return date.toLocaleDateString("en-IN");
+  };
+
+  const normalizeSize = (value) => {
+    const size = String(value || "").trim();
+
+    const normalized = size
+      .toLowerCase()
+      .replace(/\s+/g, "");
+
+    if (
+      normalized === "1l" ||
+      normalized === "1ltr" ||
+      normalized === "1liter" ||
+      normalized === "1litre"
+    ) {
+      return "1 Ltr";
+    }
+
+    if (
+      normalized === "500ml" ||
+      normalized === "500milliliter" ||
+      normalized === "500milliliters"
+    ) {
+      return "500 ml";
+    }
+
+    if (
+      normalized === "2l" ||
+      normalized === "2ltr"
+    ) {
+      return "2 Ltr";
+    }
+
+    if (
+      normalized === "5l" ||
+      normalized === "5ltr"
+    ) {
+      return "5 Ltr";
+    }
+
+    if (
+      normalized === "20l" ||
+      normalized === "20ltr"
+    ) {
+      return "20 Ltr";
+    }
+
+    return size || "-";
+  };
+
+  const drawRoundedCard = (
+    x,
+    y,
+    width,
+    height,
+    fillColor = WHITE,
+    borderColor = BORDER,
+    radius = 3
+  ) => {
+    doc.setFillColor(...fillColor);
+    doc.setDrawColor(...borderColor);
+    doc.setLineWidth(0.3);
+
+    doc.roundedRect(
+      x,
+      y,
+      width,
+      height,
+      radius,
+      radius,
+      "FD"
+    );
+  };
+
+  const drawLabelValue = (
+    label,
+    value,
+    x,
+    y,
+    valueX = x + 28
+  ) => {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...GRAY);
+
+    doc.text(label, x, y);
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...DARK);
+
+    doc.text(
+      String(value || "-"),
+      valueX,
+      y
+    );
+  };
 
   // =====================================================
   // HEADER
   // =====================================================
 
-  doc.addImage(
-    img,
-    "PNG",
-    15,
-    12,
-    18,
-    18
+  doc.setFillColor(...GREEN);
+
+  doc.roundedRect(
+    margin,
+    10,
+    contentWidth,
+    27,
+    5,
+    5,
+    "F"
   );
 
-  doc.setFontSize(20);
-  doc.setTextColor(22, 101, 52);
+  // Logo white area
+  doc.setFillColor(...WHITE);
+
+  doc.circle(
+    margin + 14,
+    23.5,
+    9,
+    "F"
+  );
+
+  if (img.width && img.height) {
+    doc.addImage(
+      img,
+      "PNG",
+      margin + 6,
+      15.5,
+      16,
+      16
+    );
+  }
+
+  // Brand
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(...WHITE);
 
   doc.text(
     "Farm Fresh Dairy",
-    pageWidth / 2,
-    18,
-    {
-      align: "center",
-    }
+    margin + 28,
+    21
   );
 
-  doc.setFontSize(11);
-  doc.setTextColor(100);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+
+  doc.setTextColor(
+    220,
+    252,
+    231
+  );
 
   doc.text(
     "Pure Fresh Buffalo Milk",
-    pageWidth / 2,
-    25,
-    {
-      align: "center",
-    }
+    margin + 28,
+    27
   );
 
-  doc.setDrawColor(180);
-  doc.line(
-    leftMargin,
-    30,
-    pageWidth - rightMargin,
-    30
+  // Invoice badge
+  doc.setFillColor(...WHITE);
+
+  doc.roundedRect(
+    pageWidth - margin - 39,
+    16,
+    32,
+    15,
+    3,
+    3,
+    "F"
   );
 
-  // =====================================================
-  // MONTHLY BILL
-  // =====================================================
-
-  doc.setFontSize(16);
-  doc.setTextColor(0);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...GREEN);
 
   doc.text(
     "MONTHLY BILL",
-    leftMargin,
-    40
+    pageWidth - margin - 23,
+    22,
+    { align: "center" }
   );
 
-  doc.setFontSize(11);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.5);
 
   doc.text(
-    `Month : ${bill.month}/${bill.year}`,
-    leftMargin,
-    48
-  );
-
-  doc.text(
-    `Generated : ${new Date(
-      bill.generated_at
-    ).toLocaleDateString()}`,
-    120,
-    48
+    `${bill.month}/${bill.year}`,
+    pageWidth - margin - 23,
+    27,
+    { align: "center" }
   );
 
   // =====================================================
-  // CUSTOMER
+  // BILL INFORMATION
   // =====================================================
 
-  doc.setFontSize(13);
-  doc.setTextColor(0);
+  let y = 45;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(...DARK);
 
   doc.text(
-    "Customer",
-    leftMargin,
-    60
+    "Monthly Billing Statement",
+    margin,
+    y
   );
 
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...GRAY);
+
+  doc.text(
+    `Generated on ${formatDate(bill.generated_at)}`,
+    pageWidth - margin,
+    y,
+    { align: "right" }
+  );
+
+  y += 7;
+
+  doc.setDrawColor(...BORDER);
+  doc.line(
+    margin,
+    y,
+    pageWidth - margin,
+    y
+  );
+
+  y += 7;
+
+  // =====================================================
+  // CUSTOMER CARD
+  // =====================================================
+
+  const cardGap = 6;
+  const cardWidth =
+    (contentWidth - cardGap) / 2;
+
+  const cardHeight = 42;
+
+  drawRoundedCard(
+    margin,
+    y,
+    cardWidth,
+    cardHeight,
+    WHITE,
+    BORDER
+  );
+
+  drawRoundedCard(
+    margin + cardWidth + cardGap,
+    y,
+    cardWidth,
+    cardHeight,
+    VERY_LIGHT_GREEN,
+    [187, 247, 208]
+  );
+
+  // Customer title
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
+  doc.setTextColor(...GREEN);
 
   doc.text(
-    `Name : ${customer.full_name || "-"}`,
-    leftMargin,
-    67
+    "CUSTOMER",
+    margin + 7,
+    y + 9
   );
 
-  doc.text(
-    `Phone : ${customer.phone || "-"}`,
-    leftMargin,
-    73
+  // Customer data
+  drawLabelValue(
+    "Name",
+    customer.full_name,
+    margin + 7,
+    y + 17,
+    margin + 30
   );
 
-  doc.text(
-    `Email : ${customer.email || "-"}`,
-    leftMargin,
-    79
+  drawLabelValue(
+    "Phone",
+    customer.phone,
+    margin + 7,
+    y + 24,
+    margin + 30
   );
 
-  // =====================================================
-  // SUBSCRIPTION
-  // =====================================================
-
-  doc.setFontSize(13);
-
-  doc.text(
-    "Subscription",
-    120,
-    60
+  drawLabelValue(
+    "Email",
+    customer.email,
+    margin + 7,
+    y + 31,
+    margin + 30
   );
 
+  // Subscription card
+  const subscriptionX =
+    margin + cardWidth + cardGap;
+
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
+  doc.setTextColor(...GREEN);
 
   doc.text(
-    `Status : ${subscription.status || "-"}`,
-    120,
-    67
+    "SUBSCRIPTION",
+    subscriptionX + 7,
+    y + 9
   );
 
-  doc.text(
-    `Frequency : ${subscription.frequency || "-"}`,
-    120,
-    73
+  drawLabelValue(
+    "Status",
+    subscription.status,
+    subscriptionX + 7,
+    y + 17,
+    subscriptionX + 35
   );
 
-  doc.text(
-    `Delivery : ${subscription.delivery_time || "-"}`,
-    120,
-    79
+  drawLabelValue(
+    "Frequency",
+    subscription.frequency,
+    subscriptionX + 7,
+    y + 24,
+    subscriptionX + 35
   );
+
+  drawLabelValue(
+    "Delivery",
+    subscription.delivery_time,
+    subscriptionX + 7,
+    y + 31,
+    subscriptionX + 35
+  );
+
+  y += cardHeight + 9;
 
   // =====================================================
-  // DELIVERY TABLE DATA
+  // DELIVERY DATA
   // =====================================================
 
   const rows = [];
 
-  (deliveries || []).forEach((delivery) => {
-
+  deliveries.forEach((delivery) => {
     const items =
       delivery.subscription_delivery_items || [];
 
     items.forEach((item) => {
-
       rows.push([
-        delivery.delivery_date
-          ? new Date(
-              delivery.delivery_date
-            ).toLocaleDateString()
-          : "-",
+        formatDate(
+          delivery.delivery_date
+        ),
 
         item.products?.name || "-",
 
-        item.size || "-",
+        normalizeSize(item.size),
 
-        item.quantity ?? 0,
+        Number(item.quantity || 0),
 
-        `Rs. ${Number(
-          item.unit_price || 0
-        ).toFixed(2)}`,
+        money(item.unit_price),
 
-        `Rs. ${Number(
-          item.total_price || 0
-        ).toFixed(2)}`,
+        money(item.total_price),
 
         delivery.status || "-",
       ]);
-
     });
-
   });
+
+  // =====================================================
+  // DELIVERY SECTION TITLE
+  // =====================================================
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...DARK);
+
+  doc.text(
+    "Delivery Details",
+    margin,
+    y
+  );
+
+  y += 4;
 
   // =====================================================
   // DELIVERY TABLE
   // =====================================================
 
   autoTable(doc, {
-  startY: 90,
+    startY: y,
 
-  margin: {
-    left: 10,
-    right: 10,
-  },
-
-  tableWidth: "auto",
-
-  head: [[
-    "Date",
-    "Product",
-    "Size",
-    "Qty",
-    "Rate",
-    "Amount",
-    "Status",
-  ]],
-
-  body: rows,
-
-  styles: {
-    fontSize: 8,
-    cellPadding: 2,
-    overflow: "linebreak",
-    valign: "middle",
-  },
-
-  columnStyles: {
-    0: {
-      cellWidth: 24,
+    margin: {
+      left: margin,
+      right: margin,
     },
-    1: {
-      cellWidth: 45,
+
+    tableWidth: contentWidth,
+
+    head: [[
+      "Date",
+      "Product",
+      "Size",
+      "Qty",
+      "Rate",
+      "Amount",
+      "Status",
+    ]],
+
+    body: rows,
+
+    theme: "grid",
+
+    styles: {
+      font: "helvetica",
+      fontSize: 7.5,
+      cellPadding: 2.4,
+      textColor: DARK,
+      lineColor: BORDER,
+      lineWidth: 0.25,
+      valign: "middle",
     },
-    2: {
-      cellWidth: 20,
-    },
-    3: {
-      cellWidth: 15,
+
+    headStyles: {
+      fillColor: GREEN,
+      textColor: WHITE,
+      fontStyle: "bold",
+      fontSize: 7.5,
       halign: "center",
+      lineColor: GREEN,
     },
-    4: {
-      cellWidth: 22,
-    },
-    5: {
-      cellWidth: 25,
-    },
-    6: {
-      cellWidth: 25,
-    },
-  },
 
-  headStyles: {
-    fillColor: [22, 101, 52],
-    fontSize: 8,
-  },
+    bodyStyles: {
+      minCellHeight: 7,
+    },
 
-  alternateRowStyles: {
-    fillColor: [245, 245, 245],
-  },
-});
+    alternateRowStyles: {
+      fillColor: [249, 250, 251],
+    },
+
+    columnStyles: {
+      0: {
+        cellWidth: 24,
+        halign: "center",
+      },
+
+      1: {
+        cellWidth: 39,
+      },
+
+      2: {
+        cellWidth: 20,
+        halign: "center",
+      },
+
+      3: {
+        cellWidth: 13,
+        halign: "center",
+      },
+
+      4: {
+        cellWidth: 23,
+        halign: "right",
+      },
+
+      5: {
+        cellWidth: 25,
+        halign: "right",
+      },
+
+      6: {
+        cellWidth: 25,
+        halign: "center",
+      },
+    },
+
+    didParseCell(data) {
+      if (
+        data.section === "body" &&
+        data.column.index === 6
+      ) {
+        const status =
+          String(data.cell.raw || "")
+            .toLowerCase();
+
+        if (status === "delivered") {
+          data.cell.styles.textColor =
+            GREEN;
+          data.cell.styles.fontStyle =
+            "bold";
+        }
+
+        if (status === "missed") {
+          data.cell.styles.textColor =
+            [185, 28, 28];
+          data.cell.styles.fontStyle =
+            "bold";
+        }
+      }
+    },
+  });
+
   // =====================================================
-  // BILL SUMMARY
+  // BILL SUMMARY CALCULATION
   // =====================================================
 
-  let y =
-    doc.lastAutoTable.finalY + 10;
-
-  // Calculate summary
   let deliveredDays = 0;
   let missedDays = 0;
   let subtotal = 0;
 
-  (deliveries || []).forEach(
-    (delivery) => {
+  const sizeSummaryMap =
+    new Map();
 
-      if (
-        delivery.status ===
-        "Delivered"
-      ) {
+  deliveries.forEach((delivery) => {
 
-        deliveredDays++;
+    if (delivery.status === "Delivered") {
 
-        const items =
-          delivery.subscription_delivery_items || [];
+      deliveredDays++;
 
-        items.forEach((item) => {
+      const items =
+        delivery.subscription_delivery_items || [];
 
-          subtotal += Number(
-            item.total_price || 0
-          );
+      items.forEach((item) => {
 
-        });
+        const quantity =
+          Number(item.quantity || 0);
 
-      }
+        const rate =
+          Number(item.unit_price || 0);
 
-      if (
-        delivery.status ===
-        "Missed"
-      ) {
+        const amount =
+          Number(item.total_price || 0);
 
-        missedDays++;
+        subtotal += amount;
 
-      }
+        const size =
+          normalizeSize(item.size);
 
+        const key =
+          `${size}_${rate}`;
+
+        if (!sizeSummaryMap.has(key)) {
+
+          sizeSummaryMap.set(key, {
+            size,
+            quantity: 0,
+            rate,
+            amount: 0,
+          });
+
+        }
+
+        const summary =
+          sizeSummaryMap.get(key);
+
+        summary.quantity += quantity;
+        summary.amount += amount;
+
+      });
     }
-  );
+
+    if (delivery.status === "Missed") {
+      missedDays++;
+    }
+
+  });
+
+  const sizeSummary =
+    Array.from(
+      sizeSummaryMap.values()
+    );
+
+  // Sort by size
+  sizeSummary.sort((a, b) => {
+
+    const sizeToMl = (size) => {
+
+      const normalized =
+        String(size)
+          .toLowerCase()
+          .replace(/\s+/g, "");
+
+      if (normalized === "500ml") {
+        return 500;
+      }
+
+      if (normalized === "1ltr") {
+        return 1000;
+      }
+
+      if (normalized === "2ltr") {
+        return 2000;
+      }
+
+      if (normalized === "5ltr") {
+        return 5000;
+      }
+
+      if (normalized === "20ltr") {
+        return 20000;
+      }
+
+      return 999999;
+    };
+
+    return (
+      sizeToMl(a.size) -
+      sizeToMl(b.size)
+    );
+  });
 
   const discount =
     Number(bill.discount || 0);
@@ -341,141 +683,369 @@ export async function generateMonthlyBillPDF(
     subtotal - discount;
 
   // =====================================================
-  // IMPORTANT:
-  // IF SUMMARY DOES NOT FIT ON CURRENT PAGE,
-  // CREATE NEW PAGE
+  // SUMMARY POSITION
   // =====================================================
 
-  if (y > pageHeight - 65) {
+  y =
+    doc.lastAutoTable.finalY + 10;
 
+  // Enough space for summary
+  const summaryHeight =
+    65 +
+    sizeSummary.length * 7;
+
+  if (
+    y + summaryHeight >
+    pageHeight - 20
+  ) {
     doc.addPage();
 
     y = 20;
-
   }
 
   // =====================================================
-  // SUMMARY TITLE
+  // SUMMARY HEADER
   // =====================================================
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(...DARK);
+
+  doc.text(
+    "Billing Summary",
+    margin,
+    y
+  );
+
+  y += 7;
+
+  // =====================================================
+  // SUMMARY CARD
+  // =====================================================
+
+  const summaryCardHeight =
+    48 +
+    sizeSummary.length * 7;
+
+  drawRoundedCard(
+    margin,
+    y,
+    contentWidth,
+    summaryCardHeight,
+    WHITE,
+    BORDER
+  );
+
+  let summaryY = y + 9;
+
+  // Delivered / Missed
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(...GRAY);
+
+  doc.text(
+    "Delivered Days",
+    margin + 7,
+    summaryY
+  );
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...DARK);
+
+  doc.text(
+    String(deliveredDays),
+    margin + 47,
+    summaryY
+  );
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...GRAY);
+
+  doc.text(
+    "Missed Days",
+    margin + 65,
+    summaryY
+  );
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...DARK);
+
+  doc.text(
+    String(missedDays),
+    margin + 100,
+    summaryY
+  );
+
+  summaryY += 8;
+
+  // Divider
+  doc.setDrawColor(...BORDER);
+
+  doc.line(
+    margin + 7,
+    summaryY - 3,
+    pageWidth - margin - 7,
+    summaryY - 3
+  );
+
+  // =====================================================
+  // SIZE-WISE BILLING
+  // =====================================================
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...GREEN);
+
+  doc.text(
+    "SIZE-WISE BILLING",
+    margin + 7,
+    summaryY + 3
+  );
+
+  summaryY += 10;
+
+  sizeSummary.forEach((item) => {
+
+    // Size
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...DARK);
+
+    doc.text(
+      item.size,
+      margin + 7,
+      summaryY
+    );
+
+    // Quantity
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...GRAY);
+
+    doc.text(
+      `${item.quantity} × ${money(item.rate)}`,
+      margin + 50,
+      summaryY
+    );
+
+    // Amount
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...DARK);
+
+    doc.text(
+      money(item.amount),
+      pageWidth - margin - 8,
+      summaryY,
+      { align: "right" }
+    );
+
+    summaryY += 7;
+  });
+
+  // Divider
+  doc.setDrawColor(...BORDER);
+
+  doc.line(
+    margin + 7,
+    summaryY - 3,
+    pageWidth - margin - 7,
+    summaryY - 3
+  );
+
+  summaryY += 5;
+
+  // Subtotal
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(...GRAY);
+
+  doc.text(
+    "Subtotal",
+    pageWidth - margin - 55,
+    summaryY
+  );
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...DARK);
+
+  doc.text(
+    money(subtotal),
+    pageWidth - margin - 8,
+    summaryY,
+    { align: "right" }
+  );
+
+  summaryY += 6;
+
+  // Discount
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...GRAY);
+
+  doc.text(
+    "Discount",
+    pageWidth - margin - 55,
+    summaryY
+  );
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...DARK);
+
+  doc.text(
+    money(discount),
+    pageWidth - margin - 8,
+    summaryY,
+    { align: "right" }
+  );
+
+  // =====================================================
+  // GRAND TOTAL CARD
+  // =====================================================
+
+  summaryY += 7;
+
+  doc.setFillColor(...GREEN);
+
+  doc.roundedRect(
+    margin + 5,
+    summaryY - 4,
+    contentWidth - 10,
+    15,
+    3,
+    3,
+    "F"
+  );
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...WHITE);
+
+  doc.text(
+    "GRAND TOTAL",
+    margin + 12,
+    summaryY + 5
+  );
 
   doc.setFontSize(14);
-  doc.setTextColor(0);
 
   doc.text(
-    "Bill Summary",
-    leftMargin,
-    y
+    money(grandTotal),
+    pageWidth - margin - 12,
+    summaryY + 5,
+    { align: "right" }
   );
 
-  y += 9;
+  y =
+    summaryY + 19;
 
   // =====================================================
-  // SUMMARY DETAILS
+  // PAYMENT STATUS
   // =====================================================
 
-  doc.setFontSize(10);
-  doc.setTextColor(40);
+  if (
+    y + 25 >
+    pageHeight - 20
+  ) {
+    doc.addPage();
 
-  doc.text(
-    `Delivered Days : ${deliveredDays}`,
-    leftMargin,
-    y
-  );
+    y = 20;
+  }
 
-  y += 6;
-
-  doc.text(
-    `Missed Days : ${missedDays}`,
-    leftMargin,
-    y
-  );
-
-  y += 6;
-
-  doc.text(
-    `Subtotal : Rs. ${subtotal.toFixed(2)}`,
-    leftMargin,
-    y
-  );
-
-  y += 6;
-
-  doc.text(
-    `Discount : Rs. ${discount.toFixed(2)}`,
-    leftMargin,
-    y
-  );
-
-  y += 8;
-
-  // =====================================================
-  // GRAND TOTAL
-  // =====================================================
-
-  doc.setFontSize(13);
-  doc.setTextColor(
-    22,
-    101,
-    52
-  );
-
-  doc.text(
-    `Grand Total : Rs. ${grandTotal.toFixed(2)}`,
-    leftMargin,
-    y
-  );
-
-  y += 12;
-
-  // =====================================================
-  // PAYMENT
-  // =====================================================
-
-  doc.setFontSize(13);
-  doc.setTextColor(0);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...DARK);
 
   doc.text(
     "Payment",
-    leftMargin,
+    margin,
     y
   );
 
-  y += 8;
+  y += 7;
 
-  doc.setFontSize(10);
+  const paymentStatus =
+    String(
+      bill.payment_status || "Pending"
+    );
+
+  const isPaid =
+    paymentStatus.toLowerCase() ===
+    "paid";
+
+  const statusWidth = 35;
+
+  doc.setFillColor(
+    ...(isPaid
+      ? LIGHT_GREEN
+      : [254, 249, 195])
+  );
+
+  doc.setDrawColor(
+    ...(isPaid
+      ? [187, 247, 208]
+      : [253, 230, 138])
+  );
+
+  doc.roundedRect(
+    margin,
+    y - 5,
+    statusWidth,
+    10,
+    4,
+    4,
+    "FD"
+  );
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+
+  doc.setTextColor(
+    ...(isPaid
+      ? GREEN
+      : [161, 98, 7])
+  );
 
   doc.text(
-    `Status : ${bill.payment_status || "-"}`,
-    leftMargin,
-    y
+    isPaid
+      ? "● PAID"
+      : "● PENDING",
+    margin + statusWidth / 2,
+    y + 1,
+    { align: "center" }
   );
 
   // =====================================================
-  // THANK YOU
+  // FOOTER
   // =====================================================
 
-  y += 15;
+  const footerY =
+    pageHeight - 15;
 
-  // Check again before placing thank-you text
+  doc.setDrawColor(...BORDER);
 
-  if (y > pageHeight - 15) {
+  doc.line(
+    margin,
+    footerY - 5,
+    pageWidth - margin,
+    footerY - 5
+  );
 
-    doc.addPage();
-
-    y = 20;
-
-  }
-
-  doc.setFontSize(10);
-  doc.setTextColor(120);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...GRAY);
 
   doc.text(
     "Thank you for choosing Farm Fresh Dairy",
     pageWidth / 2,
-    y,
-    {
-      align: "center",
-    }
+    footerY,
+    { align: "center" }
+  );
+
+  doc.setFontSize(6.5);
+
+  doc.text(
+    "Freshness delivered to your doorstep",
+    pageWidth / 2,
+    footerY + 4,
+    { align: "center" }
   );
 
   // =====================================================
@@ -499,11 +1069,8 @@ export async function generateMonthlyBillPDF(
   // =====================================================
 
   if (action === "download") {
-
     doc.save(fileName);
-
     return;
-
   }
 
   // =====================================================
@@ -532,6 +1099,5 @@ export async function generateMonthlyBillPDF(
       };
 
     }
-
   }
 }

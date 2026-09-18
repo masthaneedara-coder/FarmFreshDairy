@@ -184,6 +184,10 @@ async function getProductSizePrice(productId, size) {
 export async function generateTodayDeliveriesService() {
   const today = new Date().toISOString().split("T")[0];
 
+  // ==========================================================
+  // GET ACTIVE SUBSCRIPTIONS
+  // ==========================================================
+
   const {
     data: subscriptions,
     error,
@@ -204,177 +208,41 @@ export async function generateTodayDeliveriesService() {
   const updated = [];
   let skipped = 0;
 
+  // ==========================================================
+  // PROCESS EACH SUBSCRIPTION
+  // ==========================================================
+
   for (const subscription of subscriptions || []) {
 
     console.log("=================================");
     console.log("CHECKING SUBSCRIPTION:", subscription.id);
+    console.log("Customer:", subscription.customer_id);
     console.log("Start:", subscription.start_date);
     console.log("End:", subscription.end_date);
     console.log("Frequency:", subscription.frequency);
     console.log("Paused:", subscription.is_paused);
+    console.log("Pause From:", subscription.pause_from);
+    console.log("Pause To:", subscription.pause_to);
     console.log("Today:", today);
 
-    // ==========================================
-    // 1. Check subscription eligibility
-    // ==========================================
+    // ========================================================
+    // 1. NORMAL DELIVERY ELIGIBILITY
+    // ========================================================
 
-    const eligible = shouldGenerateDelivery(
+    const normalEligible = shouldGenerateDelivery(
       subscription,
       today
     );
 
     console.log(
-      "ELIGIBLE:",
+      "NORMAL DELIVERY ELIGIBLE:",
       subscription.id,
-      eligible
+      normalEligible
     );
 
-    if (!eligible) {
-      skipped++;
-      continue;
-    }
-
-    // ==========================================
-    // 2. Check today's delivery
-    // ==========================================
-
-    const {
-      data: existingDelivery,
-      error: existingError,
-    } = await supabaseAdmin
-      .from("subscription_deliveries")
-      .select("id, delivery_number, status")
-      .eq("subscription_id", subscription.id)
-      .eq("delivery_date", today)
-      .maybeSingle();
-
-    if (existingError) {
-      throw existingError;
-    }
-
-    let delivery;
-
-    // ==========================================
-    // 3. If delivery already exists
-    // ==========================================
-
-    if (existingDelivery) {
-
-      console.log(
-        "TODAY'S DELIVERY ALREADY EXISTS:",
-        existingDelivery
-      );
-
-      delivery = existingDelivery;
-
-      // IMPORTANT:
-      // Do NOT skip here.
-      //
-      // We still need to sync approved Extra Milk.
-
-    } else {
-
-      // ==========================================
-      // 4. Create today's delivery
-      // ==========================================
-
-      const deliveryNumber =
-        await generateDeliveryNumber();
-
-      const {
-        data: newDelivery,
-        error: deliveryError,
-      } = await supabaseAdmin
-        .from("subscription_deliveries")
-       .insert({
-          delivery_number: deliveryNumber,
-          subscription_id: subscription.id,
-          customer_id: subscription.customer_id,
-          address_id: subscription.address_id,
-          delivery_date: today,
-          delivery_type: subscription.delivery_type,
-          status: "Pending",
-        })
-        .select()
-        .single();
-
-      if (deliveryError) {
-        console.error(
-          "Delivery Insert Error:",
-          deliveryError
-        );
-
-        throw deliveryError;
-      }
-
-      delivery = newDelivery;
-
-      console.log(
-        "NEW DELIVERY CREATED:",
-        delivery.id
-      );
-
-      // ==========================================
-      // 5. Insert normal subscription items
-      // ==========================================
-
-   const normalItems = [];
-
-for (const item of subscription.subscription_items || []) {
-  const quantity = Number(item.quantity || 0);
-
-  if (quantity <= 0) {
-    console.log(
-      "Skipping subscription item - invalid quantity:",
-      item
-    );
-    continue;
-  }
-
-  // Get the actual price for the selected size
-  // from product_sizes.
-  const unitPrice = await getProductSizePrice(
-    item.product_id,
-    item.size
-  );
-
-  console.log(
-    "SIZE PRICE:",
-    item.size,
-    "₹",
-    unitPrice
-  );
-
-  normalItems.push({
-    delivery_id: delivery.id,
-    product_id: item.product_id,
-    quantity,
-    size: item.size,
-    unit_price: unitPrice,
-    total_price: quantity * unitPrice,
-    is_extra: false,
-  });
-}
-
-      if (normalItems.length > 0) {
-
-        const {
-          error: itemError,
-        } = await supabaseAdmin
-          .from("subscription_delivery_items")
-          .insert(normalItems);
-
-        if (itemError) {
-          throw itemError;
-        }
-      }
-
-      created.push(delivery);
-    }
-
-    // ==========================================
-    // 6. Get approved Extra Milk for today
-    // ==========================================
+    // ========================================================
+    // 2. CHECK APPROVED EXTRA MILK FOR TODAY
+    // ========================================================
 
     const {
       data: extraMilkRequests,
@@ -406,185 +274,407 @@ for (const item of subscription.subscription_items || []) {
 
     console.log(
       "APPROVED EXTRA MILK:",
-      extraMilkRequests
+      extraMilkRequests || []
     );
 
-    // ==========================================
-    // 7. Insert approved Extra Milk
-    // ==========================================
+    // ========================================================
+    // 3. IF NORMAL DELIVERY IS NOT ELIGIBLE
+    //    BUT EXTRA MILK EXISTS
+    //    WE STILL NEED A DELIVERY RECORD
+    // ========================================================
 
-   // ==========================================
-// 7. Insert approved Extra Milk
-// ==========================================
+    if (
+      !normalEligible &&
+      (!extraMilkRequests ||
+        extraMilkRequests.length === 0)
+    ) {
+      console.log(
+        "SKIPPED: No normal delivery and no extra milk."
+      );
 
-for (const request of extraMilkRequests || []) {
+      skipped++;
+      continue;
+    }
 
-  console.log("--------------------------------");
-  console.log("PROCESSING EXTRA MILK REQUEST");
-  console.log("Request ID:", request.id);
-  console.log("Product:", request.products?.name);
-  console.log("Size:", request.size);
-  console.log("Quantity:", request.quantity);
+    // ========================================================
+    // 4. CHECK WHETHER TODAY'S DELIVERY ALREADY EXISTS
+    // ========================================================
 
-  // ------------------------------------------
-  // Check if this request is already added
-  // ------------------------------------------
+    const {
+      data: existingDelivery,
+      error: existingError,
+    } = await supabaseAdmin
+      .from("subscription_deliveries")
+      .select(
+        "id, delivery_number, status"
+      )
+      .eq(
+        "subscription_id",
+        subscription.id
+      )
+      .eq(
+        "delivery_date",
+        today
+      )
+      .maybeSingle();
 
-  const {
-    data: existingExtraItem,
-    error: existingExtraError,
-  } = await supabaseAdmin
-    .from("subscription_delivery_items")
-    .select("id")
-    .eq("delivery_id", delivery.id)
-    .eq("extra_milk_request_id", request.id)
-    .maybeSingle();
+    if (existingError) {
+      throw existingError;
+    }
 
-  if (existingExtraError) {
-    console.error(
-      "Existing Extra Item Check Error:",
-      existingExtraError
-    );
+    let delivery;
 
-    throw existingExtraError;
-  }
-
-  // Already added
-  if (existingExtraItem) {
-
-    console.log(
-      "EXTRA MILK ALREADY ADDED:",
-      request.id
-    );
-
-    continue;
-  }
-
-  // ------------------------------------------
-  // Calculate quantity
-  // ------------------------------------------
-
-  const quantity =
-    Number(request.quantity || 0);
-
-  if (quantity <= 0) {
-    console.log(
-      "Skipping Extra Milk - invalid quantity"
-    );
-
-    continue;
-  }
-
-  // ------------------------------------------
-  // Calculate price
-  // ------------------------------------------
-
-  let unitPrice = 0;
-
-  switch (request.size) {
-
-    case "250ml":
-      unitPrice =
-        Number(request.products?.price_250ml || 0);
-      break;
-
-    case "500ml":
-      unitPrice =
-        Number(request.products?.price_500ml || 0);
-      break;
-
-    case "1L":
-      unitPrice =
-        Number(
-          request.products?.price_1l ||
-          request.products?.price ||
-          0
-        );
-      break;
-
-    case "2L":
-      unitPrice =
-        Number(request.products?.price_2l || 0);
-      break;
-
-    case "3L":
-      unitPrice =
-        Number(request.products?.price_3l || 0);
-      break;
-
-    case "5L":
-      unitPrice =
-        Number(request.products?.price_5l || 0);
-      break;
-
-    default:
-      unitPrice =
-        Number(request.products?.price || 0);
-  }
-
-  // ------------------------------------------
-  // Create Extra Milk Item
-  // ------------------------------------------
-
-  const extraItem = {
-    delivery_id: delivery.id,
-
-    product_id: request.product_id,
-
-    quantity,
-
-    size: request.size,
-
-    unit_price: unitPrice,
-
-    total_price:
-      quantity * unitPrice,
-
-    is_extra: true,
-
-    extra_milk_request_id:
-      request.id,
-  };
-
-  console.log(
-    "INSERTING EXTRA MILK ITEM:",
-    extraItem
-  );
-
-  // ------------------------------------------
-  // Insert
-  // ------------------------------------------
-
-  const {
-    error: insertExtraError,
-  } = await supabaseAdmin
-    .from("subscription_delivery_items")
-    .insert(extraItem);
-
-  if (insertExtraError) {
-
-    console.error(
-      "Extra Milk Insert Error:",
-      insertExtraError
-    );
-
-    throw insertExtraError;
-  }
-
-  console.log(
-    "✅ EXTRA MILK ADDED:",
-    request.id
-  );
-}
-
-    // ==========================================
-    // 8. Mark delivery as updated
-    // ==========================================
+    // ========================================================
+    // 5. EXISTING DELIVERY
+    // ========================================================
 
     if (existingDelivery) {
+
+      console.log(
+        "TODAY'S DELIVERY ALREADY EXISTS:",
+        existingDelivery
+      );
+
+      delivery = existingDelivery;
+
       updated.push(delivery);
+
+    } else {
+
+      // ======================================================
+      // 6. CREATE TODAY'S DELIVERY
+      // ======================================================
+
+      const deliveryNumber =
+        await generateDeliveryNumber();
+
+      const {
+        data: newDelivery,
+        error: deliveryError,
+      } = await supabaseAdmin
+        .from("subscription_deliveries")
+        .insert({
+          delivery_number:
+            deliveryNumber,
+
+          subscription_id:
+            subscription.id,
+
+          customer_id:
+            subscription.customer_id,
+
+          address_id:
+            subscription.address_id,
+
+          delivery_date:
+            today,
+
+          delivery_type:
+            subscription.delivery_type,
+
+          status:
+            "Pending",
+        })
+        .select()
+        .single();
+
+      if (deliveryError) {
+
+        console.error(
+          "Delivery Insert Error:",
+          deliveryError
+        );
+
+        throw deliveryError;
+      }
+
+      delivery = newDelivery;
+
+      console.log(
+        "NEW DELIVERY CREATED:",
+        delivery.id
+      );
+
+      created.push(delivery);
+
+      // ======================================================
+      // 7. ADD NORMAL SUBSCRIPTION ITEMS
+      //    ONLY WHEN NORMAL DELIVERY IS ELIGIBLE
+      // ======================================================
+
+      if (normalEligible) {
+
+        const normalItems = [];
+
+        for (
+          const item
+          of subscription.subscription_items || []
+        ) {
+
+          const quantity =
+            Number(item.quantity || 0);
+
+          if (quantity <= 0) {
+
+            console.log(
+              "Skipping subscription item - invalid quantity:",
+              item
+            );
+
+            continue;
+          }
+
+          // ----------------------------------------------
+          // Get actual size-specific price
+          // ----------------------------------------------
+
+          const unitPrice =
+            await getProductSizePrice(
+              item.product_id,
+              item.size
+            );
+
+          console.log(
+            "NORMAL SIZE PRICE:",
+            item.size,
+            "₹",
+            unitPrice
+          );
+
+          normalItems.push({
+
+            delivery_id:
+              delivery.id,
+
+            product_id:
+              item.product_id,
+
+            quantity,
+
+            size:
+              item.size,
+
+            unit_price:
+              unitPrice,
+
+            total_price:
+              quantity * unitPrice,
+
+            is_extra:
+              false,
+
+          });
+        }
+
+        if (normalItems.length > 0) {
+
+          const {
+            error: itemError,
+          } = await supabaseAdmin
+            .from(
+              "subscription_delivery_items"
+            )
+            .insert(normalItems);
+
+          if (itemError) {
+            throw itemError;
+          }
+        }
+
+      } else {
+
+        console.log(
+          "SUBSCRIPTION PAUSED → NORMAL MILK NOT ADDED"
+        );
+      }
     }
+
+    // ========================================================
+    // 8. ADD APPROVED EXTRA MILK
+    // ========================================================
+
+    for (
+      const request
+      of extraMilkRequests || []
+    ) {
+
+      console.log("--------------------------------");
+      console.log(
+        "PROCESSING EXTRA MILK REQUEST"
+      );
+
+      console.log(
+        "Request ID:",
+        request.id
+      );
+
+      console.log(
+        "Product:",
+        request.products?.name
+      );
+
+      console.log(
+        "Size:",
+        request.size
+      );
+
+      console.log(
+        "Quantity:",
+        request.quantity
+      );
+
+      // ======================================================
+      // 9. PREVENT DUPLICATE EXTRA MILK
+      // ======================================================
+
+      const {
+        data: existingExtraItem,
+        error: existingExtraError,
+      } = await supabaseAdmin
+        .from(
+          "subscription_delivery_items"
+        )
+        .select("id")
+        .eq(
+          "delivery_id",
+          delivery.id
+        )
+        .eq(
+          "extra_milk_request_id",
+          request.id
+        )
+        .maybeSingle();
+
+      if (existingExtraError) {
+
+        console.error(
+          "Existing Extra Item Check Error:",
+          existingExtraError
+        );
+
+        throw existingExtraError;
+      }
+
+      if (existingExtraItem) {
+
+        console.log(
+          "EXTRA MILK ALREADY ADDED:",
+          request.id
+        );
+
+        continue;
+      }
+
+      // ======================================================
+      // 10. VALIDATE QUANTITY
+      // ======================================================
+
+      const quantity =
+        Number(request.quantity || 0);
+
+      if (quantity <= 0) {
+
+        console.log(
+          "Skipping Extra Milk - invalid quantity"
+        );
+
+        continue;
+      }
+
+      // ======================================================
+      // 11. GET ACTUAL SIZE PRICE
+      //    FROM product_sizes
+      // ======================================================
+
+      const unitPrice =
+        await getProductSizePrice(
+          request.product_id,
+          request.size
+        );
+
+      console.log(
+        "EXTRA MILK SIZE PRICE:",
+        request.size,
+        "₹",
+        unitPrice
+      );
+
+      // ======================================================
+      // 12. CREATE EXTRA MILK ITEM
+      // ======================================================
+
+      const extraItem = {
+
+        delivery_id:
+          delivery.id,
+
+        product_id:
+          request.product_id,
+
+        quantity,
+
+        size:
+          request.size,
+
+        unit_price:
+          unitPrice,
+
+        total_price:
+          quantity * unitPrice,
+
+        is_extra:
+          true,
+
+        extra_milk_request_id:
+          request.id,
+      };
+
+      console.log(
+        "INSERTING EXTRA MILK ITEM:",
+        extraItem
+      );
+
+      // ======================================================
+      // 13. INSERT EXTRA MILK
+      // ======================================================
+
+      const {
+        error: insertExtraError,
+      } = await supabaseAdmin
+        .from(
+          "subscription_delivery_items"
+        )
+        .insert(extraItem);
+
+      if (insertExtraError) {
+
+        console.error(
+          "Extra Milk Insert Error:",
+          insertExtraError
+        );
+
+        throw insertExtraError;
+      }
+
+      console.log(
+        "✅ EXTRA MILK ADDED:",
+        request.id
+      );
+    }
+
+    // ========================================================
+    // 14. LOG RESULT
+    // ========================================================
+
+    console.log(
+      "✅ DELIVERY PROCESSING COMPLETE:",
+      delivery.id
+    );
   }
+
+  // ==========================================================
+  // RETURN
+  // ==========================================================
 
   return {
     created,
