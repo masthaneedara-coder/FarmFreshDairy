@@ -249,10 +249,7 @@ export async function bulkAssignSubscriptionDeliveries(
 
   }
 }
-export async function updateSubscriptionDeliveryStatus(
-  req,
-  res
-) {
+export async function updateSubscriptionDeliveryStatus(req, res) {
   try {
     const { deliveryId } = req.params;
     const { status } = req.body;
@@ -271,12 +268,197 @@ export async function updateSubscriptionDeliveryStatus(
       });
     }
 
-    const { data, error } = await supabaseAdmin
+    // ==========================================
+    // ALLOWED STATUS CHANGES
+    // ==========================================
+
+    const allowedStatuses = [
+      "Pending",
+      "Assigned",
+      "Out for Delivery",
+      "Delivered",
+      "Skipped",
+      "Cancelled",
+      "Missed",
+      "Failed",
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid delivery status: ${status}`,
+      });
+    }
+
+    // ==========================================
+    // GET CURRENT DELIVERY
+    // ==========================================
+
+    const {
+      data: currentDelivery,
+      error: currentError,
+    } = await supabaseAdmin
       .from("subscription_deliveries")
-      .update({
-        status,
-        updated_at: new Date().toISOString(),
-      })
+      .select(
+        "id, status, delivery_boy_id, delivery_date"
+      )
+      .eq("id", deliveryId)
+      .single();
+
+    if (currentError) {
+      throw currentError;
+    }
+
+    if (!currentDelivery) {
+      return res.status(404).json({
+        success: false,
+        message: "Delivery not found.",
+      });
+    }
+
+    // ==========================================
+    // PROTECT COMPLETED DELIVERIES
+    // ==========================================
+
+    if (
+      currentDelivery.status === "Delivered" &&
+      status !== "Delivered"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "A delivered order cannot be changed.",
+      });
+    }
+
+    // ==========================================
+    // SKIP TODAY
+    // ==========================================
+
+    if (status === "Skipped") {
+
+      if (
+        currentDelivery.status === "Delivered"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Delivered delivery cannot be skipped.",
+        });
+      }
+
+      if (
+        currentDelivery.status ===
+        "Out for Delivery"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Delivery is already out for delivery and cannot be skipped.",
+        });
+      }
+
+      const {
+        data,
+        error,
+      } = await supabaseAdmin
+        .from("subscription_deliveries")
+        .update({
+          status: "Skipped",
+
+          // Remove delivery boy assignment
+          delivery_boy_id: null,
+
+          // Clear assignment timestamp
+          assigned_at: null,
+
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq("id", deliveryId)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return res.json({
+        success: true,
+        message:
+          "Today's delivery skipped successfully.",
+        delivery: data,
+      });
+    }
+
+    // ==========================================
+    // RESTORE TODAY
+    // ==========================================
+
+    if (
+      status === "Pending" &&
+      currentDelivery.status === "Skipped"
+    ) {
+
+      const {
+        data,
+        error,
+      } = await supabaseAdmin
+        .from("subscription_deliveries")
+        .update({
+          status: "Pending",
+
+          // Restored delivery starts unassigned
+          delivery_boy_id: null,
+
+          assigned_at: null,
+
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq("id", deliveryId)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return res.json({
+        success: true,
+        message:
+          "Today's delivery restored successfully.",
+        delivery: data,
+      });
+    }
+
+    // ==========================================
+    // NORMAL STATUS UPDATE
+    // ==========================================
+
+    const updateData = {
+      status,
+      updated_at:
+        new Date().toISOString(),
+    };
+
+    // When manually changing to Pending,
+    // make sure it is unassigned.
+    if (status === "Pending") {
+      updateData.delivery_boy_id = null;
+      updateData.assigned_at = null;
+    }
+
+    // ==========================================
+    // UPDATE
+    // ==========================================
+
+    const {
+      data,
+      error,
+    } = await supabaseAdmin
+      .from("subscription_deliveries")
+      .update(updateData)
       .eq("id", deliveryId)
       .select()
       .single();
@@ -287,11 +469,13 @@ export async function updateSubscriptionDeliveryStatus(
 
     return res.json({
       success: true,
-      message: "Subscription delivery status updated",
+      message:
+        "Subscription delivery status updated.",
       delivery: data,
     });
 
   } catch (err) {
+
     console.error(
       "Update Subscription Delivery Status Error:",
       err

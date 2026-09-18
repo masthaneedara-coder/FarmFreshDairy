@@ -113,6 +113,86 @@ export default function AdminSubscriptionDeliveries() {
       alert(err.message);
     }
   }
+  async function handleSkipToday(delivery) {
+  if (
+    delivery.status === "Delivered" ||
+    delivery.status === "Out for Delivery"
+  ) {
+    alert(
+      "This delivery cannot be skipped because it is already delivered or out for delivery."
+    );
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Skip today's delivery for ${
+      delivery.customers?.full_name || "this customer"
+    }?`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setLoading(true);
+
+    await updateSubscriptionDeliveryStatus(
+      delivery.id,
+      "Skipped"
+    );
+
+    setSelectedDeliveries((previous) =>
+      previous.filter((id) => id !== delivery.id)
+    );
+
+    await loadDeliveries();
+  } catch (err) {
+    console.error("Skip Delivery Error:", err);
+
+    alert(
+      err.message ||
+        "Failed to skip today's delivery."
+    );
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function handleRestoreToday(delivery) {
+  if (delivery.status !== "Skipped") {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Restore today's delivery for ${
+      delivery.customers?.full_name || "this customer"
+    }?`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setLoading(true);
+
+    await updateSubscriptionDeliveryStatus(
+      delivery.id,
+      "Pending"
+    );
+
+    await loadDeliveries();
+  } catch (err) {
+    console.error(
+      "Restore Delivery Error:",
+      err
+    );
+
+    alert(
+      err.message ||
+        "Failed to restore today's delivery."
+    );
+  } finally {
+    setLoading(false);
+  }
+}
 
   // ==========================================
   // FILTER
@@ -156,6 +236,10 @@ export default function AdminSubscriptionDeliveries() {
       delivered: filtered.filter(
         (d) => d.status === "Delivered"
       ).length,
+
+      skipped: filtered.filter(
+        (d) => d.status === "Skipped"
+      ).length,
     };
   }, [filtered]);
 
@@ -163,13 +247,14 @@ export default function AdminSubscriptionDeliveries() {
   // SELECTABLE
   // ==========================================
 
+  const isDeliverySelectable = (delivery) =>
+    delivery.status !== "Delivered" &&
+    delivery.status !== "Cancelled" &&
+    delivery.status !== "Missed" &&
+    delivery.status !== "Skipped";
+
   const selectableDeliveries =
-    filtered.filter(
-      (delivery) =>
-        delivery.status !== "Delivered" &&
-        delivery.status !== "Cancelled" &&
-        delivery.status !== "Missed"
-    );
+    filtered.filter(isDeliverySelectable);
 
   const allSelected =
     selectableDeliveries.length > 0 &&
@@ -335,6 +420,12 @@ export default function AdminSubscriptionDeliveries() {
           badge:
             "bg-gray-100 text-gray-600 border-gray-200",
           dot: "bg-gray-400",
+        };
+        case "Skipped":
+        return {
+          badge:
+            "bg-orange-100 text-orange-700 border-orange-200",
+          dot: "bg-orange-500",
         };
 
       default:
@@ -613,7 +704,7 @@ export default function AdminSubscriptionDeliveries() {
             STATS
         ========================================== */}
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
 
           <StatCard
             icon="📦"
@@ -641,6 +732,13 @@ export default function AdminSubscriptionDeliveries() {
             label="Delivered"
             value={stats.delivered}
             delay="180ms"
+          />
+
+          <StatCard
+            icon="⏭️"
+            label="Skipped"
+            value={stats.skipped}
+            delay="240ms"
           />
 
         </div>
@@ -728,6 +826,9 @@ export default function AdminSubscriptionDeliveries() {
 
               <option value="Cancelled">
                 Cancelled
+              </option>
+              <option value="Skipped">
+                Skipped
               </option>
             </select>
 
@@ -985,10 +1086,7 @@ export default function AdminSubscriptionDeliveries() {
 
           {filtered.map((delivery, index) => {
 
-            const selectable =
-              delivery.status !== "Delivered" &&
-              delivery.status !== "Cancelled" &&
-              delivery.status !== "Missed";
+            const selectable = isDeliverySelectable(delivery);
 
             const checked =
               selectedDeliveries.includes(
@@ -1354,6 +1452,50 @@ export default function AdminSubscriptionDeliveries() {
                         ✓ Delivered
                       </button>
                     )}
+                    {(delivery.status === "Pending" ||
+  delivery.status === "Assigned") && (
+  <button
+    type="button"
+    onClick={() =>
+      handleSkipToday(delivery)
+    }
+    className="
+      py-2.5
+      rounded-xl
+      bg-orange-50
+      border border-orange-200
+      text-orange-700
+      font-bold
+      text-sm
+      active:scale-95
+      transition-all
+    "
+  >
+    ⏭ Skip Today
+  </button>
+)}
+
+{delivery.status === "Skipped" && (
+  <button
+    type="button"
+    onClick={() =>
+      handleRestoreToday(delivery)
+    }
+    className="
+      py-2.5
+      rounded-xl
+      bg-green-50
+      border border-green-200
+      text-green-700
+      font-bold
+      text-sm
+      active:scale-95
+      transition-all
+    "
+  >
+    ↩ Restore Today
+  </button>
+)}
 
                   </div>
 
@@ -1446,12 +1588,7 @@ export default function AdminSubscriptionDeliveries() {
                     (delivery, index) => {
 
                       const selectable =
-                        delivery.status !==
-                          "Delivered" &&
-                        delivery.status !==
-                          "Cancelled" &&
-                        delivery.status !==
-                          "Missed";
+                        isDeliverySelectable(delivery);
 
                       const checked =
                         selectedDeliveries.includes(
@@ -1615,6 +1752,51 @@ export default function AdminSubscriptionDeliveries() {
                             >
                               Assign
                             </button>
+
+                            {(delivery.status === "Pending" ||
+                              delivery.status === "Assigned") && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleSkipToday(delivery)
+                                }
+                                className="
+                                  ml-2
+                                  px-4 py-2.5
+                                  rounded-xl
+                                  bg-orange-500
+                                  hover:bg-orange-600
+                                  active:scale-95
+                                  text-white
+                                  font-bold
+                                  transition-all
+                                "
+                              >
+                                ⏭ Skip
+                              </button>
+                            )}
+
+                            {delivery.status === "Skipped" && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleRestoreToday(delivery)
+                                }
+                                className="
+                                  ml-2
+                                  px-4 py-2.5
+                                  rounded-xl
+                                  bg-green-600
+                                  hover:bg-green-700
+                                  active:scale-95
+                                  text-white
+                                  font-bold
+                                  transition-all
+                                "
+                              >
+                                ↩ Restore
+                              </button>
+                            )}
 
                           </td>
 
