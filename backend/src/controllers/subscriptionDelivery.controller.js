@@ -268,19 +268,15 @@ export async function updateSubscriptionDeliveryStatus(req, res) {
       });
     }
 
-    // ==========================================
-    // ALLOWED STATUS CHANGES
-    // ==========================================
-
     const allowedStatuses = [
       "Pending",
       "Assigned",
       "Out for Delivery",
       "Delivered",
       "Skipped",
-      "Cancelled",
       "Missed",
       "Failed",
+      "Cancelled",
     ];
 
     if (!allowedStatuses.includes(status)) {
@@ -290,173 +286,66 @@ export async function updateSubscriptionDeliveryStatus(req, res) {
       });
     }
 
-    // ==========================================
-    // GET CURRENT DELIVERY
-    // ==========================================
+    // Get current delivery
+    const { data: currentDelivery, error: fetchError } =
+      await supabaseAdmin
+        .from("subscription_deliveries")
+        .select("id, status, delivery_boy_id")
+        .eq("id", deliveryId)
+        .single();
 
-    const {
-      data: currentDelivery,
-      error: currentError,
-    } = await supabaseAdmin
-      .from("subscription_deliveries")
-      .select(
-        "id, status, delivery_boy_id, delivery_date"
-      )
-      .eq("id", deliveryId)
-      .single();
-
-    if (currentError) {
-      throw currentError;
+    if (fetchError) {
+      throw fetchError;
     }
 
     if (!currentDelivery) {
       return res.status(404).json({
         success: false,
-        message: "Delivery not found.",
+        message: "Delivery not found",
       });
     }
 
-    // ==========================================
-    // PROTECT COMPLETED DELIVERIES
-    // ==========================================
-
+    // Delivered deliveries cannot be changed
     if (
       currentDelivery.status === "Delivered" &&
       status !== "Delivered"
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "A delivered order cannot be changed.",
+        message: "Delivered delivery cannot be changed.",
       });
     }
 
-    // ==========================================
-    // SKIP TODAY
-    // ==========================================
-
-    if (status === "Skipped") {
-
-      if (
-        currentDelivery.status === "Delivered"
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Delivered delivery cannot be skipped.",
-        });
-      }
-
-      if (
-        currentDelivery.status ===
-        "Out for Delivery"
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Delivery is already out for delivery and cannot be skipped.",
-        });
-      }
-
-      const {
-        data,
-        error,
-      } = await supabaseAdmin
-        .from("subscription_deliveries")
-        .update({
-          status: "Skipped",
-
-          // Remove delivery boy assignment
-          delivery_boy_id: null,
-
-          // Clear assignment timestamp
-          assigned_at: null,
-
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq("id", deliveryId)
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      return res.json({
-        success: true,
-        message:
-          "Today's delivery skipped successfully.",
-        delivery: data,
-      });
-    }
-
-    // ==========================================
-    // RESTORE TODAY
-    // ==========================================
-
+    // Out for Delivery cannot be skipped
     if (
-      status === "Pending" &&
-      currentDelivery.status === "Skipped"
+      currentDelivery.status === "Out for Delivery" &&
+      status === "Skipped"
     ) {
-
-      const {
-        data,
-        error,
-      } = await supabaseAdmin
-        .from("subscription_deliveries")
-        .update({
-          status: "Pending",
-
-          // Restored delivery starts unassigned
-          delivery_boy_id: null,
-
-          assigned_at: null,
-
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq("id", deliveryId)
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      return res.json({
-        success: true,
+      return res.status(400).json({
+        success: false,
         message:
-          "Today's delivery restored successfully.",
-        delivery: data,
+          "Out for Delivery cannot be skipped.",
       });
     }
-
-    // ==========================================
-    // NORMAL STATUS UPDATE
-    // ==========================================
 
     const updateData = {
       status,
-      updated_at:
-        new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
-    // When manually changing to Pending,
-    // make sure it is unassigned.
-    if (status === "Pending") {
+    // When skipping today's delivery,
+    // remove delivery boy assignment.
+    if (status === "Skipped") {
       updateData.delivery_boy_id = null;
-      updateData.assigned_at = null;
     }
 
-    // ==========================================
-    // UPDATE
-    // ==========================================
+    // When restoring a skipped delivery,
+    // return it to Pending and remove assignment.
+    if (status === "Pending") {
+      updateData.delivery_boy_id = null;
+    }
 
-    const {
-      data,
-      error,
-    } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("subscription_deliveries")
       .update(updateData)
       .eq("id", deliveryId)
@@ -469,13 +358,10 @@ export async function updateSubscriptionDeliveryStatus(req, res) {
 
     return res.json({
       success: true,
-      message:
-        "Subscription delivery status updated.",
+      message: `Subscription delivery status updated to ${status}`,
       delivery: data,
     });
-
   } catch (err) {
-
     console.error(
       "Update Subscription Delivery Status Error:",
       err
@@ -483,7 +369,9 @@ export async function updateSubscriptionDeliveryStatus(req, res) {
 
     return res.status(500).json({
       success: false,
-      message: err.message,
+      message:
+        err?.message ||
+        "Failed to update subscription delivery status",
     });
   }
 }
