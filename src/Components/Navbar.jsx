@@ -195,11 +195,14 @@ export default function Navbar() {
                   </div>
                 )}
 
+                {/* Notifications - visible on mobile and desktop */}
                 <div
-                  className="relative hidden h-10 w-10 items-center justify-center sm:flex"
+                  className="relative flex h-10 w-10 shrink-0 items-center justify-center sm:h-11 sm:w-11"
                   aria-label="Notifications"
                 >
-                  <NotificationBell onClick={() => setNotificationOpen(true)} />
+                  <NotificationBell
+                    onClick={() => setNotificationOpen(true)}
+                  />
                 </div>
 
                 <button
