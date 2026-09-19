@@ -1,104 +1,212 @@
 import { supabaseAdmin } from "../config/supabase.js";
 
-// =====================================
-// Create Notification
-// =====================================
-export async function createNotification({
-  title,
-  message,
-  type,
-  receiver_role = "admin",
-  receiver_id = null,
-  reference_id = null,
-  reference_type = null,
-}) {
-  try {
-    console.log("Creating Notification...");
+/* =========================================================
+   GET ALL NOTIFICATIONS
+   Used by notification.controller.js
+========================================================= */
 
-    const { data, error } = await supabaseAdmin
-      .from("notifications")
-      .insert({
-        title,
-        message,
-        type,
-        receiver_role,
-        receiver_id,
-        reference_id,
-        reference_type,
-        is_read: false,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Supabase Notification Error:", error);
-      throw error;
-    }
-
-    console.log("Notification Created Successfully:", data);
-
-    return data;
-
-  } catch (err) {
-    console.error("createNotification Error:", err);
-    throw err;
-  }
-}
-
-// =====================================
-// Get Notifications
-// =====================================
 export async function getNotifications() {
   const { data, error } = await supabaseAdmin
     .from("notifications")
-    .select("*")
-    .order("created_at", { ascending: false });
+    .select(`
+      id,
+      customer_id,
+      title,
+      message,
+      type,
+      is_read,
+      created_at
+    `)
+    .order("created_at", {
+      ascending: false,
+    });
 
   if (error) {
-    console.error(error);
     throw error;
   }
 
-  return data;
+  return data || [];
 }
 
-// =====================================
-// Mark As Read
-// =====================================
-export async function markAsRead(id) {
-  const { data, error } = await supabaseAdmin
-    .from("notifications")
-    .update({
-      is_read: true,
-    })
-    .eq("id", id)
-    .select()
-    .single();
+/* =========================================================
+   GET UNREAD NOTIFICATION COUNT
+========================================================= */
 
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return data;
-}
-
-// =====================================
-// Unread Count
-// =====================================
 export async function getUnreadCount() {
   const { count, error } = await supabaseAdmin
     .from("notifications")
-    .select("*", {
+    .select("id", {
       count: "exact",
       head: true,
     })
     .eq("is_read", false);
 
   if (error) {
-    console.error(error);
     throw error;
   }
 
-  return count;
+  return count || 0;
+}
+
+/* =========================================================
+   CREATE NOTIFICATION
+========================================================= */
+
+export async function createNotification({
+  customerId,
+  title,
+  message,
+  type = "General",
+}) {
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .insert({
+      customer_id: customerId,
+      title,
+      message,
+      type,
+      is_read: false,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+/* =========================================================
+   MARK NOTIFICATION AS READ
+========================================================= */
+
+export async function markAsRead(notificationId) {
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .update({
+      is_read: true,
+    })
+    .eq("id", notificationId)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+/* =========================================================
+   MARK ALL NOTIFICATIONS AS READ
+========================================================= */
+
+export async function markAllAsRead() {
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .update({
+      is_read: true,
+    })
+    .eq("is_read", false)
+    .select();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
+}
+
+/* =========================================================
+   GET CUSTOMER NOTIFICATIONS
+========================================================= */
+
+export async function getCustomerNotifications(customerId) {
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .select(`
+      id,
+      customer_id,
+      title,
+      message,
+      type,
+      is_read,
+      created_at
+    `)
+    .eq("customer_id", customerId)
+    .order("created_at", {
+      ascending: false,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
+}
+
+/* =========================================================
+   GET CUSTOMER UNREAD COUNT
+========================================================= */
+
+export async function getCustomerUnreadCount(customerId) {
+  const { count, error } = await supabaseAdmin
+    .from("notifications")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .eq("customer_id", customerId)
+    .eq("is_read", false);
+
+  if (error) {
+    throw error;
+  }
+
+  return count || 0;
+}
+
+/* =========================================================
+   MARK CUSTOMER NOTIFICATION AS READ
+========================================================= */
+
+export async function markCustomerNotificationAsRead(
+  notificationId,
+  customerId
+) {
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .update({
+      is_read: true,
+    })
+    .eq("id", notificationId)
+    .eq("customer_id", customerId)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+/* =========================================================
+   DELETE NOTIFICATION
+========================================================= */
+
+export async function deleteNotification(notificationId) {
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .delete()
+    .eq("id", notificationId)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }

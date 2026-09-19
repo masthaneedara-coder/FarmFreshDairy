@@ -490,1063 +490,583 @@ function getMilkSummary(deliveries) {
   return summary;
 }
   return (
-    <div className="min-h-screen bg-slate-50 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
-      <div className="max-w-7xl mx-auto">
-        {/* HEADER */}
-        <div className="rounded-[32px] bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 p-6 sm:p-8 text-white shadow-2xl">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-            <div>
-              <p className="text-white/80 text-sm sm:text-base">Delivery Panel</p>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black mt-1">
-                🚚 Welcome {getDeliveryName()}
+    <div className="min-h-screen bg-[#f5f8f7] text-slate-900 pb-8">
+      <div className="mx-auto w-full max-w-7xl px-3 pt-3 sm:px-5 sm:pt-6 lg:px-8">
+
+        {/* MOBILE-FIRST HEADER */}
+        <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-4 text-white shadow-xl shadow-emerald-900/15 sm:rounded-[34px] sm:p-7">
+          <div className="absolute -right-10 -top-12 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -bottom-16 left-1/3 h-40 w-40 rounded-full bg-emerald-300/10 blur-3xl" />
+
+          <div className="relative flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-50 backdrop-blur">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                Delivery Panel
+              </div>
+
+              <h1 className="truncate text-[25px] font-black leading-tight tracking-tight sm:text-4xl">
+                Hello, {getDeliveryName()}
               </h1>
-              <p className="mt-2 text-white/90">
-                Manage today’s milk deliveries and customer drop points
+
+              <p className="mt-1 max-w-xl text-xs font-medium text-emerald-50/80 sm:text-sm">
+                Today&apos;s route, customer drops and milk loading in one place.
               </p>
             </div>
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={handleLogout}
-                className="px-5 py-3 rounded-2xl bg-red-500 text-white font-bold"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-        {/* STATS */}
-        
-    {/* STATS */}
-
-<div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-
-  {/* TODAY DELIVERIES */}
-  <div className="bg-white rounded-3xl p-5 shadow-lg border border-orange-100">
-    <p className="text-gray-500 text-sm">
-      Today Deliveries
-    </p>
-
-    <p className="text-3xl font-black text-orange-600 mt-2">
-      {deliveries.length}
-    </p>
-  </div>
-
-
-  {/* DELIVERED */}
-  <div className="bg-white rounded-3xl p-5 shadow-lg border border-green-100">
-    <p className="text-gray-500 text-sm">
-      Delivered
-    </p>
-
-    <p className="text-3xl font-black text-green-700 mt-2">
-      {deliveries.filter(
-        (d) => d.status === "Delivered"
-      ).length}
-    </p>
-  </div>
-
-
-  {/* PENDING */}
-  <div className="bg-white rounded-3xl p-5 shadow-lg border border-blue-100">
-    <p className="text-gray-500 text-sm">
-      Pending
-    </p>
-
-    <p className="text-3xl font-black text-blue-700 mt-2">
-      {deliveries.filter(
-        (d) =>
-          d.status !== "Delivered" &&
-          d.status !== "Missed"
-      ).length}
-    </p>
-  </div>
-
-
-  {/* MISSED */}
-  <div className="bg-white rounded-3xl p-5 shadow-lg border border-red-100">
-    <p className="text-gray-500 text-sm">
-      Missed
-    </p>
-
-    <p className="text-3xl font-black text-red-700 mt-2">
-      {deliveries.filter(
-        (d) => d.status === "Missed"
-      ).length}
-    </p>
-  </div>
-
-</div>
-        <div className="bg-white rounded-3xl p-5 shadow-lg border border-red-100">
-            <p className="text-gray-500 text-sm">
-              Missed
-            </p>
-
-            <p className="text-3xl font-black text-red-700 mt-2">
-              
-               {deliveries.filter(
-                  (d) =>
-                    d.status !== "Delivered" &&
-                    d.status !== "Missed"
-                ).length}
-              
-            </p>
-          </div>
-        
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-
-
-
-
-  {/* STATUS FILTER */}
-       
-
-      </div>
-      <div className="mt-6 space-y-4">
-
-  {/* SHIFT FILTER */}
-  <div>
-    <label className="block text-sm font-bold text-gray-600 mb-2">
-      Delivery Shift
-    </label>
-    <div className="grid grid-cols-3 gap-3">
-
-  <button
-    onClick={() => setSelectedShift("All")}
-    className={`p-4 rounded-xl font-bold ${
-      selectedShift === "All"
-        ? "bg-orange-500 text-white"
-        : "bg-white border"
-    }`}
-  >
-    📋 All
-  </button>
-
-  <button
-    onClick={() => setSelectedShift("Morning")}
-    className={`p-4 rounded-xl font-bold ${
-      selectedShift === "Morning"
-        ? "bg-orange-500 text-white"
-        : "bg-white border"
-    }`}
-  >
-    🌅 Morning
-  </button>
-
-  <button
-    onClick={() => setSelectedShift("Evening")}
-    className={`p-4 rounded-xl font-bold ${
-      selectedShift === "Evening"
-        ? "bg-purple-600 text-white"
-        : "bg-white border"
-    }`}
-  >
-    🌙 Evening
-  </button>
-
-</div>
-
-  
-  </div>
-
-
-  {/* SEARCH + STATUS */}
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-    <div>
-      <label className="block text-sm font-bold text-gray-600 mb-2">
-        Search Delivery
-      </label>
-
-      <input
-        type="text"
-        placeholder="Search customer / phone / area..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="w-full border border-gray-200 rounded-xl p-4 outline-none focus:ring-2 focus:ring-orange-400"
-      />
-    </div>
-
-
-    <div>
-      <label className="block text-sm font-bold text-gray-600 mb-2">
-        Filter by Status
-      </label>
-
-     <select
-  value={selectedStatus}
-  onChange={(e) => setSelectedStatus(e.target.value)}
-  className="w-full border rounded-xl p-4"
->
-  <option value="All Deliveries">
-    All Deliveries
-  </option>
-
-  <option value="Pending">
-    Pending
-  </option>
-
-  <option value="Assigned">
-    Assigned
-  </option>
-
-  <option value="Out for Delivery">
-    Out for Delivery
-  </option>
-
-  <option value="Delivered">
-    Delivered
-  </option>
-
-  <option value="Missed">
-    Missed
-  </option>
-
-  <option value="Failed">
-    Failed
-  </option>
-</select>
-    </div>
-
-  </div>
-
-</div>
-<div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-
-  {/* TOTAL DELIVERIES */}
-  <div className="bg-white rounded-2xl p-4 shadow-md border border-orange-100">
-    <p className="text-xs text-gray-500">
-      Today's Deliveries
-    </p>
-
-    <p className="text-3xl font-black text-orange-600 mt-1">
-      {filteredDeliveries.length}
-    </p>
-  </div>
-
-
-  {/* MORNING */}
-  <div className="bg-white rounded-2xl p-4 shadow-md border border-orange-100">
-    <p className="text-xs text-gray-500">
-      🌅 Morning
-    </p>
-
-    <p className="text-3xl font-black text-orange-500 mt-1">
-      {morningCount}
-    </p>
-  </div>
-
-
-  {/* EVENING */}
-  <div className="bg-white rounded-2xl p-4 shadow-md border border-purple-100">
-    <p className="text-xs text-gray-500">
-      🌙 Evening
-    </p>
-
-    <p className="text-3xl font-black text-purple-600 mt-1">
-      {eveningCount}
-    </p>
-  </div>
-
-
-  {/* TOTAL LITERS */}
-  <div className="bg-white rounded-2xl p-4 shadow-md border border-green-100">
-    <p className="text-xs text-gray-500">
-      🥛 Total Milk
-    </p>
-
-    <p className="text-3xl font-black text-green-600 mt-1">
-      {summary.totalLiters.toFixed(1)} L
-    </p>
-  </div>
-
-</div>
-<div className="mt-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4">
-
-  <div className="flex items-center justify-between mb-3">
-    <h3 className="font-black text-green-800">
-      🥛 Milk Loading Summary
-    </h3>
-
-    <span className="text-sm font-bold text-green-700">
-      {summary.totalLiters.toFixed(1)} Liters
-    </span>
-  </div>
-
-
-  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-
-    <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-      <p className="text-xs text-gray-500">
-        500 ml
-      </p>
-
-      <p className="text-2xl font-black text-orange-600">
-        {summary.bottles500ml}
-      </p>
-
-      <p className="text-xs text-gray-400">
-        bottles
-      </p>
-    </div>
-
-
-    <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-      <p className="text-xs text-gray-500">
-        1 L
-      </p>
-
-      <p className="text-2xl font-black text-green-600">
-        {summary.bottles1L}
-      </p>
-
-      <p className="text-xs text-gray-400">
-        bottles
-      </p>
-    </div>
-
-
-    <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-      <p className="text-xs text-gray-500">
-        2 L
-      </p>
-
-      <p className="text-2xl font-black text-blue-600">
-        {summary.bottles2L}
-      </p>
-
-      <p className="text-xs text-gray-400">
-        bottles
-      </p>
-    </div>
-
-
-    <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-      <p className="text-xs text-gray-500">
-        5 L
-      </p>
-
-      <p className="text-2xl font-black text-purple-600">
-        {summary.bottles5L}
-      </p>
-
-      <p className="text-xs text-gray-400">
-        cans
-      </p>
-    </div>
-
-  </div>
-
-</div>
-       {/* ========================================= */}
-{/* DELIVERY LIST - MODERN + ANIMATED */}
-{/* ========================================= */}
-
-{/* ========================================= */}
-{/* DELIVERY LIST */}
-{/* ========================================= */}
-
-<div className="mt-6 space-y-5">
-
-  {filteredDeliveries.length === 0 ? (
-
-    <div className="bg-white rounded-3xl p-8 text-center shadow-lg border border-gray-100">
-      <div className="text-5xl mb-3">📦</div>
-
-      <p className="text-gray-500 font-bold">
-        No deliveries found
-      </p>
-    </div>
-
-  ) : (
-
-    filteredDeliveries.map((delivery) => {
-
-      const locked = isStatusLocked(delivery);
-
-      const items = getDeliveryItems(delivery);
-
-      return (
-
-        <div
-          key={`${delivery.type}-${delivery.id}`}
-          className="
-            bg-white
-            rounded-3xl
-            overflow-hidden
-            shadow-lg
-            border border-gray-100
-            transition-all
-            duration-300
-            hover:-translate-y-1
-            hover:shadow-2xl
-          "
-        >
-
-          {/* ================================= */}
-          {/* CUSTOMER HEADER */}
-          {/* ================================= */}
-
-          <div className="
-            bg-gradient-to-r
-            from-orange-500
-            via-amber-500
-            to-orange-500
-            p-4 sm:p-5
-            text-white
-          ">
-
-            <div className="
-              flex
-              flex-col
-              sm:flex-row
-              sm:items-center
-              sm:justify-between
-              gap-3
-            ">
-
-              <div className="min-w-0">
-
-                <h3 className="
-                  text-lg
-                  sm:text-xl
-                  font-black
-                  truncate
-                ">
-                  {delivery.customer?.full_name || "Customer"}
-                </h3>
-
-                <p className="text-sm text-white/90">
-                  📞 {delivery.customer?.phone || "-"}
-                </p>
-
-              </div>
-
-
-              {/* TYPE */}
-
-              <span className="
-                self-start
-                sm:self-auto
-                px-3
-                py-1.5
-                rounded-full
-                bg-green-500
-                text-white
-                text-xs
-                sm:text-sm
-                font-black
-                shadow
-              ">
-                {delivery.type}
-              </span>
-
-            </div>
-
-          </div>
-
-
-          {/* ================================= */}
-          {/* DELIVERY INFORMATION */}
-          {/* ================================= */}
-
-          <div className="p-4 sm:p-5">
-
-            <div className="
-              grid
-              grid-cols-1
-              sm:grid-cols-2
-              gap-4
-            ">
-
-              {/* DELIVERY NUMBER */}
-
-              <div>
-
-                <p className="text-xs text-gray-400 uppercase font-bold">
-                  Delivery No
-                </p>
-
-                <p className="text-base sm:text-lg font-black text-gray-800">
-                  {delivery.number || "-"}
-                </p>
-
-              </div>
-
-
-              {/* SHIFT */}
-
-              <div>
-
-                <p className="text-xs text-gray-400 uppercase font-bold">
-                  Shift
-                </p>
-
-                <p className="font-bold text-gray-700">
-
-                  {delivery.delivery_shift === "Morning"
-                    ? "🌅 Morning"
-                    : delivery.delivery_shift === "Evening"
-                    ? "🌙 Evening"
-                    : "Shift not set"}
-
-                </p>
-
-              </div>
-
-            </div>
-
-
-            {/* DATE */}
-
-            <div className="mt-3">
-
-              <p className="text-xs text-gray-400 uppercase font-bold">
-                Delivery Date
-              </p>
-
-              <p className="text-sm text-gray-600">
-                📅 {delivery.delivery_date || "-"}
-              </p>
-
-            </div>
-
-
-            {/* ================================= */}
-            {/* ADDRESS */}
-            {/* ================================= */}
-
-            <div className="
-              mt-4
-              p-3
-              rounded-2xl
-              bg-slate-50
-              border border-slate-100
-            ">
-
-              <p className="text-xs text-gray-400 uppercase font-bold mb-1">
-                Delivery Address
-              </p>
-
-              <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
-
-                📍{" "}
-
-                {[
-                  delivery.address?.house_no,
-                  delivery.address?.street,
-                  delivery.address?.area,
-                  delivery.address?.city,
-                  delivery.address?.state,
-                  delivery.address?.pincode,
-                ]
-                  .filter(Boolean)
-                  .join(", ") || "Address not available"}
-
-              </p>
-
-            </div>
-
-
-            {/* ================================= */}
-            {/* PRODUCTS */}
-            {/* ================================= */}
-
-            <div className="mt-5">
-
-              <div className="flex items-center justify-between mb-3">
-
-                <h4 className="
-                  font-black
-                  text-gray-800
-                  text-base
-                  sm:text-lg
-                ">
-                  🥛 Delivery Items
-                </h4>
-
-                <span className="text-xs text-gray-400">
-                  {items.length} item{items.length !== 1 ? "s" : ""}
-                </span>
-
-              </div>
-
-
-              {items.length === 0 ? (
-
-                <div className="
-                  bg-gray-50
-                  rounded-2xl
-                  p-4
-                  text-center
-                  text-sm
-                  text-gray-400
-                ">
-                  No items found
-                </div>
-
-              ) : (
-
-                <div className="
-                  grid
-                  grid-cols-1
-                  sm:grid-cols-2
-                  gap-3
-                ">
-
-                  {items.map((item) => (
-
-                    <div
-                      key={item.id}
-                      className={`
-                        flex
-                        items-center
-                        gap-3
-                        p-3
-                        rounded-2xl
-                        border
-                        transition-all
-                        duration-300
-                        hover:scale-[1.02]
-                        ${
-                          item.is_extra
-                            ? "bg-orange-50 border-orange-200"
-                            : "bg-slate-50 border-gray-100"
-                        }
-                      `}
-                    >
-
-                      {/* IMAGE */}
-
-                      <div className="
-                        w-16
-                        h-16
-                        sm:w-20
-                        sm:h-20
-                        rounded-2xl
-                        overflow-hidden
-                        bg-white
-                        flex-shrink-0
-                        shadow-sm
-                      ">
-
-                        {item.products?.image ? (
-
-                          <img
-                            src={item.products.image}
-                            alt={item.products?.name || "Milk"}
-                            className="
-                              w-full
-                              h-full
-                              object-cover
-                              transition-transform
-                              duration-500
-                              hover:scale-110
-                            "
-                          />
-
-                        ) : (
-
-                          <div className="
-                            w-full
-                            h-full
-                            flex
-                            items-center
-                            justify-center
-                            text-2xl
-                          ">
-                            🥛
-                          </div>
-
-                        )}
-
-                      </div>
-
-
-                      {/* PRODUCT DETAILS */}
-
-                      <div className="min-w-0 flex-1">
-
-                        <p className="
-                          font-black
-                          text-gray-800
-                          truncate
-                        ">
-                          {item.products?.name || "Milk"}
-                        </p>
-
-                        <p className="text-sm text-gray-500">
-                          {item.quantity} × {item.size}
-                        </p>
-
-                        {item.is_extra && (
-
-                          <span className="
-                            inline-block
-                            mt-1
-                            px-2
-                            py-0.5
-                            rounded-full
-                            bg-orange-500
-                            text-white
-                            text-[10px]
-                            font-black
-                          ">
-                            ➕ EXTRA
-                          </span>
-
-                        )}
-
-                      </div>
-
-
-                      {/* PRICE */}
-
-                      <div className="text-right">
-
-                        <p className="
-                          font-black
-                          text-orange-600
-                        ">
-                          ×{item.quantity}
-                        </p>
-
-                        {item.total_price != null && (
-
-                          <p className="text-xs text-gray-500">
-                            ₹{Number(item.total_price).toFixed(2)}
-                          </p>
-
-                        )}
-
-                      </div>
-
-                    </div>
-
-                  ))}
-
-                </div>
-
-              )}
-
-            </div>
-
-
-            {/* ================================= */}
-            {/* TOTAL / PAYMENT / STATUS */}
-            {/* ================================= */}
-
-            <div className="
-              mt-5
-              bg-green-50
-              border border-green-100
-              rounded-2xl
-              p-4
-            ">
-
-              <div className="
-                flex
-                justify-between
-                items-center
-                gap-3
-              ">
-
-                <span className="text-gray-600">
-                  Total Amount
-                </span>
-
-                <span className="
-                  text-xl
-                  font-black
-                  text-green-700
-                ">
-                  ₹{Number(delivery.total_amount || 0).toFixed(2)}
-                </span>
-
-              </div>
-
-
-              <div className="
-                flex
-                justify-between
-                items-center
-                mt-2
-                gap-3
-              ">
-
-                <span className="text-gray-600">
-                  Payment
-                </span>
-
-                <span className="
-                  text-sm
-                  sm:text-base
-                  font-semibold
-                  text-gray-700
-                  text-right
-                ">
-                  {delivery.payment_method || "-"}
-                </span>
-
-              </div>
-
-
-              <div className="
-                flex
-                justify-between
-                items-center
-                mt-3
-                gap-3
-              ">
-
-                <span className="text-gray-600">
-                  Status
-                </span>
-
-
-                <span
-                  className={`
-                    px-3
-                    py-1.5
-                    rounded-full
-                    text-xs
-                    sm:text-sm
-                    font-black
-                    ${
-                      delivery.status === "Delivered"
-                        ? "bg-green-200 text-green-800"
-                        : delivery.status === "Missed"
-                        ? "bg-red-200 text-red-800"
-                        : delivery.status === "Out for Delivery"
-                        ? "bg-blue-200 text-blue-800"
-                        : "bg-yellow-200 text-yellow-800"
-                    }
-                  `}
-                >
-                  {delivery.status}
-                </span>
-
-              </div>
-
-            </div>
-
-
-            {/* ================================= */}
-            {/* ACTION BUTTONS */}
-            {/* ================================= */}
-
-            <div className="
-              mt-5
-              grid
-              grid-cols-2
-              gap-3
-            ">
-
-              {/* OUT FOR DELIVERY */}
-
-              <button
-                disabled={
-                  locked ||
-                  delivery.status === "Out for Delivery"
-                }
-
-                onClick={() =>
-                  updateDeliveryStatus(
-                    delivery,
-                    "Out for Delivery"
-                  )
-                }
-
-                className={`
-                  min-h-[52px]
-                  rounded-2xl
-                  px-3
-                  py-3
-                  font-black
-                  text-sm
-                  sm:text-base
-                  text-white
-                  transition-all
-                  duration-300
-
-                  ${
-                    locked ||
-                    delivery.status === "Out for Delivery"
-                      ? "bg-gray-300 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-md hover:shadow-lg"
-                  }
-                `}
-              >
-                🚚 Out For Delivery
-              </button>
-
-
-              {/* DELIVERED */}
-
-              <button
-                disabled={locked}
-
-                onClick={() =>
-                  updateDeliveryStatus(
-                    delivery,
-                    "Delivered"
-                  )
-                }
-
-                className={`
-                  min-h-[52px]
-                  rounded-2xl
-                  px-3
-                  py-3
-                  font-black
-                  text-sm
-                  sm:text-base
-                  text-white
-                  transition-all
-                  duration-300
-
-                  ${
-                    locked
-                      ? "bg-gray-300 cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-700 active:scale-95 shadow-md hover:shadow-lg"
-                  }
-                `}
-              >
-                ✅ Delivered
-              </button>
-
-
-              {/* MISSED */}
-
-              <button
-                disabled={locked}
-
-                onClick={() =>
-                  updateDeliveryStatus(
-                    delivery,
-                    "Missed"
-                  )
-                }
-
-                className={`
-                  min-h-[52px]
-                  rounded-2xl
-                  px-3
-                  py-3
-                  font-black
-                  text-sm
-                  sm:text-base
-                  text-white
-                  transition-all
-                  duration-300
-
-                  ${
-                    locked
-                      ? "bg-gray-300 cursor-not-allowed"
-                      : "bg-red-600 hover:bg-red-700 active:scale-95 shadow-md hover:shadow-lg"
-                  }
-                `}
-              >
-                ❌ Missed
-              </button>
-
-
-              {/* CALL */}
-
-              <a
-                href={`tel:${delivery.customer?.phone || ""}`}
-
-                className="
-                  min-h-[52px]
-                  rounded-2xl
-                  px-3
-                  py-3
-                  font-black
-                  text-sm
-                  sm:text-base
-                  text-white
-                  bg-indigo-600
-                  hover:bg-indigo-700
-                  active:scale-95
-                  shadow-md
-                  hover:shadow-lg
-                  transition-all
-                  duration-300
-                  flex
-                  items-center
-                  justify-center
-                "
-              >
-                📞 Call
-              </a>
-
-            </div>
-
-
-            {/* ================================= */}
-            {/* MAP BUTTON */}
-            {/* ================================= */}
 
             <button
-              onClick={() => handleNavigate(delivery)}
-
-              className="
-                w-full
-                mt-3
-                min-h-[52px]
-                rounded-2xl
-                bg-orange-500
-                hover:bg-orange-600
-                active:scale-[0.98]
-                text-white
-                font-black
-                transition-all
-                duration-300
-                shadow-md
-              "
+              type="button"
+              onClick={handleLogout}
+              className="shrink-0 rounded-2xl border border-white/15 bg-white/10 px-3.5 py-2.5 text-xs font-black text-white backdrop-blur transition active:scale-95 sm:px-5 sm:py-3 sm:text-sm"
             >
-              🗺️ Navigate to Customer
+              Logout
             </button>
-
           </div>
 
+          <div className="relative mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/10 px-3 py-2.5 backdrop-blur">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100/70">
+                Today
+              </p>
+              <p className="mt-0.5 text-sm font-black">
+                {deliveries.length} stops
+              </p>
+            </div>
+
+            <div className="h-8 w-px bg-white/15" />
+
+            <div className="text-right">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-100/70">
+                Milk
+              </p>
+              <p className="mt-0.5 text-sm font-black">
+                {summary.totalLiters.toFixed(1)} L
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* QUICK STATS */}
+        <section className="mt-3 grid grid-cols-2 gap-2.5 sm:mt-5 sm:grid-cols-4 sm:gap-3">
+          {[
+            {
+              label: "Total",
+              value: deliveries.length,
+              icon: "📦",
+              tone: "bg-orange-50 border-orange-100 text-orange-600",
+            },
+            {
+              label: "Delivered",
+              value: deliveries.filter((d) => d.status === "Delivered").length,
+              icon: "✓",
+              tone: "bg-emerald-50 border-emerald-100 text-emerald-700",
+            },
+            {
+              label: "Pending",
+              value: deliveries.filter(
+                (d) => d.status !== "Delivered" && d.status !== "Missed"
+              ).length,
+              icon: "⏳",
+              tone: "bg-blue-50 border-blue-100 text-blue-700",
+            },
+            {
+              label: "Missed",
+              value: deliveries.filter((d) => d.status === "Missed").length,
+              icon: "!",
+              tone: "bg-red-50 border-red-100 text-red-700",
+            },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className={`rounded-[22px] border p-3 shadow-sm sm:rounded-3xl sm:p-4 ${stat.tone}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider opacity-70">
+                  {stat.label}
+                </span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-xs font-black shadow-sm">
+                  {stat.icon}
+                </span>
+              </div>
+              <p className="mt-1 text-2xl font-black sm:text-3xl">
+                {stat.value}
+              </p>
+            </div>
+          ))}
+        </section>
+
+        {/* FILTERS */}
+        <section className="mt-3 rounded-[24px] border border-slate-200/80 bg-white p-3 shadow-sm sm:mt-5 sm:rounded-[28px] sm:p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-black text-slate-900">Today&apos;s route</p>
+              <p className="text-[10px] font-semibold text-slate-400">
+                Filter your stops quickly
+              </p>
+            </div>
+
+            {(search || selectedShift !== "All" || selectedStatus !== "All Deliveries") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setSelectedShift("All");
+                  setSelectedStatus("All Deliveries");
+                }}
+                className="rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-black text-slate-600 active:scale-95"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          {/* SHIFT CHIPS */}
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
+            {[
+              { value: "All", label: "📋 All", count: deliveries.length },
+              { value: "Morning", label: "🌅 Morning", count: morningCount },
+              { value: "Evening", label: "🌙 Evening", count: eveningCount },
+            ].map((shift) => {
+              const active = selectedShift === shift.value;
+
+              return (
+                <button
+                  key={shift.value}
+                  type="button"
+                  onClick={() => setSelectedShift(shift.value)}
+                  className={`min-h-10 shrink-0 rounded-xl px-3.5 text-xs font-black transition active:scale-95 ${
+                    active
+                      ? "bg-emerald-600 text-white shadow-md shadow-emerald-200"
+                      : "border border-slate-200 bg-slate-50 text-slate-600"
+                  }`}
+                >
+                  {shift.label}
+                  <span className={`ml-1 ${active ? "text-white/70" : "text-slate-400"}`}>
+                    {shift.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                🔎
+              </span>
+              <input
+                type="text"
+                placeholder="Search customer, phone, area..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-medium outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+              />
+            </div>
+
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+            >
+              <option value="All Deliveries">All Status</option>
+              <option value="Pending">Pending</option>
+              <option value="Assigned">Assigned</option>
+              <option value="Out for Delivery">Out for Delivery</option>
+              <option value="Delivered">Delivered</option>
+              <option value="Missed">Missed</option>
+              <option value="Failed">Failed</option>
+            </select>
+          </div>
+        </section>
+
+        {/* ROUTE SUMMARY */}
+        <section className="mt-3 rounded-[24px] border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-3.5 shadow-sm sm:mt-5 sm:rounded-[28px] sm:p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-black text-emerald-950">
+                🥛 Milk Loading
+              </p>
+              <p className="mt-0.5 text-[10px] font-semibold text-emerald-700/70">
+                Based on filtered deliveries
+              </p>
+            </div>
+            <span className="rounded-xl bg-white px-3 py-2 text-sm font-black text-emerald-700 shadow-sm">
+              {summary.totalLiters.toFixed(1)} L
+            </span>
+          </div>
+
+          <div className="mt-3 grid grid-cols-4 gap-2">
+            {[
+              ["500ml", summary.bottles500ml, "orange"],
+              ["1L", summary.bottles1L, "green"],
+              ["2L", summary.bottles2L, "blue"],
+              ["5L", summary.bottles5L, "purple"],
+            ].map(([size, count]) => (
+              <div
+                key={size}
+                className="rounded-2xl border border-white bg-white p-2.5 text-center shadow-sm"
+              >
+                <p className="text-[9px] font-black text-slate-400">{size}</p>
+                <p className="mt-0.5 text-lg font-black text-slate-800">{count}</p>
+                <p className="text-[8px] font-bold text-slate-400">bottles</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* RESULT COUNT */}
+        <div className="mt-4 flex items-center justify-between px-1">
+          <p className="text-xs font-bold text-slate-500">
+            Showing <span className="font-black text-slate-900">{filteredDeliveries.length}</span> deliveries
+          </p>
+          <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">
+            {selectedShift === "All" ? "All shifts" : selectedShift}
+          </p>
         </div>
 
-      );
+        {/* DELIVERY LIST */}
+        <section className="mt-2.5 space-y-3.5">
+          {loading ? (
+            Array.from({ length: 3 }).map((_, index) => (
+              <div
+                key={index}
+                className="animate-pulse overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm"
+              >
+                <div className="h-20 bg-slate-200" />
+                <div className="space-y-3 p-4">
+                  <div className="h-4 w-2/3 rounded bg-slate-200" />
+                  <div className="h-12 rounded-2xl bg-slate-100" />
+                  <div className="h-12 rounded-2xl bg-slate-100" />
+                </div>
+              </div>
+            ))
+          ) : filteredDeliveries.length === 0 ? (
+            <div className="rounded-[26px] border border-slate-200 bg-white p-8 text-center shadow-sm">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-3xl">
+                📦
+              </div>
+              <p className="mt-4 text-base font-black text-slate-800">
+                No deliveries found
+              </p>
+              <p className="mt-1 text-xs font-medium text-slate-400">
+                Try changing the search or filters.
+              </p>
+            </div>
+          ) : (
+            filteredDeliveries.map((delivery) => {
+              const locked = isStatusLocked(delivery);
+              const items = getDeliveryItems(delivery);
 
-    })
+              return (
+                <article
+                  key={`${delivery.type}-${delivery.id}`}
+                  className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-lg"
+                >
+                  {/* CARD HEADER */}
+                  <div className="bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 p-4 text-white">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-xl backdrop-blur">
+                            👤
+                          </div>
 
-  )}
+                          <div className="min-w-0">
+                            <h3 className="truncate text-base font-black">
+                              {delivery.customer?.full_name || "Customer"}
+                            </h3>
+                            <a
+                              href={`tel:${delivery.customer?.phone || ""}`}
+                              className="mt-0.5 block text-xs font-semibold text-emerald-100"
+                            >
+                              📞 {delivery.customer?.phone || "Phone unavailable"}
+                            </a>
+                          </div>
+                        </div>
+                      </div>
 
-</div>
-            
+                      <span className="shrink-0 rounded-full bg-white/15 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider backdrop-blur">
+                        {delivery.type || "Delivery"}
+                      </span>
+                    </div>
 
-    
+                    <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-emerald-50/90">
+                      <span className="rounded-xl bg-white/10 px-2.5 py-1.5">
+                        #{delivery.number || "—"}
+                      </span>
+                      <span className="rounded-xl bg-white/10 px-2.5 py-1.5">
+                        {delivery.delivery_shift === "Morning"
+                          ? "🌅 Morning"
+                          : delivery.delivery_shift === "Evening"
+                          ? "🌙 Evening"
+                          : "Shift not set"}
+                      </span>
+                    </div>
+                  </div>
 
+                  <div className="p-3.5 sm:p-5">
+                    {/* DATE + STATUS */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                          Delivery date
+                        </p>
+                        <p className="mt-1 text-sm font-black text-slate-800">
+                          📅 {delivery.delivery_date || "—"}
+                        </p>
+                      </div>
 
+                      <span
+                        className={`rounded-full px-3 py-1.5 text-[10px] font-black ${
+                          delivery.status === "Delivered"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : delivery.status === "Missed"
+                            ? "bg-red-100 text-red-700"
+                            : delivery.status === "Out for Delivery"
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {delivery.status}
+                      </span>
+                    </div>
 
-        {/* ROUTE / NOTES */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-          <div className="bg-white rounded-3xl p-6 shadow-lg border border-blue-100">
-            <div className="text-4xl">🗺️</div>
-            <h2 className="text-xl font-black text-blue-700 mt-3">
-              Delivery Areas
-            </h2>
-            <p className="text-gray-500 mt-2 text-sm">
-              Dammaiguda, ECIL, Kapra, Rampally, Parimal Nagar
-            </p>
+                    {/* ADDRESS */}
+                    <button
+                      type="button"
+                      onClick={() => handleNavigate(delivery)}
+                      className="mt-3 flex w-full items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left transition active:scale-[.99] hover:border-emerald-200 hover:bg-emerald-50"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
+                        📍
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">
+                          Delivery address
+                        </span>
+                        <span className="mt-1 block text-xs font-semibold leading-5 text-slate-700">
+                          {[
+                            delivery.address?.house_no,
+                            delivery.address?.street,
+                            delivery.address?.area,
+                            delivery.address?.city,
+                            delivery.address?.state,
+                            delivery.address?.pincode,
+                          ]
+                            .filter(Boolean)
+                            .join(", ") || "Address not available"}
+                        </span>
+                      </span>
+                      <span className="pt-1 text-xs font-black text-emerald-600">
+                        MAP
+                      </span>
+                    </button>
+
+                    {/* ITEMS */}
+                    <div className="mt-4">
+                      <div className="mb-2.5 flex items-center justify-between">
+                        <h4 className="text-sm font-black text-slate-800">
+                          🥛 Delivery items
+                        </h4>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          {items.length} item{items.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+
+                      {items.length === 0 ? (
+                        <div className="rounded-2xl bg-slate-50 p-4 text-center text-xs font-semibold text-slate-400">
+                          No items found
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {items.map((item) => (
+                            <div
+                              key={item.id}
+                              className={`flex items-center gap-3 rounded-2xl border p-2.5 ${
+                                item.is_extra
+                                  ? "border-orange-200 bg-orange-50"
+                                  : "border-slate-100 bg-slate-50"
+                              }`}
+                            >
+                              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
+                                {item.products?.image ? (
+                                  <img
+                                    src={item.products.image}
+                                    alt={item.products?.name || "Milk"}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-xl">
+                                    🥛
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-black text-slate-800">
+                                  {item.products?.name || "Milk"}
+                                </p>
+                                <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                                  {item.quantity} × {item.size}
+                                </p>
+                                {item.is_extra && (
+                                  <span className="mt-1 inline-flex rounded-full bg-orange-500 px-2 py-0.5 text-[8px] font-black text-white">
+                                    EXTRA
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="text-right">
+                                <p className="text-sm font-black text-emerald-700">
+                                  ×{item.quantity}
+                                </p>
+                                {item.total_price != null && (
+                                  <p className="text-[10px] font-semibold text-slate-400">
+                                    ₹{Number(item.total_price).toFixed(2)}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* PAYMENT SUMMARY */}
+                    <div className="mt-4 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 p-3.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-bold text-slate-500">
+                          Total amount
+                        </span>
+                        <span className="text-xl font-black text-emerald-700">
+                          ₹{Number(delivery.total_amount || 0).toFixed(2)}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          Payment
+                        </span>
+                        <span className="text-xs font-black text-slate-700">
+                          {delivery.payment_method || "—"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* ACTIONS */}
+                    <div className="mt-4 grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        disabled={
+                          locked || delivery.status === "Out for Delivery"
+                        }
+                        onClick={() =>
+                          updateDeliveryStatus(
+                            delivery,
+                            "Out for Delivery"
+                          )
+                        }
+                        className={`min-h-12 rounded-2xl px-2 text-xs font-black text-white transition active:scale-95 ${
+                          locked || delivery.status === "Out for Delivery"
+                            ? "cursor-not-allowed bg-slate-300"
+                            : "bg-blue-600 shadow-md shadow-blue-100 hover:bg-blue-700"
+                        }`}
+                      >
+                        🚚 Out for Delivery
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={locked}
+                        onClick={() =>
+                          updateDeliveryStatus(
+                            delivery,
+                            "Delivered"
+                          )
+                        }
+                        className={`min-h-12 rounded-2xl px-2 text-xs font-black text-white transition active:scale-95 ${
+                          locked
+                            ? "cursor-not-allowed bg-slate-300"
+                            : "bg-emerald-600 shadow-md shadow-emerald-100 hover:bg-emerald-700"
+                        }`}
+                      >
+                        ✓ Delivered
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={locked}
+                        onClick={() =>
+                          updateDeliveryStatus(
+                            delivery,
+                            "Missed"
+                          )
+                        }
+                        className={`min-h-12 rounded-2xl px-2 text-xs font-black text-white transition active:scale-95 ${
+                          locked
+                            ? "cursor-not-allowed bg-slate-300"
+                            : "bg-red-500 shadow-md shadow-red-100 hover:bg-red-600"
+                        }`}
+                      >
+                        ✕ Missed
+                      </button>
+
+                      <a
+                        href={`tel:${delivery.customer?.phone || ""}`}
+                        className="flex min-h-12 items-center justify-center rounded-2xl bg-indigo-600 px-2 text-xs font-black text-white shadow-md shadow-indigo-100 transition active:scale-95 hover:bg-indigo-700"
+                      >
+                        📞 Call
+                      </a>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleNavigate(delivery)}
+                      className="mt-2.5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-white text-xs font-black text-emerald-700 transition active:scale-[.98] hover:bg-emerald-50"
+                    >
+                      🗺️ Navigate to Customer
+                    </button>
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </section>
+
+        {/* FOOTER INFO */}
+        <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-[24px] border border-blue-100 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-xl">
+                🗺️
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-slate-800">
+                  Delivery Areas
+                </h2>
+                <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
+                  Dammaiguda • ECIL • Kapra • Rampally • Parimal Nagar
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="bg-white rounded-3xl p-6 shadow-lg border border-green-100">
-            <div className="text-4xl">⏰</div>
-            <h2 className="text-xl font-black text-green-700 mt-3">
-              Morning Delivery Slot
-            </h2>
-            <p className="text-gray-500 mt-2 text-sm">
-              Daily milk delivery from 5:30 AM to 8:30 AM
-            </p>
+          <div className="rounded-[24px] border border-emerald-100 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-xl">
+                ⏰
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-slate-800">
+                  Morning Delivery
+                </h2>
+                <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-400">
+                  Daily milk delivery from 5:30 AM to 8:30 AM
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );

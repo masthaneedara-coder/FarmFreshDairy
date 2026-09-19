@@ -161,6 +161,14 @@ export default function App() {
           }
         />
         <Route
+          path="/admin/notifications"
+          element={
+            <AdminRoute>
+              <Notifications />
+            </AdminRoute>
+          }
+        />
+        <Route
           path="/admin/orders"
           element={
             <AdminRoute>
@@ -227,13 +235,22 @@ export default function App() {
             </DeliveryRoute>
           }
         />
-        <Route
+       <Route
           path="/notifications"
-          element={<Notifications />}
+          element={
+            <CustomerRoute>
+              <Notifications />
+            </CustomerRoute>
+          }
         />
+
         <Route
           path="/notification-settings"
-          element={<NotificationSettings />}
+          element={
+            <CustomerRoute>
+              <NotificationSettings />
+            </CustomerRoute>
+          }
         />
         <Route
           path="/address-book"

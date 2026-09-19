@@ -1,825 +1,257 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-
-import {
-  getNotificationColor,
-  getNotificationIcon,
-} from "../config/notificationTypes";
-
+import { getNotificationColor, getNotificationIcon } from "../config/notificationTypes";
 import {
   NOTIFICATION_CATEGORIES,
   NOTIFICATION_STATUS_FILTERS,
   NOTIFICATION_PRIORITY_FILTERS,
   NOTIFICATION_SORT_OPTIONS,
 } from "../config/notificationFilters";
-
 import { useNotifications } from "../context/NotificationContext";
 
 export default function Notifications() {
   const {
-    notifications,
-    unreadCount,
+    notifications = [],
+    unreadCount = 0,
     markAsRead,
     deleteNotification,
     markAllRead,
     clearNotifications,
   } = useNotifications();
 
-  /* -----------------------------
-     Search & Filters
-  ------------------------------*/
-
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("latest");
+  const [showFilters, setShowFilters] = useState(false);
+  const [selected, setSelected] = useState([]);
 
-  const [categoryFilter, setCategoryFilter] =
-    useState("all");
+  const dateOf = (n) => n.createdAt || n.created_at || new Date().toISOString();
+  const statusOf = (n) => n.status || (n.is_read ? "read" : "unread");
+  const priorityOf = (n) => n.priority || "medium";
+  const typeOf = (n) => n.type || "system";
 
-  const [statusFilter, setStatusFilter] =
-    useState("all");
-
-  const [priorityFilter, setPriorityFilter] =
-    useState("all");
-
-  const [sortBy, setSortBy] =
-    useState("latest");
-
-  /* -----------------------------
-     Bulk Selection
-  ------------------------------*/
-
-  const [
-    selectedNotifications,
-    setSelectedNotifications,
-  ] = useState([]);
-
-  /* -----------------------------
-     Filter Notifications
-  ------------------------------*/
-
-  const filteredNotifications = useMemo(() => {
+  const filtered = useMemo(() => {
     let data = [...notifications];
+    const q = search.trim().toLowerCase();
 
-    // Search
-
-    if (search.trim()) {
-      const keyword = search.toLowerCase();
-
+    if (q) {
       data = data.filter(
-        (item) =>
-          item.title
-            ?.toLowerCase()
-            .includes(keyword) ||
-          item.message
-            ?.toLowerCase()
-            .includes(keyword)
+        (n) =>
+          n.title?.toLowerCase().includes(q) ||
+          n.message?.toLowerCase().includes(q)
       );
     }
+    if (categoryFilter !== "all")
+      data = data.filter((n) => typeOf(n) === categoryFilter);
+    if (statusFilter !== "all")
+      data = data.filter((n) => statusOf(n) === statusFilter);
+    if (priorityFilter !== "all")
+      data = data.filter((n) => priorityOf(n) === priorityFilter);
 
-    // Category
-
-    if (categoryFilter !== "all") {
-      data = data.filter(
-        (item) => item.type === categoryFilter
-      );
-    }
-
-    // Status
-
-    if (statusFilter !== "all") {
-      data = data.filter(
-        (item) => item.status === statusFilter
-      );
-    }
-
-    // Priority
-
-    if (priorityFilter !== "all") {
-      data = data.filter(
-        (item) =>
-          item.priority === priorityFilter
-      );
-    }
-
-    // Sorting
-
-    const priorityOrder = {
-      high: 3,
-      medium: 2,
-      low: 1,
-    };
-
-    switch (sortBy) {
-      case "oldest":
-        data.sort(
-          (a, b) =>
-            new Date(a.createdAt) -
-            new Date(b.createdAt)
-        );
-        break;
-
-      case "priorityHigh":
-        data.sort(
-          (a, b) =>
-            priorityOrder[b.priority] -
-            priorityOrder[a.priority]
-        );
-        break;
-
-      case "priorityLow":
-        data.sort(
-          (a, b) =>
-            priorityOrder[a.priority] -
-            priorityOrder[b.priority]
-        );
-        break;
-
-      default:
-        data.sort(
-          (a, b) =>
-            new Date(b.createdAt) -
-            new Date(a.createdAt)
-        );
-    }
-
+    const po = { high: 3, medium: 2, low: 1 };
+    data.sort((a, b) => {
+      if (sortBy === "oldest") return new Date(dateOf(a)) - new Date(dateOf(b));
+      if (sortBy === "priorityHigh") return (po[priorityOf(b)] || 0) - (po[priorityOf(a)] || 0);
+      if (sortBy === "priorityLow") return (po[priorityOf(a)] || 0) - (po[priorityOf(b)] || 0);
+      return new Date(dateOf(b)) - new Date(dateOf(a));
+    });
     return data;
-  }, [
-    notifications,
-    search,
-    categoryFilter,
-    statusFilter,
-    priorityFilter,
-    sortBy,
-  ]);
-
-  /* -----------------------------
-     Statistics
-  ------------------------------*/
+  }, [notifications, search, categoryFilter, statusFilter, priorityFilter, sortBy]);
 
   const todayCount = notifications.filter(
-    (item) =>
-      new Date(item.createdAt).toDateString() ===
-      new Date().toDateString()
+    (n) => new Date(dateOf(n)).toDateString() === new Date().toDateString()
   ).length;
+  const readCount = Math.max(notifications.length - unreadCount, 0);
+  const highCount = notifications.filter((n) => priorityOf(n) === "high").length;
 
-  const readCount =
-    notifications.length - unreadCount;
+  const toggle = (id) =>
+    setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
-  const highPriorityCount =
-    notifications.filter(
-      (item) => item.priority === "high"
-    ).length;
+  const selectAll = () => setSelected(filtered.map((n) => n.id));
+  const clearSelection = () => setSelected([]);
+
+  const bulkRead = async () => {
+    for (const id of selected) await markAsRead(id);
+    clearSelection();
+  };
+
+  const bulkDelete = async () => {
+    for (const id of selected) await deleteNotification(id);
+    clearSelection();
+  };
+
+  const resetFilters = () => {
+    setSearch("");
+    setCategoryFilter("all");
+    setStatusFilter("all");
+    setPriorityFilter("all");
+    setSortBy("latest");
+  };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-
-      {/* Header */}
-
-      <div className="bg-white shadow-sm border-b sticky top-0 z-20">
-
-        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
-
-          <div>
-
-            <h1 className="text-3xl font-bold text-green-700">
-              🔔 Notifications
-            </h1>
-
-            <p className="text-gray-500 mt-1">
-              View and manage all your
-              notifications
-            </p>
-
-          </div>
-
-          <Link
-            to="/notification-settings"
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            ⚙ Settings
-          </Link>
-
-        </div>
-
-      </div>
-
-      <div className="max-w-7xl mx-auto p-6">
-
-        {/* Statistics */}
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
-
-          <div className="bg-white rounded-xl shadow p-5">
-
-            <p className="text-gray-500">
-              Total
-            </p>
-
-            <h2 className="text-3xl font-bold mt-2">
-              {notifications.length}
-            </h2>
-
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-5">
-
-            <p className="text-gray-500">
-              Unread
-            </p>
-
-            <h2 className="text-3xl font-bold text-red-500 mt-2">
-              {unreadCount}
-            </h2>
-
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-5">
-
-            <p className="text-gray-500">
-              Read
-            </p>
-
-            <h2 className="text-3xl font-bold text-green-600 mt-2">
-              {readCount}
-            </h2>
-
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-5">
-
-            <p className="text-gray-500">
-              High Priority
-            </p>
-
-            <h2 className="text-3xl font-bold text-orange-500 mt-2">
-              {highPriorityCount}
-            </h2>
-
-          </div>
-
-        </div>
-
-        {/* Search & Filters start here in Part 2 */}
-                {/* Search & Filters */}
-
-        <div className="bg-white rounded-2xl shadow p-5 mb-6">
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-
-            {/* Search */}
-
-            <input
-              type="text"
-              placeholder="Search notifications..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="border rounded-lg px-4 py-3 focus:ring-2 focus:ring-green-500 outline-none"
-            />
-
-            {/* Category */}
-
-            <select
-              value={categoryFilter}
-              onChange={(e) =>
-                setCategoryFilter(e.target.value)
-              }
-              className="border rounded-lg px-4 py-3"
-            >
-              {NOTIFICATION_CATEGORIES.map((item) => (
-                <option
-                  key={item}
-                  value={item}
-                >
-                  {item.charAt(0).toUpperCase() +
-                    item.slice(1)}
-                </option>
-              ))}
-            </select>
-
-            {/* Status */}
-
-            <select
-              value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value)
-              }
-              className="border rounded-lg px-4 py-3"
-            >
-              {NOTIFICATION_STATUS_FILTERS.map(
-                (item) => (
-                  <option
-                    key={item}
-                    value={item}
-                  >
-                    {item.charAt(0).toUpperCase() +
-                      item.slice(1)}
-                  </option>
-                )
-              )}
-            </select>
-
-            {/* Priority */}
-
-            <select
-              value={priorityFilter}
-              onChange={(e) =>
-                setPriorityFilter(e.target.value)
-              }
-              className="border rounded-lg px-4 py-3"
-            >
-              {NOTIFICATION_PRIORITY_FILTERS.map(
-                (item) => (
-                  <option
-                    key={item}
-                    value={item}
-                  >
-                    {item.charAt(0).toUpperCase() +
-                      item.slice(1)}
-                  </option>
-                )
-              )}
-            </select>
-
-            {/* Sort */}
-
-            <select
-              value={sortBy}
-              onChange={(e) =>
-                setSortBy(e.target.value)
-              }
-              className="border rounded-lg px-4 py-3"
-            >
-              {NOTIFICATION_SORT_OPTIONS.map(
-                (item) => (
-                  <option
-                    key={item.value}
-                    value={item.value}
-                  >
-                    {item.label}
-                  </option>
-                )
-              )}
-            </select>
-
-          </div>
-
-        </div>
-
-        {/* Action Buttons */}
-
-        <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
-
-          <div className="flex flex-wrap gap-3">
-
-            <button
-              onClick={markAllRead}
-              className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg"
-            >
-              ✓ Mark All Read
-            </button>
-
-            <button
-              onClick={clearNotifications}
-              className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg"
-            >
-              🗑 Clear All
-            </button>
-
-          </div>
-
-          <div className="text-sm text-gray-500">
-
-            Showing{" "}
-            <span className="font-semibold">
-              {filteredNotifications.length}
-            </span>{" "}
-            of{" "}
-            <span className="font-semibold">
-              {notifications.length}
-            </span>{" "}
-            notifications
-
-          </div>
-
-        </div>
-
-        {/* Selection Controls */}
-
-        <div className="flex flex-wrap gap-3 mb-5">
-
-          <button
-            onClick={() =>
-              setSelectedNotifications(
-                filteredNotifications.map(
-                  (item) => item.id
-                )
-              )
-            }
-            className="border rounded-lg px-4 py-2 hover:bg-gray-100"
-          >
-            Select All
-          </button>
-
-          <button
-            onClick={() =>
-              setSelectedNotifications([])
-            }
-            className="border rounded-lg px-4 py-2 hover:bg-gray-100"
-          >
-            Deselect All
-          </button>
-
-        </div>
-
-        {/* Bulk Toolbar */}
-
-        {selectedNotifications.length > 0 && (
-
-          <div className="sticky top-24 z-10 bg-white rounded-xl shadow border p-4 mb-6 flex flex-wrap justify-between items-center">
-
-            <h3 className="font-semibold">
-
-              {selectedNotifications.length} Selected
-
-            </h3>
-
-            <div className="flex gap-3">
-
-              <button
-                onClick={async () => {
-
-                  for (const id of selectedNotifications) {
-                    await markAsRead(id);
-                  }
-
-                  setSelectedNotifications([]);
-
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-              >
-                Mark Read
-              </button>
-
-              <button
-                onClick={async () => {
-
-                  for (const id of selectedNotifications) {
-                    await deleteNotification(id);
-                  }
-
-                  setSelectedNotifications([]);
-
-                }}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
-              >
-                Delete
-              </button>
-
-              <button
-                onClick={() =>
-                  setSelectedNotifications([])
-                }
-                className="border px-4 py-2 rounded-lg"
-              >
-                Cancel
-              </button>
-
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-cyan-50 pb-24">
+      <header className="sticky top-0 z-40 border-b border-white/70 bg-white/90 shadow-sm backdrop-blur-xl">
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-2xl shadow-sm sm:h-14 sm:w-14 sm:text-3xl">🔔</div>
+              <div className="min-w-0">
+                <h1 className="truncate text-xl font-black text-slate-900 sm:text-3xl">Notifications</h1>
+                <p className="text-xs font-medium text-slate-500 sm:text-sm">{unreadCount} unread · {todayCount} today</p>
+              </div>
             </div>
+            <Link to="/notification-settings" className="flex h-11 shrink-0 items-center rounded-xl bg-slate-900 px-3 text-sm font-bold text-white shadow-lg active:scale-95">
+              <span className="sm:hidden">⚙️</span><span className="hidden sm:inline">⚙ Settings</span>
+            </Link>
+          </div>
+        </div>
+      </header>
 
+      <main className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-7">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+          <Stat label="Total" value={notifications.length} icon="🔔" />
+          <Stat label="Unread" value={unreadCount} icon="🔴" valueClass="text-red-600" />
+          <Stat label="Read" value={readCount} icon="✅" valueClass="text-emerald-600" />
+          <Stat label="High Priority" value={highCount} icon="⚡" valueClass="text-orange-600" />
+        </div>
+
+        <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:mt-6 sm:p-5">
+          <div className="flex gap-2">
+            <div className="relative min-w-0 flex-1">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">🔎</span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search notifications..."
+                className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-medium outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+              />
+            </div>
+            <button onClick={() => setShowFilters((v) => !v)} className={`h-12 shrink-0 rounded-xl px-4 text-sm font-bold active:scale-95 ${showFilters ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-800"}`}>
+              <span className="sm:hidden">⚙️</span><span className="hidden sm:inline">Filters</span>
+            </button>
           </div>
 
+          {showFilters && (
+            <div className="mt-3 grid grid-cols-1 gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Filter label="Category" value={categoryFilter} setValue={setCategoryFilter} options={NOTIFICATION_CATEGORIES} />
+              <Filter label="Status" value={statusFilter} setValue={setStatusFilter} options={NOTIFICATION_STATUS_FILTERS} />
+              <Filter label="Priority" value={priorityFilter} setValue={setPriorityFilter} options={NOTIFICATION_PRIORITY_FILTERS} />
+              <Filter label="Sort" value={sortBy} setValue={setSortBy} options={NOTIFICATION_SORT_OPTIONS.map((x) => x.value)} labels={NOTIFICATION_SORT_OPTIONS} />
+              <button onClick={resetFilters} className="h-11 rounded-xl border bg-slate-50 text-sm font-bold sm:col-span-2 lg:col-span-4">Reset Filters</button>
+            </div>
+          )}
+        </section>
+
+        <div className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+          {["all", ...NOTIFICATION_CATEGORIES.filter((x) => x !== "all")].map((cat) => (
+            <button key={cat} onClick={() => setCategoryFilter(cat)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold capitalize active:scale-95 ${categoryFilter === cat ? "bg-emerald-600 text-white shadow-md" : "border bg-white text-slate-600"}`}>
+              {cat === "all" ? "All" : cat}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-2">
+            <button onClick={markAllRead} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white active:scale-95">✓ Mark All Read</button>
+            <button onClick={clearNotifications} className="rounded-xl bg-red-50 px-4 py-2.5 text-xs font-bold text-red-600 active:scale-95">🗑 Clear All</button>
+          </div>
+          <p className="text-xs font-semibold text-slate-500">Showing <b>{filtered.length}</b> of <b>{notifications.length}</b></p>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between">
+          <button onClick={selectAll} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold">Select All</button>
+          {selected.length > 0 && <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">{selected.length} selected</span>}
+        </div>
+
+        {selected.length > 0 && (
+          <div className="sticky top-[73px] z-30 mt-3 rounded-2xl border border-blue-100 bg-blue-50/95 p-3 shadow-lg backdrop-blur sm:top-24">
+            <div className="flex flex-wrap gap-2">
+              <button onClick={bulkRead} className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white">✓ Mark Read</button>
+              <button onClick={bulkDelete} className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white">🗑 Delete</button>
+              <button onClick={clearSelection} className="rounded-xl bg-white px-4 py-2.5 text-xs font-bold">Cancel</button>
+            </div>
+          </div>
         )}
 
-        {/* Notification List starts in Part 3 */}
-                {/* Notification List */}
-
-        <div className="space-y-5">
-
-          {filteredNotifications.length === 0 && (
-
-            <div className="bg-white rounded-2xl shadow p-12 text-center">
-
-              <div className="text-7xl mb-4">
-                🔔
-              </div>
-
-              <h2 className="text-2xl font-bold text-gray-700">
-                No Notifications Found
-              </h2>
-
-              <p className="text-gray-500 mt-3">
-                Try changing your search or filter.
-              </p>
-
+        <section className="mt-5 space-y-3 sm:space-y-4">
+          {filtered.length === 0 && (
+            <div className="rounded-3xl border bg-white px-5 py-14 text-center shadow-sm">
+              <div className="text-6xl">🔔</div>
+              <h2 className="mt-4 text-xl font-black text-slate-800">No Notifications</h2>
+              <p className="mt-2 text-sm text-slate-500">There are no notifications matching your filters.</p>
             </div>
-
           )}
 
-          {filteredNotifications.map((item) => {
-
-            const color =
-              getNotificationColor(item.type);
-
-            const selected =
-              selectedNotifications.includes(
-                item.id
-              );
+          {filtered.map((item) => {
+            const color = getNotificationColor(typeOf(item));
+            const status = statusOf(item);
+            const priority = priorityOf(item);
+            const selectedItem = selected.includes(item.id);
+            const created = dateOf(item);
 
             return (
-
-              <div
-                key={item.id}
-                className={`rounded-2xl border shadow transition-all duration-300 hover:shadow-lg
-
-                ${
-                  selected
-                    ? "border-blue-500 bg-blue-50"
-                    : `${color.border} bg-white`
-                }`}
-              >
-
-                <div className="p-5 flex flex-col lg:flex-row justify-between gap-5">
-
-                  {/* Left */}
-
-                  <div className="flex gap-4 flex-1">
-
-                    {/* Checkbox */}
-
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      onChange={() => {
-
-                        setSelectedNotifications(
-                          (prev) =>
-
-                            prev.includes(item.id)
-
-                              ? prev.filter(
-                                  (id) =>
-                                    id !== item.id
-                                )
-
-                              : [
-                                  ...prev,
-                                  item.id,
-                                ]
-                        );
-
-                      }}
-                      className="mt-2 w-5 h-5"
-                    />
-
-                    {/* Icon */}
-
-                    <div
-                      className={`w-14 h-14 rounded-full flex items-center justify-center text-3xl ${color.bg}`}
-                    >
-                      {getNotificationIcon(
-                        item.type
-                      )}
-                    </div>
-
-                    {/* Content */}
-
-                    <div className="flex-1">
-
-                      <div className="flex flex-wrap items-center gap-2">
-
-                        <h2 className="font-bold text-lg">
-                          {item.title}
-                        </h2>
-
-                        {item.status ===
-                          "unread" && (
-
-                          <span className="px-2 py-1 rounded-full bg-red-100 text-red-600 text-xs font-semibold">
-
-                            Unread
-
-                          </span>
-
-                        )}
-
-                        {item.priority ===
-                          "high" && (
-
-                          <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-600 text-xs font-semibold">
-
-                            High Priority
-
-                          </span>
-
-                        )}
-
+              <article key={item.id} className={`overflow-hidden rounded-2xl border bg-white shadow-sm sm:rounded-3xl ${selectedItem ? "border-blue-400 ring-2 ring-blue-100" : color.border}`}>
+                <div className="p-4 sm:p-5">
+                  <div className="flex gap-3 sm:gap-4">
+                    <input type="checkbox" checked={selectedItem} onChange={() => toggle(item.id)} className="mt-2 h-5 w-5 shrink-0 accent-emerald-600" />
+                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl sm:h-14 sm:w-14 sm:text-3xl ${color.bg}`}>{getNotificationIcon(typeOf(item))}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <h2 className="text-base font-black leading-tight text-slate-900 sm:text-lg">{item.title}</h2>
+                        <div className="flex gap-1.5">
+                          {status === "unread" && <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-black uppercase text-red-600">Unread</span>}
+                          {priority === "high" && <span className="rounded-full bg-orange-100 px-2 py-1 text-[10px] font-black uppercase text-orange-600">High</span>}
+                        </div>
                       </div>
-
-                      <p className="text-gray-600 mt-3 leading-relaxed">
-
-                        {item.message}
-
-                      </p>
-
-                      <div className="flex flex-wrap gap-5 mt-4 text-sm text-gray-500">
-
-                        <span>
-
-                          📅{" "}
-
-                          {new Date(
-                            item.createdAt
-                          ).toLocaleDateString()}
-
-                        </span>
-
-                        <span>
-
-                          🕒{" "}
-
-                          {new Date(
-                            item.createdAt
-                          ).toLocaleTimeString()}
-
-                        </span>
-
-                        <span>
-
-                          📂{" "}
-
-                          {item.type}
-
-                        </span>
-
+                      <p className="mt-2 text-sm leading-6 text-slate-600 sm:text-base">{item.message}</p>
+                      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] font-medium text-slate-400 sm:text-xs">
+                        <span>📅 {new Date(created).toLocaleDateString()}</span>
+                        <span>🕒 {new Date(created).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        <span className="capitalize">📂 {typeOf(item)}</span>
                       </div>
-
                     </div>
-
                   </div>
-
-                  {/* Right */}
-
-                  <div className="flex lg:flex-col gap-3 justify-center">
-
-                    {item.status ===
-                      "unread" && (
-
-                      <button
-                        onClick={() =>
-                          markAsRead(item.id)
-                        }
-                        className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg transition"
-                      >
-                        ✓ Read
-                      </button>
-
-                    )}
-
-                    <button
-                      onClick={() =>
-                        deleteNotification(
-                          item.id
-                        )
-                      }
-                      className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg transition"
-                    >
-                      🗑 Delete
-                    </button>
-
+                  <div className="mt-4 grid grid-cols-2 gap-2 pl-8 sm:flex sm:justify-end sm:pl-0">
+                    {status === "unread" && <button onClick={() => markAsRead(item.id)} className="rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white active:scale-95 sm:px-5">✓ Mark Read</button>}
+                    <button onClick={() => deleteNotification(item.id)} className="rounded-xl bg-red-50 px-3 py-2.5 text-xs font-bold text-red-600 active:scale-95 sm:px-5">🗑 Delete</button>
                   </div>
-
                 </div>
-
-              </div>
-
+              </article>
             );
-
           })}
+        </section>
 
-        </div>
-
-        {/* Footer */}
-
-        <div className="mt-8 flex justify-center">
-
-          <div className="text-gray-500 text-sm">
-
-            Showing
-
-            <span className="font-bold mx-1">
-
-              {filteredNotifications.length}
-
-            </span>
-
-            of
-
-            <span className="font-bold mx-1">
-
-              {notifications.length}
-
-            </span>
-
-            notifications
-
-          </div>
-
-        </div>
-
-        {/* Part 4 starts here */}
-                {/* Refresh Section */}
-
-        <div className="mt-8 flex flex-wrap justify-between items-center gap-4">
-
-          <div className="text-sm text-gray-500">
-            Last updated:
-            <span className="font-semibold ml-2">
-              {new Date().toLocaleString()}
-            </span>
-          </div>
-
-          <button
-            onClick={() => window.location.reload()}
-            className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition"
-          >
-            🔄 Refresh
-          </button>
-
-        </div>
-
-        {/* Bottom Statistics */}
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-
-          <div className="bg-white rounded-xl shadow p-4">
-
-            <p className="text-gray-500 text-sm">
-              Orders
-            </p>
-
-            <h3 className="text-2xl font-bold text-green-600">
-              {
-                notifications.filter(
-                  (n) => n.type === "order"
-                ).length
-              }
-            </h3>
-
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-4">
-
-            <p className="text-gray-500 text-sm">
-              Delivery
-            </p>
-
-            <h3 className="text-2xl font-bold text-blue-600">
-              {
-                notifications.filter(
-                  (n) => n.type === "delivery"
-                ).length
-              }
-            </h3>
-
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-4">
-
-            <p className="text-gray-500 text-sm">
-              Payments
-            </p>
-
-            <h3 className="text-2xl font-bold text-purple-600">
-              {
-                notifications.filter(
-                  (n) => n.type === "payment"
-                ).length
-              }
-            </h3>
-
-          </div>
-
-          <div className="bg-white rounded-xl shadow p-4">
-
-            <p className="text-gray-500 text-sm">
-              Promotions
-            </p>
-
-            <h3 className="text-2xl font-bold text-orange-600">
-              {
-                notifications.filter(
-                  (n) => n.type === "promotion"
-                ).length
-              }
-            </h3>
-
-          </div>
-
-        </div>
-
-      </div>
-
+        <section className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Mini label="Orders" value={notifications.filter((n) => typeOf(n) === "order").length} icon="📦" />
+          <Mini label="Delivery" value={notifications.filter((n) => typeOf(n) === "delivery").length} icon="🥛" />
+          <Mini label="Payments" value={notifications.filter((n) => typeOf(n) === "payment").length} icon="💳" />
+          <Mini label="Promotions" value={notifications.filter((n) => typeOf(n) === "promotion").length} icon="🎁" />
+        </section>
+      </main>
     </div>
-
   );
+}
 
+function Stat({ label, value, icon, valueClass = "text-slate-900" }) {
+  return <div className="rounded-2xl border bg-white p-4 shadow-sm sm:rounded-3xl sm:p-5"><div className="flex justify-between"><span>{icon}</span><span className={`text-2xl font-black sm:text-3xl ${valueClass}`}>{value}</span></div><p className="mt-2 text-xs font-bold text-slate-500">{label}</p></div>;
+}
+
+function Mini({ label, value, icon }) {
+  return <div className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex justify-between"><span>{icon}</span><b className="text-xl">{value}</b></div><p className="mt-1 text-xs font-bold text-slate-500">{label}</p></div>;
+}
+
+function Filter({ label, value, setValue, options, labels }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-bold text-slate-500">{label}</label>
+      <select value={value} onChange={(e) => setValue(e.target.value)} className="h-11 w-full rounded-xl border bg-white px-3 text-sm font-semibold outline-none focus:border-emerald-500">
+        {options.map((item) => {
+          const labelText = labels ? labels.find((x) => x.value === item)?.label : item;
+          return <option key={item} value={item}>{item === "all" ? "All" : (labelText || item).replace(/^./, (c) => c.toUpperCase())}</option>;
+        })}
+      </select>
+    </div>
+  );
 }
