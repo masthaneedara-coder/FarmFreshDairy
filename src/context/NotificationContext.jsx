@@ -18,16 +18,8 @@ const API_URL = "https://farmfreshdairy.onrender.com/api";
 /* =========================================================
    GET LOGGED-IN CUSTOMER ID
 
-   Your auth stores the complete customer object in:
+   Auth stores the complete customer object in:
    localStorage.customer
-
-   Example:
-   {
-     "id": "09c7271b-765b-436d-a5ba-5ba31f2fe79e",
-     "full_name": "...",
-     "phone": "...",
-     "role": "customer"
-   }
 ========================================================= */
 
 function getCustomerId() {
@@ -42,7 +34,10 @@ function getCustomerId() {
       }
     }
   } catch (error) {
-    console.warn("Unable to read customer from localStorage:", error);
+    console.warn(
+      "Unable to read customer from localStorage:",
+      error
+    );
   }
 
   return (
@@ -80,7 +75,8 @@ async function apiRequest(url, options = {}) {
 
   if (!response.ok) {
     throw new Error(
-      data?.message || `Request failed with status ${response.status}`
+      data?.message ||
+        `Request failed with status ${response.status}`
     );
   }
 
@@ -108,9 +104,13 @@ export function NotificationProvider({ children }) {
     const id = getCustomerId();
 
     if (!id) {
-      console.warn("Customer ID not found. Notifications cannot load.");
+      console.warn(
+        "Customer ID not found. Notifications cannot load."
+      );
+
       setNotifications([]);
       setError("Customer ID not found");
+
       return;
     }
 
@@ -122,18 +122,10 @@ export function NotificationProvider({ children }) {
         `${API_URL}/notifications/customer/${id}`
       );
 
-      console.log("Customer notifications API response:", data);
-
-      /*
-        Backend currently returns:
-
-        {
-          notifications: [...],
-          unreadCount: 3
-        }
-
-        This also supports a direct array response for compatibility.
-      */
+      console.log(
+        "Customer notifications API response:",
+        data
+      );
 
       const notificationList = Array.isArray(data)
         ? data
@@ -145,9 +137,16 @@ export function NotificationProvider({ children }) {
 
       setNotifications(notificationList);
     } catch (err) {
-      console.error("Load notifications error:", err);
+      console.error(
+        "Load notifications error:",
+        err
+      );
+
       setNotifications([]);
-      setError(err?.message || "Unable to load notifications");
+      setError(
+        err?.message ||
+          "Unable to load notifications"
+      );
     } finally {
       setLoading(false);
     }
@@ -184,7 +183,10 @@ export function NotificationProvider({ children }) {
     const id = getCustomerId();
 
     if (!id) {
-      console.warn("Cannot create notification: customer ID missing");
+      console.warn(
+        "Cannot create notification: customer ID missing"
+      );
+
       return;
     }
 
@@ -203,32 +205,48 @@ export function NotificationProvider({ children }) {
     };
 
     if (
-      Object.prototype.hasOwnProperty.call(preferenceMap, type) &&
+      Object.prototype.hasOwnProperty.call(
+        preferenceMap,
+        type
+      ) &&
       preferenceMap[type] === false
     ) {
       return;
     }
 
     try {
-      await apiRequest(`${API_URL}/notifications`, {
-        method: "POST",
-        body: JSON.stringify({
-          customer_id: id,
-          title: notification?.title || "Farm Fresh Dairy",
-          message: notification?.message || "",
-          type: notification?.type || "General",
-        }),
-      });
+      await apiRequest(
+        `${API_URL}/notifications`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            customer_id: id,
+            title:
+              notification?.title ||
+              "Farm Fresh Dairy",
+            message:
+              notification?.message || "",
+            type:
+              notification?.type ||
+              "General",
+          }),
+        }
+      );
 
       await loadNotifications();
     } catch (err) {
-      console.error("Add notification error:", err);
+      console.error(
+        "Add notification error:",
+        err
+      );
+
       throw err;
     }
   };
 
   /* =======================================================
      MARK ONE AS READ
+     Customer-specific
   ======================================================= */
 
   const markAsRead = async (id) => {
@@ -246,7 +264,6 @@ export function NotificationProvider({ children }) {
         }
       );
 
-      // Instant UI update
       setNotifications((current) =>
         current.map((notification) =>
           notification.id === id
@@ -259,7 +276,11 @@ export function NotificationProvider({ children }) {
         )
       );
     } catch (err) {
-      console.error("Mark notification as read error:", err);
+      console.error(
+        "Mark notification as read error:",
+        err
+      );
+
       throw err;
     }
   };
@@ -278,19 +299,29 @@ export function NotificationProvider({ children }) {
 
   /* =======================================================
      MARK ALL AS READ
+     CUSTOMER-SAFE
 
-     Current backend endpoint is global.
-     Keep this for compatibility with the current backend.
-     Before production, change backend to a customer-scoped
-     endpoint such as:
      PUT /notifications/customer/:customerId/read-all
   ======================================================= */
 
   const markAllRead = async () => {
+    const idCustomer = getCustomerId();
+
+    if (!idCustomer) {
+      console.warn(
+        "Cannot mark all notifications as read: customer ID missing"
+      );
+
+      return;
+    }
+
     try {
-      await apiRequest(`${API_URL}/notifications/read-all`, {
-        method: "PUT",
-      });
+      await apiRequest(
+        `${API_URL}/notifications/customer/${idCustomer}/read-all`,
+        {
+          method: "PUT",
+        }
+      );
 
       setNotifications((current) =>
         current.map((notification) => ({
@@ -300,87 +331,144 @@ export function NotificationProvider({ children }) {
         }))
       );
     } catch (err) {
-      console.error("Mark all notifications read error:", err);
+      console.error(
+        "Mark all customer notifications read error:",
+        err
+      );
+
       throw err;
     }
   };
 
   /* =======================================================
      DELETE ONE
+     CUSTOMER-SAFE
 
-     Current backend endpoint is global.
-     Before production, change backend to:
      DELETE /notifications/customer/:customerId/:id
   ======================================================= */
 
   const deleteNotification = async (id) => {
     if (!id) return;
 
+    const idCustomer = getCustomerId();
+
+    if (!idCustomer) {
+      console.warn(
+        "Cannot delete notification: customer ID missing"
+      );
+
+      return;
+    }
+
     try {
-      await apiRequest(`${API_URL}/notifications/${id}`, {
-        method: "DELETE",
-      });
+      await apiRequest(
+        `${API_URL}/notifications/customer/${idCustomer}/${id}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       setNotifications((current) =>
-        current.filter((notification) => notification.id !== id)
+        current.filter(
+          (notification) =>
+            notification.id !== id
+        )
       );
     } catch (err) {
-      console.error("Delete notification error:", err);
+      console.error(
+        "Delete customer notification error:",
+        err
+      );
+
       throw err;
     }
   };
 
   /* =======================================================
      CLEAR ALL
+     CUSTOMER-SAFE
 
-     Uses the existing delete endpoint one by one.
+     DELETE /notifications/customer/:customerId
   ======================================================= */
 
   const clearNotifications = async () => {
-    const currentNotifications = [...notifications];
+    const idCustomer = getCustomerId();
+
+    if (!idCustomer) {
+      console.warn(
+        "Cannot clear notifications: customer ID missing"
+      );
+
+      return;
+    }
 
     try {
-      for (const notification of currentNotifications) {
-        if (!notification?.id) continue;
-
-        await apiRequest(
-          `${API_URL}/notifications/${notification.id}`,
-          {
-            method: "DELETE",
-          }
-        );
-      }
+      await apiRequest(
+        `${API_URL}/notifications/customer/${idCustomer}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       setNotifications([]);
     } catch (err) {
-      console.error("Clear notifications error:", err);
+      console.error(
+        "Clear customer notifications error:",
+        err
+      );
+
       throw err;
     }
   };
 
   /* =======================================================
      BULK DELETE
+     CUSTOMER-SAFE
+
+     Each notification is deleted with customer ID.
   ======================================================= */
 
   const bulkDelete = async (ids) => {
-    if (!Array.isArray(ids)) return;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return;
+    }
+
+    const idCustomer = getCustomerId();
+
+    if (!idCustomer) {
+      console.warn(
+        "Cannot bulk delete notifications: customer ID missing"
+      );
+
+      return;
+    }
 
     try {
-      for (const id of ids) {
-        if (!id) continue;
+      await Promise.all(
+        ids.map((id) => {
+          if (!id) return Promise.resolve();
 
-        await apiRequest(`${API_URL}/notifications/${id}`, {
-          method: "DELETE",
-        });
-      }
+          return apiRequest(
+            `${API_URL}/notifications/customer/${idCustomer}/${id}`,
+            {
+              method: "DELETE",
+            }
+          );
+        })
+      );
 
       setNotifications((current) =>
         current.filter(
-          (notification) => !ids.includes(notification.id)
+          (notification) =>
+            !ids.includes(notification.id)
         )
       );
     } catch (err) {
-      console.error("Bulk delete notifications error:", err);
+      console.error(
+        "Bulk delete customer notifications error:",
+        err
+      );
+
       throw err;
     }
   };
@@ -395,12 +483,6 @@ export function NotificationProvider({ children }) {
 
   /* =======================================================
      UNREAD COUNT
-
-     Database field:
-       is_read = false
-
-     Also supports existing frontend:
-       status = "unread"
   ======================================================= */
 
   const unreadCount = useMemo(() => {
@@ -448,7 +530,9 @@ export function NotificationProvider({ children }) {
 ========================================================= */
 
 export function useNotifications() {
-  const context = useContext(NotificationContext);
+  const context = useContext(
+    NotificationContext
+  );
 
   if (!context) {
     throw new Error(

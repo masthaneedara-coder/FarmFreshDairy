@@ -2,7 +2,7 @@ import { supabaseAdmin } from "../config/supabase.js";
 
 /* =========================================================
    GET ALL NOTIFICATIONS
-   Used by notification.controller.js
+   Used by admin notification APIs
 ========================================================= */
 
 export async function getNotifications() {
@@ -21,15 +21,13 @@ export async function getNotifications() {
       ascending: false,
     });
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return data || [];
 }
 
 /* =========================================================
-   GET UNREAD NOTIFICATION COUNT
+   GET GLOBAL UNREAD NOTIFICATION COUNT
 ========================================================= */
 
 export async function getUnreadCount() {
@@ -41,9 +39,7 @@ export async function getUnreadCount() {
     })
     .eq("is_read", false);
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return count || 0;
 }
@@ -70,15 +66,14 @@ export async function createNotification({
     .select()
     .single();
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return data;
 }
 
 /* =========================================================
    MARK NOTIFICATION AS READ
+   Admin/global operation
 ========================================================= */
 
 export async function markAsRead(notificationId) {
@@ -91,15 +86,14 @@ export async function markAsRead(notificationId) {
     .select()
     .single();
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return data;
 }
 
 /* =========================================================
    MARK ALL NOTIFICATIONS AS READ
+   Admin/global operation
 ========================================================= */
 
 export async function markAllAsRead() {
@@ -111,9 +105,7 @@ export async function markAllAsRead() {
     .eq("is_read", false)
     .select();
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return data || [];
 }
@@ -123,6 +115,10 @@ export async function markAllAsRead() {
 ========================================================= */
 
 export async function getCustomerNotifications(customerId) {
+  if (!customerId) {
+    throw new Error("Customer ID is required");
+  }
+
   const { data, error } = await supabaseAdmin
     .from("notifications")
     .select(`
@@ -139,9 +135,7 @@ export async function getCustomerNotifications(customerId) {
       ascending: false,
     });
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return data || [];
 }
@@ -151,6 +145,10 @@ export async function getCustomerNotifications(customerId) {
 ========================================================= */
 
 export async function getCustomerUnreadCount(customerId) {
+  if (!customerId) {
+    throw new Error("Customer ID is required");
+  }
+
   const { count, error } = await supabaseAdmin
     .from("notifications")
     .select("id", {
@@ -160,21 +158,24 @@ export async function getCustomerUnreadCount(customerId) {
     .eq("customer_id", customerId)
     .eq("is_read", false);
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return count || 0;
 }
 
 /* =========================================================
    MARK CUSTOMER NOTIFICATION AS READ
+   Customer can only update their own notification
 ========================================================= */
 
 export async function markCustomerNotificationAsRead(
   notificationId,
   customerId
 ) {
+  if (!notificationId || !customerId) {
+    throw new Error("Notification ID and customer ID are required");
+  }
+
   const { data, error } = await supabaseAdmin
     .from("notifications")
     .update({
@@ -185,15 +186,38 @@ export async function markCustomerNotificationAsRead(
     .select()
     .single();
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return data;
 }
 
 /* =========================================================
+   MARK ALL CUSTOMER NOTIFICATIONS AS READ
+   IMPORTANT: Only this customer's notifications are updated
+========================================================= */
+
+export async function markAllCustomerNotificationsAsRead(customerId) {
+  if (!customerId) {
+    throw new Error("Customer ID is required");
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .update({
+      is_read: true,
+    })
+    .eq("customer_id", customerId)
+    .eq("is_read", false)
+    .select();
+
+  if (error) throw error;
+
+  return data || [];
+}
+
+/* =========================================================
    DELETE NOTIFICATION
+   Admin/global operation
 ========================================================= */
 
 export async function deleteNotification(notificationId) {
@@ -204,9 +228,54 @@ export async function deleteNotification(notificationId) {
     .select()
     .single();
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return data;
+}
+
+/* =========================================================
+   DELETE CUSTOMER NOTIFICATION
+   IMPORTANT: Customer ID is required.
+========================================================= */
+
+export async function deleteCustomerNotification(
+  notificationId,
+  customerId
+) {
+  if (!notificationId || !customerId) {
+    throw new Error("Notification ID and customer ID are required");
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .delete()
+    .eq("id", notificationId)
+    .eq("customer_id", customerId)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return data;
+}
+
+/* =========================================================
+   DELETE ALL CUSTOMER NOTIFICATIONS
+   IMPORTANT: Only this customer's notifications are deleted
+========================================================= */
+
+export async function deleteAllCustomerNotifications(customerId) {
+  if (!customerId) {
+    throw new Error("Customer ID is required");
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("notifications")
+    .delete()
+    .eq("customer_id", customerId)
+    .select();
+
+  if (error) throw error;
+
+  return data || [];
 }

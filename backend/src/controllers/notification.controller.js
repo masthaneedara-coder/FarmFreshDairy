@@ -7,7 +7,10 @@ import {
   getCustomerNotifications,
   getCustomerUnreadCount,
   markCustomerNotificationAsRead,
+  markAllCustomerNotificationsAsRead,
   deleteNotification,
+  deleteCustomerNotification,
+  deleteAllCustomerNotifications,
 } from "../services/notification.service.js";
 
 /* =========================================================
@@ -25,10 +28,7 @@ export async function getAllNotifications(req, res) {
       notifications,
     });
   } catch (err) {
-    console.error(
-      "Get All Notifications Error:",
-      err
-    );
+    console.error("Get All Notifications Error:", err);
 
     return res.status(500).json({
       success: false,
@@ -56,15 +56,13 @@ export async function getCustomerNotificationsController(
       });
     }
 
-    const notifications =
-      await getCustomerNotifications(
-        customerId
-      );
+    const notifications = await getCustomerNotifications(
+      customerId
+    );
 
-    const unreadCount =
-      await getCustomerUnreadCount(
-        customerId
-      );
+    const unreadCount = await getCustomerUnreadCount(
+      customerId
+    );
 
     return res.json({
       success: true,
@@ -90,10 +88,7 @@ export async function getCustomerNotificationsController(
    GET /api/notifications/count
 ========================================================= */
 
-export async function getNotificationCount(
-  req,
-  res
-) {
+export async function getNotificationCount(req, res) {
   try {
     const count = await getUnreadCount();
 
@@ -133,10 +128,9 @@ export async function getCustomerNotificationCount(
       });
     }
 
-    const count =
-      await getCustomerUnreadCount(
-        customerId
-      );
+    const count = await getCustomerUnreadCount(
+      customerId
+    );
 
     return res.json({
       success: true,
@@ -160,10 +154,7 @@ export async function getCustomerNotificationCount(
    POST /api/notifications
 ========================================================= */
 
-export async function sendNotification(
-  req,
-  res
-) {
+export async function sendNotification(req, res) {
   try {
     const {
       customer_id,
@@ -193,18 +184,16 @@ export async function sendNotification(
       });
     }
 
-    const notification =
-      await createNotification({
-        customerId: customer_id,
-        title,
-        message,
-        type: type || "General",
-      });
+    const notification = await createNotification({
+      customerId: customer_id,
+      title,
+      message,
+      type: type || "General",
+    });
 
     return res.status(201).json({
       success: true,
-      message:
-        "Notification created successfully",
+      message: "Notification created successfully",
       notification,
     });
   } catch (err) {
@@ -222,13 +211,11 @@ export async function sendNotification(
 
 /* =========================================================
    MARK ONE NOTIFICATION AS READ
+   Admin
    PUT /api/notifications/:id/read
 ========================================================= */
 
-export async function readNotification(
-  req,
-  res
-) {
+export async function readNotification(req, res) {
   try {
     const { id } = req.params;
 
@@ -239,13 +226,11 @@ export async function readNotification(
       });
     }
 
-    const notification =
-      await markAsRead(id);
+    const notification = await markAsRead(id);
 
     return res.json({
       success: true,
-      message:
-        "Notification marked as read",
+      message: "Notification marked as read",
       notification,
     });
   } catch (err) {
@@ -263,21 +248,17 @@ export async function readNotification(
 
 /* =========================================================
    MARK ALL NOTIFICATIONS AS READ
+   Admin
    PUT /api/notifications/read-all
 ========================================================= */
 
-export async function readAllNotifications(
-  req,
-  res
-) {
+export async function readAllNotifications(req, res) {
   try {
-    const notifications =
-      await markAllAsRead();
+    const notifications = await markAllAsRead();
 
     return res.json({
       success: true,
-      message:
-        "All notifications marked as read",
+      message: "All notifications marked as read",
       notifications,
     });
   } catch (err) {
@@ -295,6 +276,7 @@ export async function readAllNotifications(
 
 /* =========================================================
    MARK CUSTOMER NOTIFICATION AS READ
+   Customer
    PUT /api/notifications/customer/:customerId/:id/read
 ========================================================= */
 
@@ -303,10 +285,7 @@ export async function readCustomerNotification(
   res
 ) {
   try {
-    const {
-      customerId,
-      id,
-    } = req.params;
+    const { customerId, id } = req.params;
 
     if (!customerId) {
       return res.status(400).json({
@@ -318,8 +297,7 @@ export async function readCustomerNotification(
     if (!id) {
       return res.status(400).json({
         success: false,
-        message:
-          "Notification ID is required",
+        message: "Notification ID is required",
       });
     }
 
@@ -331,8 +309,7 @@ export async function readCustomerNotification(
 
     return res.json({
       success: true,
-      message:
-        "Notification marked as read",
+      message: "Notification marked as read",
       notification,
     });
   } catch (err) {
@@ -349,37 +326,172 @@ export async function readCustomerNotification(
 }
 
 /* =========================================================
-   DELETE NOTIFICATION
-   DELETE /api/notifications/:id
+   MARK ALL CUSTOMER NOTIFICATIONS AS READ
+   Customer
+   PUT /api/notifications/customer/:customerId/read-all
 ========================================================= */
 
-export async function removeNotification(
+export async function readAllCustomerNotifications(
   req,
   res
 ) {
+  try {
+    const { customerId } = req.params;
+
+    if (!customerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer ID is required",
+      });
+    }
+
+    const notifications =
+      await markAllCustomerNotificationsAsRead(
+        customerId
+      );
+
+    return res.json({
+      success: true,
+      message:
+        "All customer notifications marked as read",
+      notifications,
+    });
+  } catch (err) {
+    console.error(
+      "Mark All Customer Notifications Read Error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+}
+
+/* =========================================================
+   DELETE NOTIFICATION
+   Admin
+   DELETE /api/notifications/:id
+========================================================= */
+
+export async function removeNotification(req, res) {
   try {
     const { id } = req.params;
 
     if (!id) {
       return res.status(400).json({
         success: false,
-        message:
-          "Notification ID is required",
+        message: "Notification ID is required",
       });
     }
 
-    const notification =
-      await deleteNotification(id);
+    const notification = await deleteNotification(id);
 
     return res.json({
       success: true,
-      message:
-        "Notification deleted successfully",
+      message: "Notification deleted successfully",
       notification,
     });
   } catch (err) {
     console.error(
       "Delete Notification Error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+}
+
+/* =========================================================
+   DELETE CUSTOMER NOTIFICATION
+   Customer
+   DELETE /api/notifications/customer/:customerId/:id
+========================================================= */
+
+export async function removeCustomerNotification(
+  req,
+  res
+) {
+  try {
+    const { customerId, id } = req.params;
+
+    if (!customerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer ID is required",
+      });
+    }
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Notification ID is required",
+      });
+    }
+
+    const notification =
+      await deleteCustomerNotification(
+        id,
+        customerId
+      );
+
+    return res.json({
+      success: true,
+      message:
+        "Customer notification deleted successfully",
+      notification,
+    });
+  } catch (err) {
+    console.error(
+      "Delete Customer Notification Error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+}
+
+/* =========================================================
+   DELETE ALL CUSTOMER NOTIFICATIONS
+   Customer
+   DELETE /api/notifications/customer/:customerId
+========================================================= */
+
+export async function removeAllCustomerNotifications(
+  req,
+  res
+) {
+  try {
+    const { customerId } = req.params;
+
+    if (!customerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer ID is required",
+      });
+    }
+
+    const notifications =
+      await deleteAllCustomerNotifications(
+        customerId
+      );
+
+    return res.json({
+      success: true,
+      message:
+        "All customer notifications deleted successfully",
+      notifications,
+    });
+  } catch (err) {
+    console.error(
+      "Delete All Customer Notifications Error:",
       err
     );
 

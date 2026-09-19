@@ -9,7 +9,10 @@ import {
   readNotification,
   readAllNotifications,
   readCustomerNotification,
+  readAllCustomerNotifications,
   removeNotification,
+  removeCustomerNotification,
+  removeAllCustomerNotifications,
 } from "../controllers/notification.controller.js";
 
 const router = express.Router();
@@ -30,13 +33,13 @@ router.get("/count", getNotificationCount);
 // POST /api/notifications
 router.post("/", sendNotification);
 
-// Mark one notification as read
-// PUT /api/notifications/:id/read
-router.put("/:id/read", readNotification);
-
 // Mark all notifications as read
 // PUT /api/notifications/read-all
 router.put("/read-all", readAllNotifications);
+
+// Mark one notification as read
+// PUT /api/notifications/:id/read
+router.put("/:id/read", readNotification);
 
 // Delete notification
 // DELETE /api/notifications/:id
@@ -66,6 +69,27 @@ router.get(
 router.put(
   "/customer/:customerId/:id/read",
   readCustomerNotification
+);
+
+// Mark all customer's notifications as read
+// PUT /api/notifications/customer/:customerId/read-all
+router.put(
+  "/customer/:customerId/read-all",
+  readAllCustomerNotifications
+);
+
+// Delete customer's notification
+// DELETE /api/notifications/customer/:customerId/:id
+router.delete(
+  "/customer/:customerId/:id",
+  removeCustomerNotification
+);
+
+// Delete all customer's notifications
+// DELETE /api/notifications/customer/:customerId
+router.delete(
+  "/customer/:customerId",
+  removeAllCustomerNotifications
 );
 
 export default router;
