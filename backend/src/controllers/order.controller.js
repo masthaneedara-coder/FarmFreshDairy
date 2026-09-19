@@ -368,6 +368,27 @@ export const assignDeliveryBoy = async (req, res) => {
     }
 
     // ==============================
+    // Create Customer Notification
+    // ==============================
+    try {
+      await createNotification({
+        customerId: data.customer_id,
+        title: "🚚 Delivery Assigned",
+        message: `Your order ${data.order_number} has been assigned to a delivery partner.`,
+        type: "DELIVERY_ASSIGNED",
+      });
+
+      console.log(
+        `[Notification] Delivery assigned notification created: ${data.order_number}`
+      );
+    } catch (err) {
+      console.error(
+        "[Notification] Delivery assigned notification failed:",
+        err
+      );
+    }
+
+    // ==============================
     // Send Customer Push Notification
     // ==============================
     try {
