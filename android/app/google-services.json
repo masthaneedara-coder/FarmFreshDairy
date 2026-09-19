@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "863617761513",
+    "project_id": "farm-fresh-dairy-f5e49",
+    "storage_bucket": "farm-fresh-dairy-f5e49.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:863617761513:android:ef7cb7c1e204b4de393078",
+        "android_client_info": {
+          "package_name": "com.farmfreshdairy.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD7q43uAS9aw2nc4YUcQWx-WUbwwkmObI0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

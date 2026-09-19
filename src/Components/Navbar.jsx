@@ -233,39 +233,7 @@ export default function Navbar() {
               </div>
             </div>
 
-            {/* Mobile quick actions */}
-            <div className="grid grid-cols-2 gap-2 pb-3 pt-2 lg:hidden">
-              {!role && (
-                <MobileChip icon="🔐" label="Login / Signup" onClick={() => navigate("/auth")} />
-              )}
-
-              {role === "customer" && (
-                <>
-                  <MobileChip icon="🛍️" label="Shop" active={isActive("/products")} onClick={() => navigate("/products")} />
-                  <MobileChip icon="📊" label="Dashboard" active={isActive("/dashboard")} onClick={() => navigate("/dashboard")} />
-                  <MobileChip icon="🥛" label="Subscription" active={isActive("/subscription", true)} onClick={goToSubscription} />
-                  <MobileChip icon="📦" label="Orders" active={isActive("/order-history")} onClick={() => navigate("/order-history")} />
-                </>
-              )}
-
-              {role === "admin" && (
-                <>
-                  <MobileChip icon="📊" label="Dashboard" active={isActive("/admin")} onClick={() => navigate("/admin")} />
-                  <MobileChip icon="🛍️" label="Products" active={isActive("/admin/products")} onClick={() => navigate("/admin/products")} />
-                  <MobileChip icon="📦" label="Orders" active={isActive("/admin/orders")} onClick={() => navigate("/admin/orders")} />
-                  <MobileChip icon="👥" label="Customers" active={isActive("/admin/customers")} onClick={() => navigate("/admin/customers")} />
-                  <MobileChip icon="🔄" label="Subs" active={isActive("/admin/subscriptions")} onClick={() => navigate("/admin/subscriptions")} />
-                </>
-              )}
-
-              {role === "delivery" && (
-                <>
-                  <MobileChip icon="📊" label="Dashboard" active={isActive("/delivery")} onClick={() => navigate("/delivery")} />
-                  <MobileChip icon="🚚" label="Deliveries" onClick={() => navigate("/delivery")} />
-                  <MobileChip icon="📋" label="History" active={isActive("/delivery/history")} onClick={() => navigate("/delivery/history")} />
-                </>
-              )}
-            </div>
+           
           </div>
         </div>
 

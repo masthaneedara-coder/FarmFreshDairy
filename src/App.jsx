@@ -1,4 +1,6 @@
 import { Routes, Route, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { initializeFCM } from "./services/fcmService";
 import Navbar from "./Components/Navbar";
 import { USER_ROLES } from "./config/appConfig";
 
@@ -55,6 +57,9 @@ import NotificationSettings from "./Pages/NotificationSettings";
 
 export default function App() {
   const location = useLocation();
+    useEffect(() => {
+    initializeFCM();
+  }, []);
   const hideNavbar =  location.pathname.startsWith("/admin");
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-cyan-50 animate-gradient">
