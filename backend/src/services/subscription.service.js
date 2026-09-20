@@ -877,13 +877,14 @@ export async function pauseSubscriptionService(
   console.log("Pause To:", pauseTo);
 
   const result = await supabaseAdmin
-    .from("subscriptions")
-    .update({
-      is_paused: true,
-      pause_from: pauseFrom,
-      pause_to: pauseTo,
-      updated_at: new Date().toISOString(),
-    })
+  .from("subscriptions")
+  .update({
+    status: "Paused",
+    is_paused: true,
+    pause_from: pauseFrom,
+    pause_to: pauseTo,
+    updated_at: new Date().toISOString(),
+  })
     .eq("id", subscriptionId)
     .select();
 
