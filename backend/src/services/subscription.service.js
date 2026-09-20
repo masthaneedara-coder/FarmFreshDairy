@@ -444,19 +444,356 @@ export async function deleteSubscriptionService(subscriptionId) {
 export async function renewSubscriptionService(
   subscriptionId,
   endDate,
-  totalAmount
+  totalAmount,
+  paymentData = {}
 ) {
-  return await supabaseAdmin
+  // ==========================================
+  // 1. Get current subscription
+  // ==========================================
+
+  const {
+    data: currentSubscription,
+    error: subscriptionFetchError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .select("*")
+    .eq("id", subscriptionId)
+    .single();
+
+  if (subscriptionFetchError) {
+    return {
+      data: null,
+      error: subscriptionFetchError,
+    };
+  }
+
+  if (!currentSubscription) {
+    return {
+      data: null,
+      error: new Error("Subscription not found."),
+    };
+  }
+
+  // ==========================================
+  // 2. Validate renewal data
+  // ==========================================
+
+  if (!endDate) {
+    return {
+      data: null,
+      error: new Error("Renewal end date is required."),
+    };
+  }
+
+  if (
+    totalAmount === undefined ||
+    totalAmount === null ||
+    totalAmount === ""
+  ) {
+    return {
+      data: null,
+      error: new Error("Renewal total amount is required."),
+    };
+  }
+
+  const renewalAmount = Number(totalAmount);
+
+  if (!Number.isFinite(renewalAmount) || renewalAmount < 0) {
+    return {
+      data: null,
+      error: new Error("Invalid renewal total amount."),
+    };
+  }
+
+  // ==========================================
+  // 3. Determine renewal billing period
+  // ==========================================
+
+  const today = new Date();
+
+  today.setHours(0, 0, 0, 0);
+
+  const currentEndDate = new Date(
+    `${currentSubscription.end_date}T00:00:00`
+  );
+
+  let renewalStart = new Date(today);
+
+  // If subscription has not expired,
+  // renewal starts the day after current end date.
+  if (
+    currentSubscription.end_date &&
+    !Number.isNaN(currentEndDate.getTime()) &&
+    currentEndDate >= today
+  ) {
+    renewalStart = new Date(currentEndDate);
+
+    renewalStart.setDate(
+      renewalStart.getDate() + 1
+    );
+  }
+
+  const renewalStartDate =
+    renewalStart.toISOString().split("T")[0];
+
+  // ==========================================
+  // 4. Payment information
+  // ==========================================
+
+  const paymentMethod =
+    paymentData.payment_method ||
+    currentSubscription.payment_method ||
+    "COD";
+
+  const paymentStatus =
+    paymentData.payment_status ||
+    "Pending";
+
+  const paymentDate =
+    paymentData.payment_date ||
+    (paymentStatus === "Paid"
+      ? new Date().toISOString()
+      : null);
+
+  const paymentReference =
+    paymentData.payment_reference || null;
+
+  const paymentAmount =
+    paymentData.payment_amount !== undefined &&
+    paymentData.payment_amount !== null
+      ? Number(paymentData.payment_amount)
+      : renewalAmount;
+
+  // ==========================================
+  // 5. Generate new invoice number
+  // ==========================================
+
+  let invoiceNumber;
+
+  try {
+    invoiceNumber =
+      await generateInvoiceNumber();
+  } catch (invoiceNumberError) {
+    return {
+      data: null,
+      error: invoiceNumberError,
+    };
+  }
+
+  // ==========================================
+  // 6. Save old subscription values
+  //    for rollback if billing fails
+  // ==========================================
+
+  const previousSubscription = {
+    end_date: currentSubscription.end_date,
+    total_amount: currentSubscription.total_amount,
+    status: currentSubscription.status,
+    payment_method:
+      currentSubscription.payment_method,
+    payment_status:
+      currentSubscription.payment_status,
+    payment_date:
+      currentSubscription.payment_date,
+    payment_reference:
+      currentSubscription.payment_reference,
+    payment_amount:
+      currentSubscription.payment_amount,
+    updated_at:
+      currentSubscription.updated_at,
+  };
+
+  // ==========================================
+  // 7. Update subscription
+  // ==========================================
+
+  const {
+    data: renewedSubscription,
+    error: renewalError,
+  } = await supabaseAdmin
     .from("subscriptions")
     .update({
       end_date: endDate,
-      total_amount: totalAmount,
+
+      total_amount: renewalAmount,
+
       status: "Active",
+
+      payment_method: paymentMethod,
+
+      payment_status: paymentStatus,
+
+      payment_date: paymentDate,
+
+      payment_reference: paymentReference,
+
+      payment_amount: paymentAmount,
+
       updated_at: new Date().toISOString(),
     })
     .eq("id", subscriptionId)
     .select()
     .single();
+
+  if (renewalError) {
+    return {
+      data: null,
+      error: renewalError,
+    };
+  }
+
+  // ==========================================
+  // 8. Billing values
+  // ==========================================
+
+  const billingSubtotal =
+    paymentData.subtotal !== undefined &&
+    paymentData.subtotal !== null
+      ? Number(paymentData.subtotal)
+      : renewalAmount;
+
+  const billingDiscount =
+    paymentData.discount !== undefined &&
+    paymentData.discount !== null
+      ? Number(paymentData.discount)
+      : 0;
+
+  const billingGst =
+    paymentData.gst !== undefined &&
+    paymentData.gst !== null
+      ? Number(paymentData.gst)
+      : 0;
+
+  const billingGstPercent =
+    paymentData.gst_percent !== undefined &&
+    paymentData.gst_percent !== null
+      ? Number(paymentData.gst_percent)
+      : 2;
+
+  const dailyRate =
+    renewalAmount / 30;
+
+  // ==========================================
+  // 9. Billing month / year
+  // ==========================================
+
+  const billingDate = new Date(
+    `${renewalStartDate}T00:00:00`
+  );
+
+  const billingMonth =
+    billingDate.toLocaleString("en-US", {
+      month: "long",
+    });
+
+  const billingYear =
+    billingDate.getFullYear();
+
+  // ==========================================
+  // 10. Create NEW billing record
+  // ==========================================
+
+  const {
+    data: billingRecord,
+    error: billingError,
+  } = await supabaseAdmin
+    .from("billing")
+    .insert({
+      invoice_number: invoiceNumber,
+
+      customer_id:
+        currentSubscription.customer_id,
+
+      subscription_id:
+        currentSubscription.id,
+
+      billing_month:
+        billingMonth,
+
+      billing_year:
+        billingYear,
+
+      amount:
+        renewalAmount,
+
+      subtotal:
+        billingSubtotal,
+
+      discount:
+        billingDiscount,
+
+      gst:
+        billingGst,
+
+      gst_amount:
+        billingGst,
+
+      gst_percent:
+        billingGstPercent,
+
+      total_amount:
+        renewalAmount,
+
+      payment_status:
+        paymentStatus,
+
+      payment_method:
+        paymentMethod,
+
+      invoice_date:
+        new Date().toISOString(),
+
+      invoice_type:
+        "Subscription",
+
+      delivered_days:
+        0,
+
+      daily_rate:
+        dailyRate,
+    })
+    .select()
+    .single();
+
+  // ==========================================
+  // 11. Rollback subscription if billing fails
+  // ==========================================
+
+  if (billingError) {
+    console.error(
+      "Renewal Billing Creation Error:",
+      billingError
+    );
+
+    const {
+      error: rollbackError,
+    } = await supabaseAdmin
+      .from("subscriptions")
+      .update(previousSubscription)
+      .eq("id", subscriptionId);
+
+    if (rollbackError) {
+      console.error(
+        "Renewal Subscription Rollback Error:",
+        rollbackError
+      );
+    }
+
+    return {
+      data: null,
+      error: billingError,
+    };
+  }
+
+  // ==========================================
+  // 12. Return renewed subscription + billing
+  // ==========================================
+
+  return {
+    data: renewedSubscription,
+    billing: billingRecord,
+    error: null,
+  };
 }
 
 export async function getSubscriptionDeliverySummaryService(subscriptionId) {

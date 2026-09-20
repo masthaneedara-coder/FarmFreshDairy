@@ -320,22 +320,53 @@ export async function deleteSubscription(req, res) {
     });
   }
 }
-
 /* ==========================================================
-   Renew
+   Renew Subscription
 ========================================================== */
 
 export async function renewSubscription(req, res) {
   try {
     const { id } = req.params;
-    const { end_date, total_amount } = req.body;
 
-    const { data, error } =
-      await renewSubscriptionService(
-        id,
-        end_date,
-        total_amount
-      );
+    const {
+      end_date,
+      total_amount,
+
+      // Payment details
+      payment_method,
+      payment_status,
+      payment_date,
+      payment_reference,
+      payment_amount,
+
+      // Optional billing details
+      subtotal,
+      discount,
+      gst,
+      gst_percent,
+    } = req.body;
+
+    const {
+      data,
+      billing,
+      error,
+    } = await renewSubscriptionService(
+      id,
+      end_date,
+      total_amount,
+      {
+        payment_method,
+        payment_status,
+        payment_date,
+        payment_reference,
+        payment_amount,
+
+        subtotal,
+        discount,
+        gst,
+        gst_percent,
+      }
+    );
 
     if (error) {
       return res.status(400).json({
@@ -346,10 +377,18 @@ export async function renewSubscription(req, res) {
 
     return res.json({
       success: true,
+
       subscription: data,
+
+      billing,
     });
 
   } catch (err) {
+    console.error(
+      "Renew Subscription Error:",
+      err
+    );
+
     return res.status(500).json({
       success: false,
       message: err.message,
