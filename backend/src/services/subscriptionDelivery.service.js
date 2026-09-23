@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../config/supabase.js";
+import { debitWalletForDelivery } from "./wallet.service.js";
 
 export async function getTodayDeliveriesService() {
   const today = new Date().toISOString().split("T")[0];
@@ -75,15 +76,15 @@ export async function updateDeliveryStatusService(
 ) {
   const now = new Date().toISOString();
 
-  const update = {
-    status,
-    updated_at: now,
-  };
+  // ==========================================================
+  // ORDER DELIVERY
+  // ==========================================================
 
-  // ==========================================
-  // ORDER
-  // ==========================================
   if (type === "Order") {
+    const update = {
+      status,
+      updated_at: now,
+    };
 
     if (status === "Out for Delivery") {
       update.out_for_delivery_at = now;
@@ -93,26 +94,276 @@ export async function updateDeliveryStatusService(
       update.delivery_completed_at = now;
     }
 
-    return await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("orders")
       .update(update)
       .eq("id", deliveryId)
       .select()
       .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return {
+      data,
+      wallet: null,
+    };
   }
 
-  // ==========================================
-  // SUBSCRIPTION
-  // ==========================================
+  // ==========================================================
+  // SUBSCRIPTION DELIVERY
+  // ==========================================================
+
   if (type === "Subscription") {
+    // --------------------------------------------------------
+    // 1. GET DELIVERY + SUBSCRIPTION + ITEMS
+    // --------------------------------------------------------
 
-    return await supabaseAdmin
-      .from("subscription_deliveries")
-      .update(update)
-      .eq("id", deliveryId)
-      .select()
-      .single();
+    const { data: delivery, error: deliveryError } =
+      await supabaseAdmin
+        .from("subscription_deliveries")
+        .select(`
+          id,
+          delivery_number,
+          customer_id,
+          subscription_id,
+          status,
+          delivery_completed_at,
+          wallet_debited_amount,
+          wallet_balance_after,
+          subscriptions(
+            id,
+            customer_id,
+            payment_method,
+            payment_status
+          ),
+          subscription_delivery_items(
+            id,
+            quantity,
+            unit_price,
+            total_price
+          )
+        `)
+        .eq("id", deliveryId)
+        .single();
+
+    if (deliveryError) {
+      throw deliveryError;
+    }
+
+    if (!delivery) {
+      throw new Error("Subscription delivery not found");
+    }
+
+    // --------------------------------------------------------
+    // 2. PREVENT DUPLICATE DELIVERY
+    // --------------------------------------------------------
+
+    if (
+      status === "Delivered" &&
+      String(delivery.status || "").toLowerCase() === "delivered"
+    ) {
+      return {
+        data: delivery,
+        wallet: {
+          debited: Number(delivery.wallet_debited_amount || 0),
+          balanceAfter:
+            delivery.wallet_balance_after !== null &&
+            delivery.wallet_balance_after !== undefined
+              ? Number(delivery.wallet_balance_after)
+              : null,
+          alreadyProcessed: true,
+        },
+      };
+    }
+
+    // --------------------------------------------------------
+    // 3. CALCULATE DELIVERY TOTAL
+    // --------------------------------------------------------
+
+    const deliveryItems =
+      delivery.subscription_delivery_items || [];
+
+    const deliveryTotal = deliveryItems.reduce(
+      (total, item) => {
+        const itemTotal = Number(
+          item.total_price ??
+            Number(item.quantity || 0) *
+              Number(item.unit_price || 0)
+        );
+
+        return total + (Number.isFinite(itemTotal) ? itemTotal : 0);
+      },
+      0
+    );
+
+    if (deliveryTotal < 0) {
+      throw new Error("Invalid delivery amount");
+    }
+
+    // --------------------------------------------------------
+    // 4. DETERMINE PAYMENT TYPE
+    // --------------------------------------------------------
+
+    const subscription = delivery.subscriptions;
+
+    if (!subscription) {
+      throw new Error("Subscription not found for delivery");
+    }
+
+    const paymentMethod = String(
+      subscription.payment_method || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    const paymentStatus = String(
+      subscription.payment_status || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    /*
+     * IMPORTANT:
+     *
+     * Only ONLINE / PREPAID subscriptions use wallet.
+     *
+     * We do NOT use:
+     *
+     * paymentStatus === "paid"
+     *
+     * to identify prepaid because a COD/Postpaid subscription
+     * could also become Paid later.
+     */
+
+    const isPrepaid =
+      paymentMethod === "online" ||
+      paymentMethod === "prepaid";
+
+    const isPostpaid =
+      paymentMethod === "cod" ||
+      paymentMethod === "postpaid";
+
+    // --------------------------------------------------------
+    // 5. PREPAID WALLET PROCESSING
+    // --------------------------------------------------------
+
+    let walletResult = null;
+
+    if (status === "Delivered" && isPrepaid) {
+      if (deliveryTotal <= 0) {
+        throw new Error(
+          "Cannot debit wallet because delivery amount is zero"
+        );
+      }
+
+      walletResult = await debitWalletForDelivery({
+        customerId: delivery.customer_id,
+        amount: deliveryTotal,
+        deliveryId: delivery.id,
+        deliveryNumber: delivery.delivery_number,
+      });
+
+      if (!walletResult.success) {
+        throw new Error(
+          walletResult.message ||
+            "Insufficient wallet balance"
+        );
+      }
+    }
+
+    // --------------------------------------------------------
+    // 6. BUILD DELIVERY UPDATE
+    // --------------------------------------------------------
+
+    const update = {
+      status,
+      updated_at: now,
+    };
+
+    if (status === "Out for Delivery") {
+      update.out_for_delivery_at = now;
+    }
+
+    if (status === "Delivered") {
+      update.delivery_completed_at = now;
+    }
+
+    // --------------------------------------------------------
+    // 7. SAVE WALLET INFORMATION
+    // --------------------------------------------------------
+
+    if (status === "Delivered" && isPrepaid) {
+      update.wallet_debited_amount = deliveryTotal;
+      update.wallet_balance_after =
+        walletResult.newBalance;
+
+      update.payment_status = "Paid";
+    }
+
+    // --------------------------------------------------------
+    // 8. POSTPAID / COD
+    // --------------------------------------------------------
+
+    if (status === "Delivered" && isPostpaid) {
+      /*
+       * No wallet deduction.
+       *
+       * The delivery amount remains part of the customer's
+       * outstanding/monthly bill.
+       */
+    }
+
+    // --------------------------------------------------------
+    // 9. UPDATE DELIVERY
+    // --------------------------------------------------------
+
+    const { data: updatedDelivery, error: updateError } =
+      await supabaseAdmin
+        .from("subscription_deliveries")
+        .update(update)
+        .eq("id", deliveryId)
+        .select()
+        .single();
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    // --------------------------------------------------------
+    // 10. RETURN RESULT
+    // --------------------------------------------------------
+
+    return {
+      data: updatedDelivery,
+
+      wallet: walletResult
+        ? {
+            debited: walletResult.debitedAmount,
+            previousBalance:
+              walletResult.previousBalance,
+            balanceAfter:
+              walletResult.newBalance,
+            message: walletResult.message,
+            alreadyProcessed: false,
+          }
+        : null,
+
+      billing: {
+        deliveryAmount: deliveryTotal,
+        paymentType: isPrepaid
+          ? "Prepaid"
+          : isPostpaid
+          ? "Postpaid"
+          : paymentMethod || "Unknown",
+      },
+    };
   }
+
+  // ==========================================================
+  // INVALID DELIVERY TYPE
+  // ==========================================================
 
   throw new Error(
     `Invalid delivery type: ${type}`

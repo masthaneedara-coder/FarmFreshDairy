@@ -79,7 +79,8 @@ export async function updateDeliveryStatus(req, res) {
     const { data, error } =
       await updateDeliveryStatusService(
         req.params.id,
-        status
+        status,
+        "Order"
       );
 
     if (error) throw error;
@@ -254,6 +255,10 @@ export async function updateSubscriptionDeliveryStatus(req, res) {
     const { deliveryId } = req.params;
     const { status } = req.body;
 
+    // ==========================================================
+    // VALIDATION
+    // ==========================================================
+
     if (!deliveryId) {
       return res.status(400).json({
         success: false,
@@ -286,7 +291,10 @@ export async function updateSubscriptionDeliveryStatus(req, res) {
       });
     }
 
-    // Get current delivery
+    // ==========================================================
+    // GET CURRENT DELIVERY
+    // ==========================================================
+
     const { data: currentDelivery, error: fetchError } =
       await supabaseAdmin
         .from("subscription_deliveries")
@@ -305,7 +313,10 @@ export async function updateSubscriptionDeliveryStatus(req, res) {
       });
     }
 
-    // Delivered deliveries cannot be changed
+    // ==========================================================
+    // PREVENT CHANGING DELIVERED DELIVERY
+    // ==========================================================
+
     if (
       currentDelivery.status === "Delivered" &&
       status !== "Delivered"
@@ -316,51 +327,51 @@ export async function updateSubscriptionDeliveryStatus(req, res) {
       });
     }
 
-    // Out for Delivery cannot be skipped
+    // ==========================================================
+    // OUT FOR DELIVERY → CANNOT SKIP
+    // ==========================================================
+
     if (
       currentDelivery.status === "Out for Delivery" &&
       status === "Skipped"
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "Out for Delivery cannot be skipped.",
+        message: "Out for Delivery cannot be skipped.",
       });
     }
 
-    const updateData = {
+    // ==========================================================
+    // SPECIAL HANDLING FOR SKIPPED / PENDING
+    // ==========================================================
+
+    /*
+     * We let the main service handle the actual status update
+     * and wallet processing.
+     *
+     * Wallet processing happens ONLY when:
+     *
+     * status === "Delivered"
+     */
+
+    const result = await updateDeliveryStatusService(
+      deliveryId,
       status,
-      updated_at: new Date().toISOString(),
-    };
+      "Subscription"
+    );
 
-    // When skipping today's delivery,
-    // remove delivery boy assignment.
-    if (status === "Skipped") {
-      updateData.delivery_boy_id = null;
-    }
-
-    // When restoring a skipped delivery,
-    // return it to Pending and remove assignment.
-    if (status === "Pending") {
-      updateData.delivery_boy_id = null;
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from("subscription_deliveries")
-      .update(updateData)
-      .eq("id", deliveryId)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
+    // ==========================================================
+    // RESPONSE
+    // ==========================================================
 
     return res.json({
       success: true,
       message: `Subscription delivery status updated to ${status}`,
-      delivery: data,
+      delivery: result.data,
+      wallet: result.wallet || null,
+      billing: result.billing || null,
     });
+
   } catch (err) {
     console.error(
       "Update Subscription Delivery Status Error:",

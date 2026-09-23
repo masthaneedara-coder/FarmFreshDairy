@@ -1,19 +1,147 @@
 import { supabaseAdmin } from "../config/supabase.js";
 
-export const getDashboardService = async (customerId) => {
+// ======================================
+// Customer Wallet
+// ======================================
+async function getCustomerWallet(customerId) {
+  const { data, error } = await supabaseAdmin
+    .from("wallet_accounts")
+    .select(`
+      id,
+      customer_id,
+      balance,
+      wallet_type,
+      status
+    `)
+    .eq("customer_id", customerId)
+    .maybeSingle();
+
+  if (error) {
+    console.error(
+      "Customer wallet lookup error:",
+      error
+    );
+
+    throw error;
+  }
+
+  return {
+    balance: Number(data?.balance || 0),
+    type: data?.wallet_type || "Prepaid",
+    status: data?.status || "Active",
+  };
+}
+
+// ======================================
+// Customer Outstanding Billing
+// ======================================
+async function getCustomerOutstanding(customerId) {
+  const { data, error } = await supabaseAdmin
+    .from("billing")
+    .select(`
+      id,
+      invoice_number,
+      invoice_type,
+      subscription_id,
+      order_id,
+      total_amount,
+      payment_status,
+      payment_method,
+      invoice_date,
+      billing_month,
+      billing_year
+    `)
+    .eq("customer_id", customerId)
+    .order("invoice_date", {
+      ascending: false,
+    });
+
+  if (error) {
+    console.error(
+      "Customer outstanding billing error:",
+      error
+    );
+
+    throw error;
+  }
+
+  const unpaidBills = (data || []).filter((bill) => {
+    const paymentMethod = String(
+      bill.payment_method || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    const paymentStatus = String(
+      bill.payment_status || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    // Only COD/Postpaid contributes to outstanding.
+    const isPostpaid =
+      paymentMethod === "cod" ||
+      paymentMethod === "postpaid";
+
+    const isPaid =
+      paymentStatus === "paid" ||
+      paymentStatus === "completed" ||
+      paymentStatus === "success" ||
+      paymentStatus === "successful";
+
+    return isPostpaid && !isPaid;
+  });
+
+  const outstanding = unpaidBills.reduce(
+    (sum, bill) =>
+      sum + Number(bill.total_amount || 0),
+    0
+  );
+
+  return {
+    outstanding,
+    billCount: unpaidBills.length,
+    bills: unpaidBills,
+  };
+};
+
+// ======================================
+// Customer Dashboard
+// ======================================
+export const getDashboardService = async (
+  customerId
+) => {
+  if (!customerId) {
+    return {
+      error: new Error("Customer ID is required"),
+    };
+  }
+
+  // ======================================
   // Customer
-  const { data: customer, error: customerError } =
-    await supabaseAdmin
-      .from("customers")
-      .select("*")
-      .eq("id", customerId)
-      .single();
+  // ======================================
+  const {
+    data: customer,
+    error: customerError,
+  } = await supabaseAdmin
+    .from("customers")
+    .select("*")
+    .eq("id", customerId)
+    .single();
 
-  if (customerError) return { error: customerError };
+  if (customerError) {
+    return {
+      error: customerError,
+    };
+  }
 
+  // ======================================
   // Orders
-const { data: orders, error: ordersError } =
-  await supabaseAdmin
+  // ======================================
+  const {
+    data: orders,
+    error: ordersError,
+  } = await supabaseAdmin
     .from("orders")
     .select(`
       *,
@@ -29,37 +157,57 @@ const { data: orders, error: ordersError } =
       )
     `)
     .eq("customer_id", customerId)
-    .order("order_date", { ascending: false });
+    .order("order_date", {
+      ascending: false,
+    });
 
-if (ordersError) {
-  throw ordersError;
-}
-const formattedOrders = (orders || []).map((order) => ({
-  id: order.id,
+  if (ordersError) {
+    throw ordersError;
+  }
 
-  orderNumber: order.order_number || order.id.substring(0, 8),
+  const formattedOrders = (
+    orders || []
+  ).map((order) => ({
+    id: order.id,
 
-  orderDate: order.order_date,
+    orderNumber:
+      order.order_number ||
+      order.id.substring(0, 8),
 
-  totalAmount: Number(order.total_amount || 0),
+    orderDate: order.order_date,
 
-  paymentMethod: order.payment_method,
+    totalAmount: Number(
+      order.total_amount || 0
+    ),
 
-  paymentStatus: order.payment_status || "Pending",
+    paymentMethod:
+      order.payment_method,
 
-  status: order.status || "Pending",
+    paymentStatus:
+      order.payment_status || "Pending",
 
-  totalItems: order.order_items?.reduce(
-    (sum, item) => sum + Number(item.quantity || 0),
-    0
-  ) || 0,
+    status:
+      order.status || "Pending",
 
-  items: order.order_items || [],
-}));
+    totalItems:
+      order.order_items?.reduce(
+        (sum, item) =>
+          sum +
+          Number(item.quantity || 0),
+        0
+      ) || 0,
 
+    items:
+      order.order_items || [],
+  }));
+
+  // ======================================
   // Subscriptions
- const { data: subscriptions, error: subscriptionsError } =
-  await supabaseAdmin
+  // ======================================
+  const {
+    data: subscriptions,
+    error: subscriptionsError,
+  } = await supabaseAdmin
     .from("subscriptions")
     .select(`
       *,
@@ -86,85 +234,151 @@ const formattedOrders = (orders || []).map((order) => ({
       )
     `)
     .eq("customer_id", customerId)
-    .order("created_at", { ascending: false });
+    .order("created_at", {
+      ascending: false,
+    });
 
-if (subscriptionsError) {
-  throw subscriptionsError;
-}
-const formattedSubscriptions = (subscriptions || []).map((sub) => {
-  const item = sub.subscription_items?.[0];
+  if (subscriptionsError) {
+    throw subscriptionsError;
+  }
 
-  return {
-  id: sub.id,
+  const formattedSubscriptions = (
+    subscriptions || []
+  ).map((sub) => {
+    const item =
+      sub.subscription_items?.[0];
 
-  product: item?.products?.name || "Milk Subscription",
+    return {
+      id: sub.id,
 
-  image: item?.products?.image || "",
+      product:
+        item?.products?.name ||
+        "Milk Subscription",
 
-  quantity: item?.quantity ?? 1,
+      image:
+        item?.products?.image || "",
 
-  size: item?.size || "1L",
+      quantity:
+        item?.quantity ?? 1,
 
-  monthlyAmount:
-    sub.total_amount ??
-    item?.price ??
-    item?.unit_price ??
-    0,
+      size:
+        item?.size || "1L",
 
-  deliveryType: sub.delivery_time || "Morning",
+      monthlyAmount:
+        sub.total_amount ??
+        item?.price ??
+        item?.unit_price ??
+        0,
 
-  frequency: sub.frequency,
+      deliveryType:
+        sub.delivery_time ||
+        "Morning",
 
-  startDate: sub.start_date,
+      frequency:
+        sub.frequency,
 
-  expireDate: sub.end_date,
+      startDate:
+        sub.start_date,
 
-  // Keep status if you still need it elsewhere
-  status: sub.status,
+      expireDate:
+        sub.end_date,
 
-  // ✅ ADD THESE
-  is_paused: sub.is_paused,
-  pause_from: sub.pause_from,
-  pause_to: sub.pause_to,
-  paused_days: sub.paused_days,
+      status:
+        sub.status,
 
-  address: sub.addresses,
-};
-});
+      is_paused:
+        sub.is_paused,
 
+      pause_from:
+        sub.pause_from,
+
+      pause_to:
+        sub.pause_to,
+
+      paused_days:
+        sub.paused_days,
+
+      address:
+        sub.addresses,
+    };
+  });
+
+  // ======================================
   // Addresses
-  const { data: addresses, error: addressError } =
-    await supabaseAdmin
-      .from("addresses")
-      .select("*")
-      .eq("customer_id", customerId);
+  // ======================================
+  const {
+    data: addresses,
+    error: addressError,
+  } = await supabaseAdmin
+    .from("addresses")
+    .select("*")
+    .eq("customer_id", customerId);
 
-  if (addressError) return { error: addressError };
+  if (addressError) {
+    return {
+      error: addressError,
+    };
+  }
 
+  // ======================================
+  // Wallet
+  // ======================================
+  const wallet =
+    await getCustomerWallet(
+      customerId
+    );
+
+  // ======================================
+  // Outstanding Billing
+  // ======================================
+  const billing =
+    await getCustomerOutstanding(
+      customerId
+    );
+
+  // ======================================
   // Summary
-  const totalSpent = orders.reduce(
-    (sum, order) => sum + Number(order.total_amount || 0),
-    0
-  );
+  // ======================================
+  const totalSpent =
+    (orders || []).reduce(
+      (sum, order) =>
+        sum +
+        Number(
+          order.total_amount || 0
+        ),
+      0
+    );
 
-  const activeSubscriptions = subscriptions.filter(
-  (sub) => sub.status === "Active" && !sub.is_paused
-);
+  const activeSubscriptions =
+    (subscriptions || []).filter(
+      (sub) =>
+        sub.status === "Active" &&
+        !sub.is_paused
+    );
 
-const pausedSubscriptions = subscriptions.filter(
-  (sub) => sub.is_paused
-);
+  const pausedSubscriptions =
+    (subscriptions || []).filter(
+      (sub) => sub.is_paused
+    );
 
-
+  // ======================================
+  // Final Dashboard Response
+  // ======================================
   return {
     data: {
       customer,
 
-    summary: {
-        totalOrders: orders.length,
+      summary: {
+        totalOrders:
+          orders?.length || 0,
+
         totalSpent,
-        totalSubscriptions: subscriptions.length,
-        activeSubscriptions: activeSubscriptions.length,
+
+        totalSubscriptions:
+          subscriptions?.length || 0,
+
+        activeSubscriptions:
+          activeSubscriptions.length,
 
         status:
           activeSubscriptions.length > 0
@@ -174,9 +388,38 @@ const pausedSubscriptions = subscriptions.filter(
             : "No Subscription",
       },
 
-      recentOrders: formattedOrders.slice(0, 5),
+      // ==================================
+      // NEW: Wallet
+      // ==================================
+      wallet: {
+        balance:
+          wallet.balance,
 
-      subscriptions: formattedSubscriptions,
+        type:
+          wallet.type,
+
+        status:
+          wallet.status,
+      },
+
+      // ==================================
+      // NEW: Billing
+      // ==================================
+      billing: {
+        outstanding:
+          billing.outstanding,
+
+        billCount:
+          billing.billCount,
+
+        type: "Postpaid",
+      },
+
+      recentOrders:
+        formattedOrders.slice(0, 5),
+
+      subscriptions:
+        formattedSubscriptions,
 
       addresses,
     },

@@ -1,5 +1,10 @@
 import { supabaseAdmin } from "../config/supabase.js";
 import { generateInvoiceNumber } from "./billing.service.js";
+import { creditWallet } from "./wallet.service.js";
+
+/* ==========================================================
+   Create Subscription
+========================================================== */
 
 /* ==========================================================
    Create Subscription
@@ -29,22 +34,183 @@ export async function createSubscriptionService(subscriptionData) {
     gst_percent = 2,
   } = subscriptionData;
 
-  // ==========================================
-  // 1. Calculate subscription end date
-  // ==========================================
+  /* ========================================================
+     1. Basic Validation
+  ======================================================== */
+
+  if (!customer_id) {
+    return {
+      data: null,
+      error: new Error("Customer ID is required."),
+    };
+  }
+
+  if (!product_id) {
+    return {
+      data: null,
+      error: new Error("Product ID is required."),
+    };
+  }
+
+  if (!address_id) {
+    return {
+      data: null,
+      error: new Error("Address ID is required."),
+    };
+  }
+
+  if (!start_date) {
+    return {
+      data: null,
+      error: new Error("Start date is required."),
+    };
+  }
+
+  /* ========================================================
+     2. Normalize Payment Information
+  ======================================================== */
+
+  const normalizedPaymentMethod =
+    String(payment_method || "COD").toUpperCase();
+
+  const normalizedPaymentStatus =
+    String(payment_status || "Pending");
+
+  const isOnlinePayment =
+    normalizedPaymentMethod === "ONLINE";
+
+  /* ========================================================
+     3. Validate ONLINE payment
+     
+     The payment was already verified by Razorpay.
+     payment_reference contains razorpay_payment_id.
+  ======================================================== */
+
+  let verifiedPayment = null;
+
+  if (isOnlinePayment) {
+    if (
+      normalizedPaymentStatus !== "PAID" &&
+      normalizedPaymentStatus !== "Paid"
+    ) {
+      return {
+        data: null,
+        error: new Error(
+          "Online subscription requires a successful payment."
+        ),
+      };
+    }
+
+    if (!payment_reference) {
+      return {
+        data: null,
+        error: new Error(
+          "Verified payment reference is required for online payment."
+        ),
+      };
+    }
+
+    /* ------------------------------------------------------
+       Find verified payment
+    ------------------------------------------------------ */
+
+    const {
+      data: paymentRecord,
+      error: paymentLookupError,
+    } = await supabaseAdmin
+      .from("payments")
+      .select("*")
+      .eq(
+        "transaction_id",
+        payment_reference
+      )
+      .eq(
+        "customer_id",
+        customer_id
+      )
+      .eq(
+        "payment_status",
+        "Paid"
+      )
+      .maybeSingle();
+
+    if (paymentLookupError) {
+      console.error(
+        "Verified payment lookup error:",
+        paymentLookupError
+      );
+
+      return {
+        data: null,
+        error: paymentLookupError,
+      };
+    }
+
+    if (!paymentRecord) {
+      return {
+        data: null,
+        error: new Error(
+          "Verified payment not found."
+        ),
+      };
+    }
+
+    verifiedPayment = paymentRecord;
+
+    /* ------------------------------------------------------
+       Verify amount
+    ------------------------------------------------------ */
+
+    const expectedAmount =
+      Number(total_amount || 0);
+
+    const verifiedAmount =
+      Number(paymentRecord.amount || 0);
+
+    if (
+      Math.abs(
+        verifiedAmount - expectedAmount
+      ) > 0.01
+    ) {
+      return {
+        data: null,
+        error: new Error(
+          "Payment amount does not match subscription amount."
+        ),
+      };
+    }
+  }
+
+  /* ========================================================
+     4. Calculate Subscription End Date
+  ======================================================== */
 
   const start = new Date(start_date);
 
+  if (Number.isNaN(start.getTime())) {
+    return {
+      data: null,
+      error: new Error("Invalid subscription start date."),
+    };
+  }
+
   const end = new Date(start);
-  end.setDate(end.getDate() + 30);
 
-  const end_date = end.toISOString().split("T")[0];
+  end.setDate(
+    end.getDate() + 30
+  );
 
-  // ==========================================
-  // 2. Create Subscription
-  // ==========================================
+  const end_date =
+    end.toISOString().split("T")[0];
 
-  const { data: subscription, error } = await supabaseAdmin
+  /* ========================================================
+     5. Create Subscription
+  ======================================================== */
+
+  const {
+    data: subscription,
+    error,
+  } = await supabaseAdmin
     .from("subscriptions")
     .insert({
       customer_id,
@@ -55,11 +221,38 @@ export async function createSubscriptionService(subscriptionData) {
       frequency,
       total_amount,
 
-      payment_method,
-      payment_status,
-      payment_date,
-      payment_reference,
-      payment_amount,
+      payment_method:
+        isOnlinePayment
+          ? "ONLINE"
+          : "COD",
+
+      payment_status:
+        isOnlinePayment
+          ? "Paid"
+          : "Pending",
+
+      payment_date:
+        isOnlinePayment
+          ? (
+              payment_date ||
+              new Date().toISOString()
+            )
+          : null,
+
+      payment_reference:
+        isOnlinePayment
+          ? payment_reference
+          : null,
+
+      payment_amount:
+        isOnlinePayment
+          ? Number(
+              verifiedPayment.amount
+            )
+          : Number(
+              payment_amount ||
+              total_amount
+            ),
 
       status: "Active",
     })
@@ -73,9 +266,9 @@ export async function createSubscriptionService(subscriptionData) {
     };
   }
 
-  // ==========================================
-  // 3. Calculate Daily Price
-  // ==========================================
+  /* ========================================================
+     6. Calculate Daily Price
+  ======================================================== */
 
   const PRICE_PER_LITER = 90;
 
@@ -115,30 +308,39 @@ export async function createSubscriptionService(subscriptionData) {
     multiplier *
     quantity;
 
-  // ==========================================
-  // 4. Create Subscription Item
-  // ==========================================
+  /* ========================================================
+     7. Create Subscription Item
+  ======================================================== */
 
-  const { error: itemError } = await supabaseAdmin
+  const {
+    error: itemError,
+  } = await supabaseAdmin
     .from("subscription_items")
     .insert({
-      subscription_id: subscription.id,
+      subscription_id:
+        subscription.id,
+
       product_id,
+
       quantity,
+
       size,
 
-      // Daily price
-      unit_price: dailyPrice,
+      unit_price:
+        dailyPrice,
 
-      // Monthly subscription amount
-      price: total_amount,
+      price:
+        total_amount,
     });
 
   if (itemError) {
     await supabaseAdmin
       .from("subscriptions")
       .delete()
-      .eq("id", subscription.id);
+      .eq(
+        "id",
+        subscription.id
+      );
 
     return {
       data: null,
@@ -146,99 +348,145 @@ export async function createSubscriptionService(subscriptionData) {
     };
   }
 
-  // ==========================================
-// 5. Generate Invoice Number
-// ==========================================
+  /* ========================================================
+     8. Generate Invoice Number
+  ======================================================== */
 
-let invoiceNumber;
+  let invoiceNumber;
 
-try {
-  invoiceNumber = await generateInvoiceNumber();
-} catch (invoiceNumberError) {
-  await supabaseAdmin
-    .from("subscription_items")
-    .delete()
-    .eq("subscription_id", subscription.id);
+  try {
+    invoiceNumber =
+      await generateInvoiceNumber();
+  } catch (invoiceNumberError) {
+    await supabaseAdmin
+      .from("subscription_items")
+      .delete()
+      .eq(
+        "subscription_id",
+        subscription.id
+      );
 
-  await supabaseAdmin
-    .from("subscriptions")
-    .delete()
-    .eq("id", subscription.id);
+    await supabaseAdmin
+      .from("subscriptions")
+      .delete()
+      .eq(
+        "id",
+        subscription.id
+      );
 
-  return {
-    data: null,
-    error: invoiceNumberError,
-  };
-}
-  // ==========================================
-  // 6. Calculate Billing Values
-  // ==========================================
+    return {
+      data: null,
+      error: invoiceNumberError,
+    };
+  }
 
-  const billingSubtotal = Number(subtotal || 0);
+  /* ========================================================
+     9. Billing Values
+  ======================================================== */
 
-  const billingDiscount = Number(discount || 0);
+  const billingSubtotal =
+    Number(subtotal || 0);
 
-  const billingGst = Number(gst || 0);
+  const billingDiscount =
+    Number(discount || 0);
 
-  const billingTotal = Number(
-    total_amount || 0
-  );
+  const billingGst =
+    Number(gst || 0);
 
-  // ==========================================
-  // 7. Billing Month / Year
-  // ==========================================
+  const billingTotal =
+    Number(total_amount || 0);
 
-  const billingDate = new Date(start_date);
+  /* ========================================================
+     10. Billing Month / Year
+  ======================================================== */
+
+  const billingDate =
+    new Date(start_date);
 
   const billingMonth =
-    billingDate.toLocaleString("en-US", {
-      month: "long",
-    });
+    billingDate.toLocaleString(
+      "en-US",
+      {
+        month: "long",
+      }
+    );
 
   const billingYear =
     billingDate.getFullYear();
 
-  // ==========================================
-  // 8. Create Billing Record
-  // ==========================================
+  /* ========================================================
+     11. Create Billing Record
+  ======================================================== */
 
-  const { error: billingError } = await supabaseAdmin
+  const {
+    data: billingRecord,
+    error: billingError,
+  } = await supabaseAdmin
     .from("billing")
     .insert({
-      invoice_number: invoiceNumber,
+      invoice_number:
+        invoiceNumber,
 
       customer_id,
-      subscription_id: subscription.id,
 
-      billing_month: billingMonth,
-      billing_year: billingYear,
+      subscription_id:
+        subscription.id,
 
-      amount: billingTotal,
+      billing_month:
+        billingMonth,
 
-      subtotal: billingSubtotal,
-      discount: billingDiscount,
+      billing_year:
+        billingYear,
 
-      gst: billingGst,
-      gst_amount: billingGst,
-      gst_percent: Number(gst_percent || 2),
+      amount:
+        billingTotal,
 
-      total_amount: billingTotal,
+      subtotal:
+        billingSubtotal,
 
-      payment_status,
-      payment_method,
+      discount:
+        billingDiscount,
 
-      invoice_date: new Date().toISOString(),
+      gst:
+        billingGst,
 
-      invoice_type: "Subscription",
+      gst_amount:
+        billingGst,
 
-      // New subscription has not had deliveries yet
-      delivered_days: 0,
-      daily_rate: dailyPrice,
-    });
+      gst_percent:
+        Number(gst_percent || 2),
 
-  // ==========================================
-  // 9. Rollback if Billing Creation Fails
-  // ==========================================
+      total_amount:
+        billingTotal,
+
+      payment_status:
+        isOnlinePayment
+          ? "Paid"
+          : "Pending",
+
+      payment_method:
+        isOnlinePayment
+          ? "ONLINE"
+          : "COD",
+
+      invoice_date:
+        new Date().toISOString(),
+
+      invoice_type:
+        "Subscription",
+
+      delivered_days:
+        0,
+
+      daily_rate:
+        dailyPrice,
+    })
+    .select()
+    .single();
+
+  /* ========================================================
+     12. Rollback if Billing Creation Fails
+  ======================================================== */
 
   if (billingError) {
     console.error(
@@ -249,12 +497,18 @@ try {
     await supabaseAdmin
       .from("subscription_items")
       .delete()
-      .eq("subscription_id", subscription.id);
+      .eq(
+        "subscription_id",
+        subscription.id
+      );
 
     await supabaseAdmin
       .from("subscriptions")
       .delete()
-      .eq("id", subscription.id);
+      .eq(
+        "id",
+        subscription.id
+      );
 
     return {
       data: null,
@@ -262,12 +516,192 @@ try {
     };
   }
 
-  // ==========================================
-  // 10. Return Subscription
-  // ==========================================
+  /* ========================================================
+     13. Link Verified Payment to Subscription
+  ======================================================== */
+
+  if (
+    isOnlinePayment &&
+    verifiedPayment
+  ) {
+    const {
+      error: paymentLinkError,
+    } = await supabaseAdmin
+      .from("payments")
+      .update({
+        subscription_id:
+          subscription.id,
+      })
+      .eq(
+        "id",
+        verifiedPayment.id
+      )
+      .eq(
+        "customer_id",
+        customer_id
+      )
+      .eq(
+        "transaction_id",
+        payment_reference
+      );
+
+    if (paymentLinkError) {
+      console.error(
+        "Payment Subscription Link Error:",
+        paymentLinkError
+      );
+
+      /* -----------------------------------------------
+         Roll back subscription/billing/item
+      ----------------------------------------------- */
+
+      await supabaseAdmin
+        .from("billing")
+        .delete()
+        .eq(
+          "id",
+          billingRecord.id
+        );
+
+      await supabaseAdmin
+        .from("subscription_items")
+        .delete()
+        .eq(
+          "subscription_id",
+          subscription.id
+        );
+
+      await supabaseAdmin
+        .from("subscriptions")
+        .delete()
+        .eq(
+          "id",
+          subscription.id
+        );
+
+      return {
+        data: null,
+        error: paymentLinkError,
+      };
+    }
+  }
+
+  /* ========================================================
+     14. Credit Wallet for ONLINE Payment
+  ======================================================== */
+
+  let wallet = null;
+
+  if (
+    isOnlinePayment &&
+    verifiedPayment
+  ) {
+    try {
+      wallet =
+        await creditWallet({
+          customerId:
+            customer_id,
+
+          amount:
+            Number(
+              verifiedPayment.amount
+            ),
+
+          referenceId:
+            verifiedPayment.id,
+
+          referenceType:
+            "RazorpayPayment",
+
+          remarks:
+            `Subscription payment - ${subscription.id}`,
+        });
+    } catch (walletError) {
+      console.error(
+        "Wallet Credit Error:",
+        walletError
+      );
+
+      /* -----------------------------------------------
+         IMPORTANT:
+         Do not leave an active paid subscription
+         if wallet credit failed.
+      ----------------------------------------------- */
+
+      await supabaseAdmin
+        .from("payments")
+        .update({
+          subscription_id: null,
+        })
+        .eq(
+          "id",
+          verifiedPayment.id
+        );
+
+      await supabaseAdmin
+        .from("billing")
+        .delete()
+        .eq(
+          "id",
+          billingRecord.id
+        );
+
+      await supabaseAdmin
+        .from("subscription_items")
+        .delete()
+        .eq(
+          "subscription_id",
+          subscription.id
+        );
+
+      await supabaseAdmin
+        .from("subscriptions")
+        .delete()
+        .eq(
+          "id",
+          subscription.id
+        );
+
+      return {
+        data: null,
+        error: new Error(
+          `Subscription created but wallet credit failed: ${walletError.message}`
+        ),
+      };
+    }
+  }
+
+  /* ========================================================
+     15. Return Subscription
+  ======================================================== */
 
   return {
     data: subscription,
+
+    billing:
+      billingRecord,
+
+    payment:
+      verifiedPayment
+        ? {
+            id:
+              verifiedPayment.id,
+
+            transaction_id:
+              verifiedPayment.transaction_id,
+
+            amount:
+              Number(
+                verifiedPayment.amount
+              ),
+
+            status:
+              verifiedPayment.payment_status,
+          }
+        : null,
+
+    wallet,
+
     error: null,
   };
 }

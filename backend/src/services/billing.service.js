@@ -467,3 +467,66 @@ export async function getSubscriptionBillsService() {
 
     return data;
 }
+// ======================================
+// Get Customer Outstanding Billing
+// ======================================
+export async function getCustomerOutstandingService(customerId) {
+  if (!customerId) {
+    throw new Error("Customer ID is required");
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("billing")
+    .select(`
+      id,
+      invoice_number,
+      invoice_type,
+      subscription_id,
+      order_id,
+      total_amount,
+      payment_status,
+      payment_method,
+      invoice_date,
+      billing_month,
+      billing_year
+    `)
+    .eq("customer_id", customerId)
+    .in("payment_method", ["COD", "POSTPAID", "Postpaid", "cod", "postpaid"])
+    .order("invoice_date", {
+      ascending: false,
+    });
+
+  if (error) {
+    console.error(
+      "Customer outstanding billing error:",
+      error
+    );
+
+    throw error;
+  }
+
+  const unpaidBills = (data || []).filter((bill) => {
+    const status = String(
+      bill.payment_status || ""
+    ).trim().toLowerCase();
+
+    return ![
+      "paid",
+      "completed",
+      "success",
+      "successful"
+    ].includes(status);
+  });
+
+  const outstanding = unpaidBills.reduce(
+    (total, bill) =>
+      total + Number(bill.total_amount || 0),
+    0
+  );
+
+  return {
+    outstanding,
+    billCount: unpaidBills.length,
+    bills: unpaidBills,
+  };
+}
