@@ -183,7 +183,7 @@ export default function Navbar() {
                 {!role && (
                   <button
                     onClick={() => navigate("/auth")}
-                    className="hidden rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-700 sm:inline-flex"
+                    className="inline-flex shrink-0 items-center justify-center rounded-2xl bg-slate-950 px-2.5 py-2.5 text-[10px] font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-700 sm:px-4 sm:text-xs"
                   >
                     Login
                   </button>

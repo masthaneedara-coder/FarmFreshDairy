@@ -24,7 +24,8 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuthSession } from "../context/AuthSessionContext";
 
 import { fetchProducts } from "../config/api";
 import { getCartItemCount } from "../config/cart";
@@ -120,6 +121,9 @@ function matchesCategory(product, category) {
 }
 
 export default function FarmFreshDairyWebsite() {
+  const navigate = useNavigate();
+  const { customer } = useAuthSession();
+  const isCustomerLoggedIn = Boolean(customer);
   const productsRef = useRef(null);
   const subscriptionRef = useRef(null);
 
@@ -187,16 +191,33 @@ export default function FarmFreshDairyWebsite() {
     ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const requireLogin = (action) => {
+    if (!isCustomerLoggedIn) {
+      localStorage.setItem("redirectAfterLogin", window.location.pathname);
+      navigate("/auth");
+      return;
+    }
+    action?.();
+  };
+
+  const handleHeroAction = () => {
+    requireLogin(() => navigate(currentHero.href));
+  };
+
+  const handleSubscriptionAction = () => {
+    requireLogin(() => scrollTo(subscriptionRef));
+  };
+
   const currentHero = HERO_SLIDES[slide];
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#fbfdf9] text-slate-900 pb-20 pt-[108px] md:pb-0">
+    <div className="min-h-screen overflow-x-hidden bg-[#fbfdf9] text-slate-900 pb-24 md:pb-0">
       {/* Global Navbar is rendered by the app.
           Keep this Home page focused on content so we do not duplicate the header. */}
       <main>
         {/* Hero */}
-        <section className="mx-auto max-w-7xl px-3 pt-3 sm:px-6 sm:pt-6">
-          <div className="relative min-h-[520px] overflow-hidden rounded-[30px] bg-[#073e26] shadow-xl sm:min-h-[560px] sm:rounded-[38px]">
+        <section className="mx-auto max-w-7xl px-3 pt-2 sm:px-6 sm:pt-4">
+          <div className="relative h-[440px] overflow-hidden rounded-[26px] bg-[#073e26] shadow-xl sm:h-auto sm:min-h-[560px] sm:rounded-[38px]">
             <AnimatePresence mode="wait">
               <motion.img
                 key={currentHero.image}
@@ -213,7 +234,7 @@ export default function FarmFreshDairyWebsite() {
             <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/45 to-black/10" />
             <div className="absolute -right-20 -top-20 h-60 w-60 rounded-full bg-emerald-400/20 blur-3xl" />
 
-            <div className="relative flex min-h-[520px] items-end px-6 pb-9 pt-28 sm:min-h-[560px] sm:items-center sm:px-10 sm:pb-10 lg:px-14">
+            <div className="relative flex h-full items-end px-5 pb-8 pt-20 sm:min-h-[560px] sm:items-center sm:px-10 sm:pb-10 lg:px-14">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={currentHero.title}
@@ -228,33 +249,34 @@ export default function FarmFreshDairyWebsite() {
                     {currentHero.eyebrow}
                   </span>
 
-                  <h1 className="mt-5 text-[42px] font-black leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl">
+                  <h1 className="mt-4 max-w-[330px] text-[34px] font-black leading-[0.98] tracking-tight sm:max-w-xl sm:text-6xl lg:text-7xl">
                     {currentHero.title}
                     <span className="mt-2 block text-lime-300">{currentHero.highlight}</span>
                   </h1>
 
-                  <p className="mt-5 max-w-lg text-sm leading-6 text-white/85 sm:text-lg">
+                  <p className="mt-4 max-w-[320px] text-[12px] leading-5 text-white/85 sm:mt-5 sm:max-w-lg sm:text-lg sm:leading-6">
                     {currentHero.description}
                   </p>
 
-                  <div className="mt-7 flex flex-wrap gap-3">
-                    <Link
-                      to={currentHero.href}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-lime-400 px-5 py-3.5 text-sm font-black text-[#123c20] shadow-lg shadow-black/10 transition hover:-translate-y-0.5 hover:bg-lime-300"
+                  <div className="mt-5 flex flex-wrap gap-2.5 sm:mt-7 sm:gap-3">
+                    <button
+                      type="button"
+                      onClick={handleHeroAction}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-lime-400 px-4 py-3 text-xs font-black text-[#123c20] shadow-lg shadow-black/10 transition active:scale-[0.98] hover:-translate-y-0.5 hover:bg-lime-300 sm:px-5 sm:py-3.5 sm:text-sm"
                     >
                       {currentHero.cta}
-                      <ArrowRight size={17} />
-                    </Link>
+                      <ArrowRight size={16} />
+                    </button>
 
                     <button
-                      onClick={() => scrollTo(subscriptionRef)}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-white/25 bg-white/10 px-5 py-3.5 text-sm font-bold text-white backdrop-blur-md transition hover:bg-white/20"
+                      onClick={handleSubscriptionAction}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-white/25 bg-white/10 px-4 py-3 text-xs font-bold text-white backdrop-blur-md transition active:scale-[0.98] hover:bg-white/20 sm:px-5 sm:py-3.5 sm:text-sm"
                     >
                       Daily Subscription
                     </button>
                   </div>
 
-                  <div className="mt-7 flex flex-wrap gap-4 text-xs font-semibold text-white/80">
+                  <div className="mt-5 flex flex-wrap gap-3 text-[10px] font-semibold text-white/80 sm:mt-7 sm:gap-4 sm:text-xs">
                     <span className="flex items-center gap-1.5">
                       <CheckCircle2 size={15} className="text-lime-300" /> Fresh every day
                     </span>
@@ -352,8 +374,10 @@ export default function FarmFreshDairyWebsite() {
                 <button
                   key={item.name}
                   onClick={() => {
-                    setCategory(item.name);
-                    setTimeout(() => scrollTo(productsRef), 40);
+                    requireLogin(() => {
+                      setCategory(item.name);
+                      setTimeout(() => scrollTo(productsRef), 40);
+                    });
                   }}
                   className={`min-w-[92px] rounded-3xl border p-3 text-center transition-all sm:min-w-0 ${
                     active
@@ -416,7 +440,7 @@ export default function FarmFreshDairyWebsite() {
                   whileHover={{ y: -5 }}
                   className="group overflow-hidden rounded-[24px] border border-slate-100 bg-white shadow-sm transition-shadow hover:shadow-xl"
                 >
-                  <Link to="/products" className="block">
+                  <button type="button" onClick={() => requireLogin(() => navigate("/products"))} className="block w-full text-left">
                     <div className="relative aspect-square overflow-hidden bg-slate-50">
                       {product.image ? (
                         <img
@@ -433,14 +457,17 @@ export default function FarmFreshDairyWebsite() {
                       </span>
                       <button
                         type="button"
-                        onClick={(event) => event.preventDefault()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          requireLogin();
+                        }}
                         className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-500 shadow-sm backdrop-blur"
                         aria-label="Add to favorites"
                       >
                         <Heart size={15} />
                       </button>
                     </div>
-                  </Link>
+                  </button>
 
                   <div className="p-3 sm:p-4">
                     <h3 className="line-clamp-2 min-h-[36px] text-sm font-black leading-5 sm:text-base">
@@ -450,12 +477,13 @@ export default function FarmFreshDairyWebsite() {
                       <p className="text-lg font-black text-emerald-700">
                         ₹{formatPrice(product.price)}
                       </p>
-                      <Link
-                        to="/products"
-                        className="rounded-xl bg-emerald-700 px-3 py-2 text-[10px] font-black text-white transition hover:bg-emerald-800 sm:text-xs"
+                      <button
+                        type="button"
+                        onClick={() => requireLogin(() => navigate("/products"))}
+                        className="rounded-xl bg-emerald-700 px-3 py-2 text-[10px] font-black text-white transition active:scale-95 hover:bg-emerald-800 sm:text-xs"
                       >
                         Add
-                      </Link>
+                      </button>
                     </div>
                   </div>
                 </motion.article>
@@ -498,18 +526,20 @@ export default function FarmFreshDairyWebsite() {
                 </div>
 
                 <div className="mt-7 flex flex-wrap gap-3">
-                  <Link
-                    to="/subscription-plans"
-                    className="inline-flex items-center gap-2 rounded-2xl bg-lime-400 px-5 py-3.5 text-sm font-black text-[#123c20] transition hover:bg-lime-300"
+                  <button
+                    type="button"
+                    onClick={() => requireLogin(() => navigate("/subscription-plans"))}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-lime-400 px-5 py-3.5 text-sm font-black text-[#123c20] transition active:scale-[0.98] hover:bg-lime-300"
                   >
                     View subscription plans <ArrowRight size={17} />
-                  </Link>
-                  <Link
-                    to="/products"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => requireLogin(() => navigate("/products"))}
                     className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3.5 text-sm font-bold text-white"
                   >
                     Shop first
-                  </Link>
+                  </button>
                 </div>
               </div>
 
@@ -651,12 +681,13 @@ export default function FarmFreshDairyWebsite() {
                 </p>
               </div>
             </div>
-            <Link
-              to="/products"
+            <button
+              type="button"
+              onClick={() => requireLogin(() => navigate("/products"))}
               className="inline-flex items-center gap-2 text-sm font-black text-emerald-700"
             >
               Start shopping <ArrowRight size={16} />
-            </Link>
+            </button>
           </div>
         </section>
       </main>
@@ -671,16 +702,20 @@ export default function FarmFreshDairyWebsite() {
             ["/order-history", Package, "Orders"],
             ["/customer-dashboard", UserRound, "Profile"],
           ].map(([href, Icon, label]) => (
-            <Link
+            <button
               key={label}
-              to={href}
+              type="button"
+              onClick={() => {
+                if (label === "Home") return navigate("/");
+                requireLogin(() => navigate(href));
+              }}
               className={`flex flex-col items-center gap-1 rounded-2xl py-1.5 text-[10px] font-bold ${
                 label === "Home" ? "text-emerald-700" : "text-slate-500"
               }`}
             >
               <Icon size={19} strokeWidth={label === "Home" ? 2.8 : 2} />
               {label}
-            </Link>
+            </button>
           ))}
         </div>
       </nav>
