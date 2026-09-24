@@ -530,3 +530,230 @@ export async function getCustomerOutstandingService(customerId) {
     bills: unpaidBills,
   };
 }
+// ======================================
+// Mark Billing Paid After Razorpay Payment
+// ======================================
+export async function markBillingPaidService({
+  billingId,
+  razorpayOrderId,
+  razorpayPaymentId,
+  razorpaySignature,
+  customerId,
+}) {
+  if (!billingId) {
+    throw new Error("Billing ID is required");
+  }
+
+  if (!razorpayOrderId) {
+    throw new Error("Razorpay order ID is required");
+  }
+
+  if (!razorpayPaymentId) {
+    throw new Error("Razorpay payment ID is required");
+  }
+
+  if (!razorpaySignature) {
+    throw new Error("Razorpay signature is required");
+  }
+
+  if (!customerId) {
+    throw new Error("Customer ID is required");
+  }
+
+  // Load billing record
+  const { data: bill, error: billError } =
+    await supabaseAdmin
+      .from("billing")
+      .select("*")
+      .eq("id", billingId)
+      .eq("customer_id", customerId)
+      .single();
+
+  if (billError) {
+    throw billError;
+  }
+
+  if (!bill) {
+    throw new Error("Billing record not found");
+  }
+
+  // Already paid
+  const currentStatus = String(
+    bill.payment_status || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (
+    ["paid", "completed", "success", "successful"].includes(
+      currentStatus
+    )
+  ) {
+    return {
+      alreadyPaid: true,
+      bill,
+    };
+  }
+
+  // Load Razorpay payment
+  const { default: razorpay } =
+    await import("../config/razorpay.js");
+
+  // Verify Razorpay signature
+  const crypto = await import("crypto");
+
+  const generatedSignature =
+    crypto
+      .createHmac(
+        "sha256",
+        process.env.RAZORPAY_KEY_SECRET
+      )
+      .update(
+        `${razorpayOrderId}|${razorpayPaymentId}`
+      )
+      .digest("hex");
+
+  if (
+    generatedSignature !== razorpaySignature
+  ) {
+    throw new Error(
+      "Invalid Razorpay payment signature"
+    );
+  }
+
+  // Fetch Razorpay order
+  const razorpayOrder =
+    await razorpay.orders.fetch(
+      razorpayOrderId
+    );
+
+  if (!razorpayOrder) {
+    throw new Error(
+      "Razorpay order not found"
+    );
+  }
+
+  const billAmount = Number(
+    bill.total_amount || 0
+  );
+
+  const razorpayAmount =
+    Number(razorpayOrder.amount || 0) / 100;
+
+  // IMPORTANT:
+  // Razorpay amount must exactly match bill amount
+  if (
+    Math.round(razorpayAmount * 100) !==
+    Math.round(billAmount * 100)
+  ) {
+    throw new Error(
+      `Payment amount mismatch. Bill ₹${billAmount}, Razorpay ₹${razorpayAmount}`
+    );
+  }
+
+  // Check Razorpay payment
+  const razorpayPayment =
+    await razorpay.payments.fetch(
+      razorpayPaymentId
+    );
+
+  if (!razorpayPayment) {
+    throw new Error(
+      "Razorpay payment not found"
+    );
+  }
+
+  if (
+    razorpayPayment.order_id !==
+    razorpayOrderId
+  ) {
+    throw new Error(
+      "Razorpay payment does not belong to this order"
+    );
+  }
+
+  if (
+    razorpayPayment.status !== "captured"
+  ) {
+    throw new Error(
+      `Payment is not captured. Current status: ${razorpayPayment.status}`
+    );
+  }
+
+  // Check whether this payment was already recorded
+  const { data: existingPayment } =
+    await supabaseAdmin
+      .from("payments")
+      .select("*")
+      .eq(
+        "transaction_id",
+        razorpayPaymentId
+      )
+      .maybeSingle();
+
+  if (existingPayment) {
+    // Make sure billing is paid
+    const { data: updatedBill, error } =
+      await supabaseAdmin
+        .from("billing")
+        .update({
+          payment_status: "Paid",
+          payment_method: "ONLINE",
+        })
+        .eq("id", billingId)
+        .select()
+        .single();
+
+    if (error) throw error;
+
+    return {
+      alreadyPaid: true,
+      bill: updatedBill,
+      payment: existingPayment,
+    };
+  }
+
+  // Insert payment record
+  const { data: payment, error: paymentError } =
+    await supabaseAdmin
+      .from("payments")
+      .insert({
+        order_id: bill.order_id || null,
+        subscription_id:
+          bill.subscription_id || null,
+        customer_id: customerId,
+        amount: billAmount,
+        payment_method: "ONLINE",
+        transaction_id: razorpayPaymentId,
+        payment_status: "Paid",
+        paid_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+  if (paymentError) {
+    throw paymentError;
+  }
+
+  // Mark bill paid
+  const { data: updatedBill, error: billingError } =
+    await supabaseAdmin
+      .from("billing")
+      .update({
+        payment_status: "Paid",
+        payment_method: "ONLINE",
+      })
+      .eq("id", billingId)
+      .select()
+      .single();
+
+  if (billingError) {
+    throw billingError;
+  }
+
+  return {
+    alreadyPaid: false,
+    bill: updatedBill,
+    payment,
+  };
+}

@@ -36,6 +36,10 @@ async function getCustomerWallet(customerId) {
 // Customer Outstanding Billing
 // ======================================
 async function getCustomerOutstanding(customerId) {
+  if (!customerId) {
+    throw new Error("Customer ID is required");
+  }
+
   const { data, error } = await supabaseAdmin
     .from("billing")
     .select(`
@@ -44,12 +48,18 @@ async function getCustomerOutstanding(customerId) {
       invoice_type,
       subscription_id,
       order_id,
+      customer_id,
       total_amount,
       payment_status,
       payment_method,
       invoice_date,
       billing_month,
-      billing_year
+      billing_year,
+      subtotal,
+      discount,
+      gst_amount,
+      delivered_days,
+      daily_rate
     `)
     .eq("customer_id", customerId)
     .order("invoice_date", {
@@ -65,6 +75,9 @@ async function getCustomerOutstanding(customerId) {
     throw error;
   }
 
+  // ======================================
+  // Find unpaid COD/Postpaid bills
+  // ======================================
   const unpaidBills = (data || []).filter((bill) => {
     const paymentMethod = String(
       bill.payment_method || ""
@@ -78,7 +91,8 @@ async function getCustomerOutstanding(customerId) {
       .trim()
       .toLowerCase();
 
-    // Only COD/Postpaid contributes to outstanding.
+    // Only COD / Postpaid contributes
+    // to outstanding amount.
     const isPostpaid =
       paymentMethod === "cod" ||
       paymentMethod === "postpaid";
@@ -92,6 +106,9 @@ async function getCustomerOutstanding(customerId) {
     return isPostpaid && !isPaid;
   });
 
+  // ======================================
+  // Calculate Outstanding
+  // ======================================
   const outstanding = unpaidBills.reduce(
     (sum, bill) =>
       sum + Number(bill.total_amount || 0),
@@ -103,7 +120,7 @@ async function getCustomerOutstanding(customerId) {
     billCount: unpaidBills.length,
     bills: unpaidBills,
   };
-};
+}
 
 // ======================================
 // Customer Dashboard
@@ -113,7 +130,9 @@ export const getDashboardService = async (
 ) => {
   if (!customerId) {
     return {
-      error: new Error("Customer ID is required"),
+      error: new Error(
+        "Customer ID is required"
+      ),
     };
   }
 
@@ -174,20 +193,22 @@ export const getDashboardService = async (
       order.order_number ||
       order.id.substring(0, 8),
 
-    orderDate: order.order_date,
+    orderDate:
+      order.order_date,
 
-    totalAmount: Number(
-      order.total_amount || 0
-    ),
+    totalAmount:
+      Number(order.total_amount || 0),
 
     paymentMethod:
       order.payment_method,
 
     paymentStatus:
-      order.payment_status || "Pending",
+      order.payment_status ||
+      "Pending",
 
     status:
-      order.status || "Pending",
+      order.status ||
+      "Pending",
 
     totalItems:
       order.order_items?.reduce(
@@ -256,13 +277,15 @@ export const getDashboardService = async (
         "Milk Subscription",
 
       image:
-        item?.products?.image || "",
+        item?.products?.image ||
+        "",
 
       quantity:
         item?.quantity ?? 1,
 
       size:
-        item?.size || "1L",
+        item?.size ||
+        "1L",
 
       monthlyAmount:
         sub.total_amount ??
@@ -358,7 +381,8 @@ export const getDashboardService = async (
 
   const pausedSubscriptions =
     (subscriptions || []).filter(
-      (sub) => sub.is_paused
+      (sub) =>
+        sub.is_paused
     );
 
   // ======================================
@@ -366,8 +390,14 @@ export const getDashboardService = async (
   // ======================================
   return {
     data: {
+      // ==================================
+      // Customer
+      // ==================================
       customer,
 
+      // ==================================
+      // Summary
+      // ==================================
       summary: {
         totalOrders:
           orders?.length || 0,
@@ -389,7 +419,7 @@ export const getDashboardService = async (
       },
 
       // ==================================
-      // NEW: Wallet
+      // Wallet
       // ==================================
       wallet: {
         balance:
@@ -403,24 +433,43 @@ export const getDashboardService = async (
       },
 
       // ==================================
-      // NEW: Billing
+      // Billing
       // ==================================
       billing: {
         outstanding:
-          billing.outstanding,
+          Number(
+            billing.outstanding || 0
+          ),
 
         billCount:
-          billing.billCount,
+          Number(
+            billing.billCount || 0
+          ),
 
-        type: "Postpaid",
+        type:
+          "Postpaid",
+
+        // Full unpaid bills
+        // required for payment page
+        bills:
+          billing.bills || [],
       },
 
+      // ==================================
+      // Recent Orders
+      // ==================================
       recentOrders:
         formattedOrders.slice(0, 5),
 
+      // ==================================
+      // Subscriptions
+      // ==================================
       subscriptions:
         formattedSubscriptions,
 
+      // ==================================
+      // Addresses
+      // ==================================
       addresses,
     },
   };

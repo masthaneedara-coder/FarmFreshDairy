@@ -7,60 +7,41 @@ import {
   updateBillingStatus,
   generateMonthlyInvoices,
   getSubscriptionBills,
+  payBilling,
 } from "../controllers/billing.controller.js";
 
 const router = express.Router();
 
-// ======================================
-// Get All Billing Records
-// ======================================
 router.get("/", getAllBills);
 
-// ======================================
-// Get Subscription Billing Records
-// IMPORTANT: Keep this BEFORE /:id
-// ======================================
 router.get(
-  "/subscription-bills",
+  "/subscription",
   getSubscriptionBills
 );
 
-// ======================================
-// Generate Subscription Bills
-// ======================================
-router.post(
-  "/generate-subscription-bills",
-  generateMonthlyInvoices
+router.get(
+  "/:id",
+  getBillById
 );
 
-router.post(
-  "/generate",
-  generateMonthlyInvoices
-);
-
-// ======================================
-// Order Invoice
-// ======================================
 router.post(
   "/order/:orderId",
   createOrderInvoice
 );
 
-// ======================================
-// Update Payment Status
-// ======================================
 router.put(
   "/:id/status",
   updateBillingStatus
 );
 
-// ======================================
-// Get Bill By ID
-// IMPORTANT: Keep this LAST
-// ======================================
-router.get(
-  "/:id",
-  getBillById
+router.post(
+  "/:id/pay",
+  payBilling
+);
+
+router.post(
+  "/generate-monthly",
+  generateMonthlyInvoices
 );
 
 export default router;

@@ -3,11 +3,11 @@ import {
   getBillByIdService,
   createOrderInvoiceService,
   updateBillingStatusService,
-  generateMonthlySubscriptionInvoicesService
+  generateMonthlySubscriptionInvoicesService,
+   getSubscriptionBillsService,
+  markBillingPaidService,
 } from "../services/billing.service.js";
-import {
-  getSubscriptionBillsService,
-} from "../services/billing.service.js";
+
 
 
 export async function getAllBills(req, res) {
@@ -144,6 +144,87 @@ export async function getSubscriptionBills(req, res) {
     res.status(500).json({
       success: false,
       message: err.message,
+    });
+  }
+}
+// ======================================
+// Pay Billing Through Razorpay
+// ======================================
+export async function payBilling(req, res) {
+  try {
+    const { id } = req.params;
+
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      customer_id,
+    } = req.body;
+
+    if (!razorpay_order_id) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "razorpay_order_id is required",
+      });
+    }
+
+    if (!razorpay_payment_id) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "razorpay_payment_id is required",
+      });
+    }
+
+    if (!razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "razorpay_signature is required",
+      });
+    }
+
+    if (!customer_id) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "customer_id is required",
+      });
+    }
+
+    const result =
+      await markBillingPaidService({
+        billingId: id,
+        razorpayOrderId:
+          razorpay_order_id,
+        razorpayPaymentId:
+          razorpay_payment_id,
+        razorpaySignature:
+          razorpay_signature,
+        customerId: customer_id,
+      });
+
+    return res.json({
+      success: true,
+      message: result.alreadyPaid
+        ? "Billing payment already processed"
+        : "Billing payment successful",
+      bill: result.bill,
+      payment: result.payment || null,
+    });
+
+  } catch (err) {
+    console.error(
+      "Billing payment error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        err.message ||
+        "Unable to process billing payment",
     });
   }
 }
