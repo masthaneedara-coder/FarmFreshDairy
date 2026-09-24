@@ -2531,7 +2531,7 @@ export default function CustomerDashboard() {
 
               <button
                 className="dashboard-action"
-                onClick={() => navigate("/products")}
+                onClick={() => navigate("/subscription/create/:productId")}
               >
                 <Plus size={14} />
                 Subscribe
@@ -2683,7 +2683,7 @@ export default function CustomerDashboard() {
               </p>
               <button
                 className="primary-btn"
-                onClick={() => navigate("/products")}
+               onClick={() => navigate("/subscription/create/:productId")}
               >
                 Start Subscription
                 <ArrowRight size={13} />
@@ -2987,7 +2987,7 @@ export default function CustomerDashboard() {
               icon={<RefreshCw size={18} />}
               title="Subscription"
               desc="Start or renew your milk plan"
-              onClick={() => navigate("/products")}
+              onClick={() => navigate("/subscription/create/:productId")}
             />
 
             <ModernQuick
