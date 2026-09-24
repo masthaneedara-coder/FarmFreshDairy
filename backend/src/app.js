@@ -38,7 +38,13 @@ import customerDeviceRoutes from "./routes/customerDevice.routes.js";
 dotenv.config();
 
 const app = express();
-
+app.get("/api/version", (req, res) => {
+  res.json({
+    success: true,
+    version: "2026-09-24-auth-fix",
+    message: "Latest Farm Fresh Dairy backend is running"
+  });
+});
 // Security
 app.use(helmet());
 
