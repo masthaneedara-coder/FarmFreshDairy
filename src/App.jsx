@@ -28,6 +28,8 @@ import SubscriptionPlans from "./Pages/SubscriptionPlans";
 import CreateSubscription from "./Pages/CreateSubscription";
 import ReviewSubscription from "./Pages/ReviewSubscription";
 import ExtraMilkRequest from "./Pages/ExtraMilkRequest";
+import Wallet from "./Pages/Wallet";
+import Billing from "./Pages/Billing";
 /* Admin */
 import AdminLogin from "./Pages/AdminLogin";
 import AdminDashboard from "./Pages/AdminDashboard";
@@ -301,6 +303,23 @@ export default function App() {
     path="/delivery/history"
     element={<DeliveryHistory />}
   />
+          <Route
+          path="/wallet"
+          element={
+            <CustomerRoute>
+              <Wallet />
+            </CustomerRoute>
+          }
+        />
+
+        <Route
+          path="/billing"
+          element={
+            <CustomerRoute>
+              <Billing />
+            </CustomerRoute>
+          }
+        />
       </Routes>
     
       

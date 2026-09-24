@@ -679,21 +679,21 @@ export async function fetchDeliveryOrders(deliveryBoyId) {
    PAYMENTS
 ========================================================== */
 
-export async function createPaymentOrder(amount) {
-  return await postJSON(
-    `${API_URL}/payments/create-order`,
-    {
-      amount,
-    }
-  );
-}
+// export async function createPaymentOrder(amount) {
+//   return await postJSON(
+//     `${API_URL}/payments/create-order`,
+//     {
+//       amount,
+//     }
+//   );
+// }
 
-export async function verifyPayment(paymentData) {
-  return await postJSON(
-    `${API_URL}/payments/verify`,
-    paymentData
-  );
-}
+// export async function verifyPayment(paymentData) {
+//   return await postJSON(
+//     `${API_URL}/payments/verify`,
+//     paymentData
+//   );
+// }
 export async function getMonthlyDeliveryReport(month, year) {
   const res = await fetch(
     `${API_URL}/reports/monthly-delivery?month=${month}&year=${year}`
@@ -932,3 +932,81 @@ export async function rejectExtraMilk(id) {
 //     addressData
 //   );
 // }
+export async function createPaymentOrder({
+  amount,
+  customer_id = null,
+}) {
+  const response = await fetch(
+    `${API_URL}/payments/create-order`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        amount,
+        customer_id,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message ||
+        "Unable to create payment order"
+    );
+  }
+
+  return data;
+}
+export async function verifyPayment(paymentData) {
+  const response = await fetch(
+    `${API_URL}/payments/verify`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(paymentData),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message ||
+        "Payment verification failed"
+    );
+  }
+
+  return data;
+}
+export async function payBilling(
+  billingId,
+  paymentData
+) {
+  const response = await fetch(
+    `${API_URL}/billing/${billingId}/pay`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(paymentData),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data?.message ||
+        "Billing payment failed"
+    );
+  }
+
+  return data;
+}

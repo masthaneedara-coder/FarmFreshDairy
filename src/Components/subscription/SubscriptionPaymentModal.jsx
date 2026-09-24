@@ -9,10 +9,10 @@ import { openRazorpayCheckout } from "../../utils/razorpay";
 console.log("SubscriptionPaymentModal Version 2 Loaded");
 
 export default function SubscriptionPaymentModal({
-    
   open,
   amount,
   customer,
+  subscriptionId,
   onClose,
   onContinue,
 }) {
@@ -150,49 +150,122 @@ export default function SubscriptionPaymentModal({
   className="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold"
   disabled={loading}
   onClick={async () => {
-    try {
-      if (paymentMethod === "COD") {
-        onContinue({
-          paymentMethod: "COD",
-          paymentStatus: "PENDING",
-        });
-        return;
-      }
-
-      setLoading(true);
-
-      const orderResponse = await createPaymentOrder(amount);
-
-      console.log("Order:", orderResponse);
-
-      const payment = await openRazorpayCheckout({
-        order: orderResponse.order,
-        customer,
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      });
-
-      console.log("Payment:", payment);
-
-      const verify = await verifyPayment(payment);
-
-      if (!verify.success) {
-        throw new Error("Payment verification failed");
-      }
-
+  try {
+    if (paymentMethod === "COD") {
       onContinue({
-        paymentMethod: "ONLINE",
-        paymentStatus: "PAID",
-        paymentId: payment.razorpay_payment_id,
-        orderId: payment.razorpay_order_id,
-        signature: payment.razorpay_signature,
+        paymentMethod: "COD",
+        paymentStatus: "PENDING",
       });
-    } catch (err) {
-      console.error(err);
-      alert(err.message);
-    } finally {
-      setLoading(false);
+      return;
     }
-  }}
+
+    if (!customer?.id) {
+      throw new Error("Customer information is missing.");
+    }
+
+    if (!subscriptionId) {
+      throw new Error("Subscription ID is missing.");
+    }
+
+    setLoading(true);
+
+    /* ======================================================
+       1. Create Razorpay Order
+    ====================================================== */
+
+    const orderResponse = await createPaymentOrder({
+      amount,
+      customer_id: customer.id,
+      subscription_id: subscriptionId,
+    });
+
+    console.log("Razorpay Order:", orderResponse);
+
+    if (!orderResponse?.success || !orderResponse?.order?.id) {
+      throw new Error(
+        orderResponse?.message ||
+        "Unable to create Razorpay order."
+      );
+    }
+
+    /* ======================================================
+       2. Open Razorpay Checkout
+    ====================================================== */
+
+    const payment = await openRazorpayCheckout({
+      order: orderResponse.order,
+      customer,
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+    });
+
+    console.log("Razorpay Payment:", payment);
+
+    /* ======================================================
+       3. Verify Payment on Backend
+    ====================================================== */
+
+    const verify = await verifyPayment({
+      razorpay_order_id:
+        payment.razorpay_order_id,
+
+      razorpay_payment_id:
+        payment.razorpay_payment_id,
+
+      razorpay_signature:
+        payment.razorpay_signature,
+
+      customer_id: customer.id,
+
+      subscription_id: subscriptionId,
+    });
+
+    console.log("Payment Verification:", verify);
+
+    if (!verify?.success) {
+      throw new Error(
+        verify?.message ||
+        "Payment verification failed."
+      );
+    }
+
+    /* ======================================================
+       4. Payment Successful
+    ====================================================== */
+
+    onContinue({
+      paymentMethod: "ONLINE",
+      paymentStatus: "PAID",
+
+      paymentId:
+        payment.razorpay_payment_id,
+
+      orderId:
+        payment.razorpay_order_id,
+
+      signature:
+        payment.razorpay_signature,
+
+      wallet:
+        verify.payment?.wallet || null,
+
+      payment:
+        verify.payment?.payment || null,
+    });
+
+  } catch (err) {
+    console.error(
+      "Subscription payment error:",
+      err
+    );
+
+    alert(
+      err?.message ||
+      "Payment failed. Please try again."
+    );
+  } finally {
+    setLoading(false);
+  }
+}}
 >
   {loading ? "Processing..." : "Continue →"}
 </button>
