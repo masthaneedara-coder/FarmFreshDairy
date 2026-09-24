@@ -120,31 +120,30 @@ export async function updateDeliveryStatusService(
     // 1. GET DELIVERY + SUBSCRIPTION + ITEMS
     // --------------------------------------------------------
 
-    const { data: delivery, error: deliveryError } =
-      await supabaseAdmin
-        .from("subscription_deliveries")
-        .select(`
-          id,
-          delivery_number,
-          customer_id,
-          subscription_id,
-          status,
-          delivery_completed_at,
-          wallet_debited_amount,
-          wallet_balance_after,
-          subscriptions(
-            id,
-            customer_id,
-            payment_method,
-            payment_status
-          ),
-          subscription_delivery_items(
-            id,
-            quantity,
-            unit_price,
-            total_price
-          )
-        `)
+   const { data: delivery, error: deliveryError } =
+  await supabaseAdmin
+    .from("subscription_deliveries")
+    .select(`
+      id,
+      delivery_number,
+      customer_id,
+      subscription_id,
+      status,
+      wallet_debited_amount,
+      wallet_balance_after,
+      subscriptions(
+        id,
+        customer_id,
+        payment_method,
+        payment_status
+      ),
+      subscription_delivery_items(
+        id,
+        quantity,
+        unit_price,
+        total_price
+      )
+    `)
         .eq("id", deliveryId)
         .single();
 
