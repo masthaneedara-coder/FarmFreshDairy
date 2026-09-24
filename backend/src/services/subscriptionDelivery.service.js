@@ -378,11 +378,31 @@ export async function deleteDeliveryService(id) {
 // SIZE-SPECIFIC PRODUCT PRICING
 // ==========================================
 
-function normalizeSizeLabel(value) {
-  return String(value || "")
+function normalizeSizeVolume(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const text = String(value)
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "");
+
+  if (!text) return null;
+
+  // Convert litres to ml
+  const litreMatch = text.match(/^(\d+(?:\.\d+)?)l$/);
+  if (litreMatch) {
+    return Number(litreMatch[1]) * 1000;
+  }
+
+  // Keep ml as ml
+  const mlMatch = text.match(/^(\d+(?:\.\d+)?)ml$/);
+  if (mlMatch) {
+    return Number(mlMatch[1]);
+  }
+
+  return null;
 }
 
 async function getProductSizePrice(productId, size) {
@@ -408,12 +428,19 @@ async function getProductSizePrice(productId, size) {
     throw error;
   }
 
-  const requestedSize = normalizeSizeLabel(size);
+ const requestedVolume = normalizeSizeVolume(size);
 
-  const matchingSize = (sizes || []).find(
-    (item) =>
-      normalizeSizeLabel(item.label) === requestedSize
-  );
+const matchingSize = (sizes || []).find(
+  (item) => {
+    const itemVolume = normalizeSizeVolume(item.label);
+
+    return (
+      requestedVolume !== null &&
+      itemVolume !== null &&
+      itemVolume === requestedVolume
+    );
+  }
+);
 
   if (!matchingSize) {
     throw new Error(
