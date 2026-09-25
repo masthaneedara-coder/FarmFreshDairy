@@ -26,6 +26,7 @@ export async function createBillingPaymentOrderService({
         invoice_number,
         customer_id,
         total_amount,
+        calculated_total_amount,
         payment_status,
         payment_method
       `)
@@ -76,7 +77,11 @@ export async function createBillingPaymentOrderService({
       };
     }
 
-    const amount = Number(bill.total_amount || 0);
+    const amount = Number(
+  bill.calculated_total_amount ??
+  bill.total_amount ??
+  0
+);
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return {
@@ -287,9 +292,15 @@ export async function verifyBillingPaymentService({
     }
 
     // Check against our billing amount
-    const expectedAmountPaise = Math.round(
-      Number(bill.total_amount || 0) * 100
-    );
+   const expectedBillingAmount = Number(
+  bill.calculated_total_amount ??
+  bill.total_amount ??
+  0
+);
+
+const expectedAmountPaise = Math.round(
+  expectedBillingAmount * 100
+);
 
     if (
       Number(razorpayPayment.amount) !==
