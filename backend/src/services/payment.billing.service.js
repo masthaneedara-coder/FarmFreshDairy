@@ -1,6 +1,9 @@
 import crypto from "crypto";
 import razorpay from "../config/razorpay.js";
 import { supabaseAdmin } from "../config/supabase.js";
+import {
+  getCustomerOutstanding,
+} from "./dashboard.service.js";
 
 /**
  * Create Razorpay order for postpaid billing
@@ -76,7 +79,27 @@ export async function createBillingPaymentOrderService({
       };
     }
 
-   const amount = Number(bill.total_amount ?? 0);
+  // Get actual outstanding amount from delivered milk
+const outstandingData =
+  await getCustomerOutstanding(customer_id);
+
+const deliveryBill =
+  outstandingData.bills.find(
+    (item) => item.id === billing_id
+  );
+
+if (!deliveryBill) {
+  return {
+    data: null,
+    error: {
+      message: "No unpaid delivery billing found.",
+    },
+  };
+}
+
+const amount = Number(
+  deliveryBill.calculated_total_amount || 0
+);
 
 if (!Number.isFinite(amount) || amount <= 0) {
   return {

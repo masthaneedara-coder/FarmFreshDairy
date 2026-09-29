@@ -335,7 +335,7 @@ async function getBillDeliveryRows(
 // Customer Outstanding Billing
 // ======================================
 
-async function getCustomerOutstanding(
+export  async function getCustomerOutstanding(
 
   customerId
 
@@ -1599,32 +1599,16 @@ async function getCustomerOutstanding(
 
   // ======================================
 
-  const outstanding =
-
-    formattedBills.reduce(
-
-      (
-
-        sum,
-
-        bill
-
-      ) =>
-
-        sum +
-
-        Number(
-
-          bill.calculated_total_amount ||
-
-            0
-
-        ),
-
+  const outstanding = formattedBills.reduce(
+  (sum, bill) => {
+    return sum + Number(
+      bill.balance_due ??
+      bill.calculated_total_amount ??
       0
-
     );
-
+  },
+  0
+);
 
 
   return {

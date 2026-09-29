@@ -1398,10 +1398,6 @@ export async function saveSubscriptionDeliveryOverridesService(
       status,
       start_date,
       end_date,
-      frequency,
-      is_paused,
-      pause_from,
-      pause_to,
       subscription_items (
         product_id
       )

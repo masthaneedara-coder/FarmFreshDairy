@@ -439,15 +439,16 @@ export async function getSubscriptionDeliveryOverrides(
 // SAVE SUBSCRIPTION DELIVERY OVERRIDES
 // ==========================================================
 
-// ==========================================================
-// SAVE SUBSCRIPTION DELIVERY OVERRIDES
-// Supports both date-range and individual-date requests
-// ==========================================================
-
-export async function saveSubscriptionDeliveryOverrides(req, res) {
+export async function saveSubscriptionDeliveryOverrides(
+  req,
+  res
+) {
   try {
     const { subscriptionId } = req.params;
+
     const body = req.body || {};
+    const { overrides, start_date, end_date, product_id, size, quantity } = body;
+    const rangeRequest = Boolean(start_date && end_date && product_id);
 
     if (!subscriptionId) {
       return res.status(400).json({
@@ -456,95 +457,27 @@ export async function saveSubscriptionDeliveryOverrides(req, res) {
       });
     }
 
-    // Support range data sent directly or inside overrides[]
-    let rangeRequest = null;
-
-    if (
-      body.start_date &&
-      body.end_date &&
-      body.product_id
-    ) {
-      rangeRequest = {
-        start_date: body.start_date,
-        end_date: body.end_date,
-        product_id: body.product_id,
-        size: body.size,
-        quantity: body.quantity,
-      };
-    } else if (
-      Array.isArray(body.overrides) &&
-      body.overrides.length === 1
-    ) {
-      const first = body.overrides[0];
-
-      if (
-        first?.start_date &&
-        first?.end_date &&
-        first?.product_id
-      ) {
-        rangeRequest = {
-          start_date: first.start_date,
-          end_date: first.end_date,
-          product_id: first.product_id,
-          size: first.size,
-          quantity: first.quantity,
-        };
-      }
-    }
-
-    // Validate the request
-    if (rangeRequest) {
-      const {
-        start_date,
-        end_date,
-        product_id,
-        size,
-        quantity,
-      } = rangeRequest;
-
-      if (
-        !start_date ||
-        !end_date ||
-        !product_id ||
-        !size ||
-        quantity === undefined ||
-        quantity === null
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Provide start_date, end_date, product_id, size, and quantity",
-        });
-      }
-    } else if (
-      !Array.isArray(body.overrides) ||
-      body.overrides.length === 0
-    ) {
+    if (!rangeRequest && (!Array.isArray(overrides) || overrides.length === 0)) {
       return res.status(400).json({
         success: false,
-        message: "No delivery overrides provided",
+        message: "Provide start_date, end_date, product_id, size, and quantity, or an overrides array",
       });
     }
 
-    // IMPORTANT:
-    // Pass the range as an OBJECT, not an array.
-    const data =
-      await saveSubscriptionDeliveryOverridesService(
-        subscriptionId,
-        rangeRequest || body.overrides
-      );
+    const data = await saveSubscriptionDeliveryOverridesService(
+      subscriptionId,
+      rangeRequest ? { start_date, end_date, product_id, size, quantity } : overrides
+    );
 
     return res.json({
       success: true,
       message: "Delivery size overrides saved successfully",
-      overrides: Array.isArray(data)
-        ? data
-        : data?.overrides || [],
-      pricing: Array.isArray(data)
-        ? null
-        : data?.pricing || null,
+      overrides: Array.isArray(data) ? data : (data?.overrides || []),
+      pricing: Array.isArray(data) ? null : (data?.pricing || null),
     });
+
   } catch (err) {
+
     console.error(
       "Save Delivery Overrides Error:",
       err
@@ -558,6 +491,7 @@ export async function saveSubscriptionDeliveryOverrides(req, res) {
     });
   }
 }
+
 
 // ==========================================================
 // DELETE SUBSCRIPTION DELIVERY OVERRIDE
