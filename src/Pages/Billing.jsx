@@ -40,7 +40,9 @@ import { fetchDashboard } from "../services/dashboardService";
 
 const API_URL = "https://farmfreshdairy.onrender.com/api";
 
-const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_ID = String(
+  import.meta.env.VITE_RAZORPAY_KEY_ID || ""
+).trim();
 
 import {
 
