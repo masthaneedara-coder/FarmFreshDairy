@@ -1010,3 +1010,55 @@ export async function payBilling(
 
   return data;
 }
+
+/* ==========================================================
+   SUBSCRIPTION DELIVERY OVERRIDES
+========================================================== */
+
+export async function getSubscriptionDeliveryOverrides(
+  subscriptionId
+) {
+  if (!subscriptionId) {
+    throw new Error("Subscription ID is required");
+  }
+
+  return await getJSON(
+    `${API_URL}/subscription-deliveries/${subscriptionId}/delivery-overrides`
+  );
+}
+
+export async function saveSubscriptionDeliveryOverrides(
+  subscriptionId,
+  overrides
+) {
+  if (!subscriptionId) {
+    throw new Error("Subscription ID is required");
+  }
+
+  const isRange = overrides && !Array.isArray(overrides) &&
+    overrides.start_date && overrides.end_date && overrides.product_id;
+  if (!isRange && (!Array.isArray(overrides) || overrides.length === 0)) {
+    throw new Error("Please provide a date range or at least one delivery override");
+  }
+
+  return await postJSON(
+    `${API_URL}/subscription-deliveries/${subscriptionId}/delivery-overrides`,
+    isRange ? overrides : { overrides }
+  );
+}
+
+export async function deleteSubscriptionDeliveryOverride(
+  subscriptionId,
+  deliveryDate,
+  productId
+) {
+  if (!subscriptionId || !deliveryDate || !productId) {
+    throw new Error(
+      "Subscription ID, delivery date, and product ID are required"
+    );
+  }
+
+  return await deleteJSON(
+    `${API_URL}/subscription-deliveries/${subscriptionId}/delivery-overrides/${deliveryDate}/${productId}`
+  );
+}

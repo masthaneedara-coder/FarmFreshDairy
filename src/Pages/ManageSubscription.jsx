@@ -6,6 +6,7 @@ import {
   fetchCustomerAddresses,
   updateSubscriptionStatus,
 } from "../config/api";
+import DeliverySizeOverrides from "../Components/subscription/DeliverySizeOverrides";
 
 export default function ManageSubscription() {
     const PRICE_MAP = {
@@ -226,7 +227,51 @@ console.log("Payload:", payload);
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-8">
+    <div className="manage-subscription-page max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
+      <style>{`
+        .manage-subscription-page { color:#173126; animation: msFadeIn .45s ease both; }
+        @keyframes msFadeIn { from {opacity:0; transform:translateY(12px)} to {opacity:1; transform:translateY(0)} }
+        @keyframes msFloat { 0%,100% {transform:translateY(0)} 50% {transform:translateY(-3px)} }
+        .manage-subscription-page button { -webkit-tap-highlight-color:transparent; touch-action:manipulation; transition:transform .18s ease, box-shadow .18s ease, background-color .18s ease; }
+        .manage-subscription-page button:active { transform:scale(.97); }
+        .manage-subscription-page > button:first-of-type { display:inline-flex; align-items:center; gap:.45rem; border:1px solid #dce9e1; background:#fff; color:#17633c; font-weight:700; box-shadow:0 4px 14px #174a2a0d; }
+        .manage-subscription-page h1 { font-size:clamp(1.65rem,5vw,2.5rem); line-height:1.12; letter-spacing:-.04em; }
+        .manage-subscription-page .mt-8.bg-white { overflow:hidden; border-radius:1.5rem; box-shadow:0 18px 55px rgba(15,75,42,.09); }
+        .manage-subscription-page .mt-8.bg-white > .bg-gradient-to-r { position:relative; overflow:hidden; background:linear-gradient(120deg,#075e3b,#16a36a 58%,#53c58b); padding:clamp(1.25rem,4vw,2rem); }
+        .manage-subscription-page .mt-8.bg-white > .bg-gradient-to-r:after { content:""; position:absolute; width:180px;height:180px;border-radius:50%;right:-55px;top:-90px;background:rgba(255,255,255,.12); }
+        .manage-subscription-page .mt-8.bg-white > .bg-gradient-to-r h2 { font-size:clamp(1.25rem,4vw,1.8rem); }
+        .manage-subscription-page .mt-8.bg-white > .p-8 { padding:clamp(1rem,4vw,2rem); }
+        .manage-subscription-page label { display:block; font-size:.88rem; font-weight:750; color:#294b3b; margin-bottom:.55rem; }
+        .manage-subscription-page input:not([type=checkbox]), .manage-subscription-page select { width:100%; min-height:48px; border:1px solid #d6e4dc; border-radius:14px; background:#fbfdfb; padding:.75rem .9rem; color:#173126; font-size:16px; outline:none; }
+        .manage-subscription-page input:focus, .manage-subscription-page select:focus { border-color:#16a36a; box-shadow:0 0 0 4px rgba(22,163,106,.12); }
+        .manage-subscription-page input:disabled { background:#f1f6f3; color:#52685c; opacity:1; }
+        .manage-subscription-page .grid.grid-cols-3 { gap:.55rem; }
+        .manage-subscription-page .grid.grid-cols-3 button { min-height:48px; border-radius:14px; }
+        .manage-subscription-page .flex.items-center.justify-between.rounded-xl { min-height:60px; border-color:#d6e4dc; background:#fbfdfb; }
+        .manage-subscription-page .flex.items-center.justify-between.rounded-xl button { width:44px;height:44px; flex:0 0 44px; box-shadow:0 4px 12px rgba(0,0,0,.09); }
+        .manage-subscription-page .flex.flex-wrap.gap-4.mt-10 { display:grid; grid-template-columns:1fr; gap:.7rem; margin-top:1.5rem; }
+        .manage-subscription-page .flex.flex-wrap.gap-4.mt-10 button { min-height:52px; border-radius:15px; font-size:1rem; box-shadow:0 7px 18px rgba(13,70,40,.12); }
+        .manage-subscription-page .mt-6:has(> *) { animation:msFadeIn .5s ease both; }
+        .manage-subscription-page .fixed.inset-0 { padding:1rem; backdrop-filter:blur(5px); animation:msFadeIn .2s ease both; }
+        .manage-subscription-page .fixed.inset-0 > div { width:min(100%,440px); max-height:90dvh; overflow-y:auto; border-radius:24px; box-shadow:0 24px 80px rgba(0,0,0,.25); padding:clamp(1.1rem,5vw,1.6rem); }
+        @media (min-width:640px) {
+          .manage-subscription-page .flex.flex-wrap.gap-4.mt-10 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+        }
+        @media (max-width:639px) {
+          .manage-subscription-page { padding-left: .85rem; padding-right:.85rem; padding-top:1rem; }
+          .manage-subscription-page .mb-6 { margin-bottom:1rem; }
+          .manage-subscription-page .mt-8.bg-white { margin-top:1rem; border-radius:1.2rem; }
+          .manage-subscription-page .grid.lg\\:grid-cols-2 { grid-template-columns:minmax(0,1fr); gap:1.1rem; }
+          .manage-subscription-page .grid.grid-cols-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+          .manage-subscription-page .grid.grid-cols-3 button { padding:.65rem .25rem; font-size:.95rem; }
+          .manage-subscription-page .text-2xl { font-size:1.25rem; }
+          .manage-subscription-page .mt-8.bg-white > .bg-gradient-to-r p { max-width:22rem; font-size:.9rem; }
+          .manage-subscription-page .mt-8.bg-white > .p-8 { padding:1rem; }
+        }
+        @media (prefers-reduced-motion:reduce) {
+          .manage-subscription-page *, .manage-subscription-page *:before, .manage-subscription-page *:after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+        }
+      `}</style>
 
       <button
         onClick={() => navigate(-1)}
@@ -455,6 +500,14 @@ console.log("Payload:", payload);
     </div>
 
     </div>
+
+    {/* Per-delivery milk size and quantity overrides.
+        This section changes only the selected delivery date and product.
+        It does not update the permanent subscription form or monthly amount. */}
+    <div className="mt-6">
+      <DeliverySizeOverrides subscription={subscription} />
+    </div>
+
     {showPauseModal && (
 
 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[99999]">

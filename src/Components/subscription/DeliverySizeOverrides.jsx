@@ -46,11 +46,13 @@ export default function DeliverySizeOverrides({ subscription }) {
     [items]
   );
 
-  const [deliveryDate, setDeliveryDate] = useState(() => {
+  const getLocalDate = () => {
     const d = new Date();
-    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-    return local.toISOString().slice(0, 10);
-  });
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+      .toISOString().slice(0, 10);
+  };
+  const [startDate, setStartDate] = useState(getLocalDate);
+  const [endDate, setEndDate] = useState(getLocalDate);
   const [overrides, setOverrides] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [loading, setLoading] = useState(false);
@@ -72,7 +74,8 @@ export default function DeliverySizeOverrides({ subscription }) {
       for (const product of milkProducts) {
         const existing = list.find(
           (row) =>
-            row.delivery_date === deliveryDate &&
+            row.delivery_date >= startDate &&
+            row.delivery_date <= endDate &&
             row.product_id === product.id &&
             row.status !== "Cancelled"
         );
@@ -94,7 +97,7 @@ export default function DeliverySizeOverrides({ subscription }) {
     loadOverrides();
     // Loading is intentionally tied to subscription, date, and products.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subscriptionId, deliveryDate, milkProducts]);
+  }, [subscriptionId, startDate, endDate, milkProducts]);
 
   function updateDraft(productId, field, value) {
     setDrafts((prev) => ({
@@ -121,16 +124,26 @@ export default function DeliverySizeOverrides({ subscription }) {
     setError("");
     setMessage("");
 
+    if (!startDate || !endDate || startDate > endDate) {
+      setError("Please select a valid start date and end date.");
+      return;
+    }
+
     try {
-      const payload = [{
-        delivery_date: deliveryDate,
+      const payload = {
+        start_date: startDate,
+        end_date: endDate,
         product_id: product.id,
         size: draft.size,
         quantity,
-      }];
+      };
 
-      await saveSubscriptionDeliveryOverrides(subscriptionId, payload);
-      setMessage(`${product.name} override saved for ${deliveryDate}.`);
+      const result = await saveSubscriptionDeliveryOverrides(subscriptionId, payload);
+      const pricing = result?.pricing;
+      const estimate = pricing && Number.isFinite(Number(pricing.estimated_total))
+        ? ` Estimated range charges: ₹${Number(pricing.estimated_total).toFixed(2)} (${pricing.scheduled_delivery_count} scheduled deliveries at ₹${Number(pricing.unit_price).toFixed(2)} × ${quantity}).`
+        : "";
+      setMessage(`${product.name} override saved from ${startDate} through ${endDate}. The regular subscription resumes after the end date.${estimate}`);
       await loadOverrides();
     } catch (e) {
       setError(e.message || "Could not save override.");
@@ -145,12 +158,20 @@ export default function DeliverySizeOverrides({ subscription }) {
     setMessage("");
 
     try {
-      await deleteSubscriptionDeliveryOverride(
-        subscriptionId,
-        deliveryDate,
-        product.id
+      const matchingDates = overrides
+        .filter((row) =>
+          row.product_id === product.id &&
+          row.delivery_date >= startDate &&
+          row.delivery_date <= endDate &&
+          row.status !== "Cancelled"
+        )
+        .map((row) => row.delivery_date);
+      await Promise.all(
+        [...new Set(matchingDates)].map((date) =>
+          deleteSubscriptionDeliveryOverride(subscriptionId, date, product.id)
+        )
       );
-      setMessage(`${product.name} will use its normal subscription size.`);
+      setMessage(`${product.name} overrides removed for the selected date range.`);
       await loadOverrides();
     } catch (e) {
       setError(e.message || "Could not remove override.");
@@ -168,19 +189,34 @@ export default function DeliverySizeOverrides({ subscription }) {
           Delivery Size Overrides
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Change milk size and quantity for one delivery date. Your regular
-          subscription plan and monthly amount will not change.
+          Choose a date range and set the milk size and quantity for scheduled deliveries in that period. Your permanent subscription stays unchanged; billing uses the actual size, quantity, and price delivered. Regular subscription quantities resume the day after the end date.
         </p>
       </div>
 
       <label className="mb-4 block text-sm font-semibold text-slate-700">
-        Delivery date
+        <span className="mb-1 block">From date</span>
         <input
           type="date"
-          min={subscription?.start_date || undefined}
+          min={subscription?.start_date || getLocalDate()}
           max={subscription?.end_date || undefined}
-          value={deliveryDate}
-          onChange={(e) => setDeliveryDate(e.target.value)}
+          value={startDate}
+          onChange={(e) => {
+            const next = e.target.value;
+            setStartDate(next);
+            if (endDate < next) setEndDate(next);
+          }}
+          className="mt-1 block w-full rounded-xl border border-slate-300 px-3 py-2 text-base"
+        />
+      </label>
+
+      <label className="mb-4 block text-sm font-semibold text-slate-700">
+        To date
+        <input
+          type="date"
+          min={startDate}
+          max={subscription?.end_date || undefined}
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
           className="mt-1 block w-full rounded-xl border border-slate-300 px-3 py-2 text-base"
         />
       </label>
@@ -216,7 +252,7 @@ export default function DeliverySizeOverrides({ subscription }) {
                 </h3>
                 {draft.exists && (
                   <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
-                    Override scheduled
+                    Range override exists
                   </span>
                 )}
               </div>
@@ -270,7 +306,7 @@ export default function DeliverySizeOverrides({ subscription }) {
                   onClick={() => resetProduct(product)}
                   className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Use regular size
+                  Remove override from start date
                 </button>
               </div>
             </div>
