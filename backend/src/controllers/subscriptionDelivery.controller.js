@@ -7,7 +7,11 @@ import {
   deleteDeliveryService,
   assignSubscriptionDeliveryService,
   getCustomerDeliverySummaryService,
-  bulkAssignSubscriptionDeliveriesService
+  bulkAssignSubscriptionDeliveriesService,
+  // Delivery size overrides
+  getSubscriptionDeliveryOverridesService,
+  saveSubscriptionDeliveryOverridesService,
+  deleteSubscriptionDeliveryOverrideService,
 } from "../services/subscriptionDelivery.service.js";
 import { supabaseAdmin } from "../config/supabase.js";
 
@@ -383,6 +387,176 @@ export async function updateSubscriptionDeliveryStatus(req, res) {
       message:
         err?.message ||
         "Failed to update subscription delivery status",
+    });
+  }
+}
+// ==========================================================
+// GET SUBSCRIPTION DELIVERY OVERRIDES
+// ==========================================================
+
+export async function getSubscriptionDeliveryOverrides(
+  req,
+  res
+) {
+  try {
+    const { subscriptionId } = req.params;
+
+    if (!subscriptionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Subscription ID is required",
+      });
+    }
+
+    const overrides =
+      await getSubscriptionDeliveryOverridesService(
+        subscriptionId
+      );
+
+    return res.json({
+      success: true,
+      overrides,
+    });
+
+  } catch (err) {
+
+    console.error(
+      "Get Delivery Overrides Error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        err?.message ||
+        "Failed to get delivery overrides",
+    });
+  }
+}
+
+
+// ==========================================================
+// SAVE SUBSCRIPTION DELIVERY OVERRIDES
+// ==========================================================
+
+export async function saveSubscriptionDeliveryOverrides(
+  req,
+  res
+) {
+  try {
+    const { subscriptionId } = req.params;
+
+    const { overrides } = req.body;
+
+    if (!subscriptionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Subscription ID is required",
+      });
+    }
+
+    if (
+      !Array.isArray(overrides) ||
+      overrides.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "No delivery overrides provided",
+      });
+    }
+
+    const data =
+      await saveSubscriptionDeliveryOverridesService(
+        subscriptionId,
+        overrides
+      );
+
+    return res.json({
+      success: true,
+      message:
+        "Delivery size overrides saved successfully",
+      overrides: data,
+    });
+
+  } catch (err) {
+
+    console.error(
+      "Save Delivery Overrides Error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        err?.message ||
+        "Failed to save delivery overrides",
+    });
+  }
+}
+
+
+// ==========================================================
+// DELETE SUBSCRIPTION DELIVERY OVERRIDE
+// ==========================================================
+
+export async function deleteSubscriptionDeliveryOverride(
+  req,
+  res
+) {
+  try {
+    const {
+      subscriptionId,
+      deliveryDate,
+      productId,
+    } = req.params;
+
+    if (!subscriptionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Subscription ID is required",
+      });
+    }
+
+    if (!deliveryDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Delivery date is required",
+      });
+    }
+
+    if (!productId) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required",
+      });
+    }
+
+    const data =
+      await deleteSubscriptionDeliveryOverrideService(
+        subscriptionId,
+        deliveryDate,
+        productId
+      );
+
+    return res.json({
+      success: true,
+      message:
+        "Delivery override removed successfully",
+      overrides: data,
+    });
+
+  } catch (err) {
+
+    console.error(
+      "Delete Delivery Override Error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        err?.message ||
+        "Failed to delete delivery override",
     });
   }
 }

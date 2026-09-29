@@ -518,6 +518,42 @@ export async function generateTodayDeliveriesService() {
     );
 
     // ========================================================
+// CHECK PRODUCT-SPECIFIC DELIVERY SIZE OVERRIDES FOR TODAY
+// ========================================================
+
+const {
+  data: deliveryOverrides,
+  error: overrideError,
+} = await supabaseAdmin
+  .from("subscription_delivery_overrides")
+  .select(`
+    id,
+    subscription_id,
+    product_id,
+    delivery_date,
+    size,
+    quantity,
+    status
+  `)
+  .eq("subscription_id", subscription.id)
+  .eq("delivery_date", today)
+  .eq("status", "Scheduled");
+
+if (overrideError) {
+  console.error(
+    "Delivery Override Query Error:",
+    overrideError
+  );
+
+  throw overrideError;
+}
+
+console.log(
+  "DELIVERY OVERRIDES:",
+  deliveryOverrides || []
+);
+
+// ========================================================
     // 2. CHECK APPROVED EXTRA MILK FOR TODAY
     // ========================================================
 
@@ -681,84 +717,136 @@ export async function generateTodayDeliveriesService() {
 
       if (normalEligible) {
 
-        const normalItems = [];
+  const normalItems = [];
 
-        for (
-          const item
-          of subscription.subscription_items || []
-        ) {
+  for (
+    const item
+    of subscription.subscription_items || []
+  ) {
 
-          const quantity =
-            Number(item.quantity || 0);
+    // ======================================================
+    // NORMAL SUBSCRIPTION VALUES
+    // ======================================================
 
-          if (quantity <= 0) {
+    let quantity =
+      Number(item.quantity || 0);
 
-            console.log(
-              "Skipping subscription item - invalid quantity:",
-              item
-            );
+    let size =
+      item.size;
 
-            continue;
-          }
+    // ======================================================
+    // APPLY DATE-SPECIFIC OVERRIDE FOR THIS PRODUCT ONLY
+    // ======================================================
 
-          // ----------------------------------------------
-          // Get actual size-specific price
-          // ----------------------------------------------
+    const productOverride = (deliveryOverrides || []).find(
+      (override) =>
+        override.product_id === item.product_id
+    );
 
-          const unitPrice =
-            await getProductSizePrice(
-              item.product_id,
-              item.size
-            );
-
-          console.log(
-            "NORMAL SIZE PRICE:",
-            item.size,
-            "₹",
-            unitPrice
-          );
-
-          normalItems.push({
-
-            delivery_id:
-              delivery.id,
-
-            product_id:
-              item.product_id,
-
-            quantity,
-
-            size:
-              item.size,
-
-            unit_price:
-              unitPrice,
-
-            total_price:
-              quantity * unitPrice,
-
-            is_extra:
-              false,
-
-          });
+    if (productOverride) {
+      console.log(
+        "APPLYING PRODUCT-SPECIFIC DELIVERY OVERRIDE:",
+        {
+          subscriptionId: subscription.id,
+          deliveryDate: today,
+          productId: item.product_id,
+          normalSize: item.size,
+          overrideSize: productOverride.size,
+          normalQuantity: item.quantity,
+          overrideQuantity: productOverride.quantity,
         }
+      );
 
-        if (normalItems.length > 0) {
+      size = productOverride.size;
+      quantity = Number(productOverride.quantity);
+    }
 
-          const {
-            error: itemError,
-          } = await supabaseAdmin
-            .from(
-              "subscription_delivery_items"
-            )
-            .insert(normalItems);
+    // ======================================================
+    // VALIDATE QUANTITY
+    // ======================================================
 
-          if (itemError) {
-            throw itemError;
-          }
-        }
+    if (quantity <= 0) {
 
-      } else {
+      console.log(
+        "Skipping subscription item - invalid quantity:",
+        item
+      );
+
+      continue;
+    }
+
+    // ======================================================
+    // GET SIZE-SPECIFIC PRICE
+    // ======================================================
+
+    const unitPrice =
+      await getProductSizePrice(
+        item.product_id,
+        size
+      );
+
+    console.log(
+      "FINAL DELIVERY SIZE:",
+      size
+    );
+
+    console.log(
+      "FINAL DELIVERY QUANTITY:",
+      quantity
+    );
+
+    console.log(
+      "UNIT PRICE:",
+      unitPrice
+    );
+
+    // ======================================================
+    // CREATE DELIVERY ITEM
+    // ======================================================
+
+    normalItems.push({
+
+      delivery_id:
+        delivery.id,
+
+      product_id:
+        item.product_id,
+
+      quantity,
+
+      size,
+
+      unit_price:
+        unitPrice,
+
+      total_price:
+        quantity * unitPrice,
+
+      is_extra:
+        false,
+
+    });
+  }
+
+  // ========================================================
+  // INSERT DELIVERY ITEMS
+  // ========================================================
+
+  if (normalItems.length > 0) {
+
+    const {
+      error: itemError,
+    } = await supabaseAdmin
+      .from(
+        "subscription_delivery_items"
+      )
+      .insert(normalItems);
+
+    if (itemError) {
+      throw itemError;
+    }
+  }
+} else {
 
         console.log(
           "SUBSCRIPTION PAUSED → NORMAL MILK NOT ADDED"
@@ -1216,6 +1304,252 @@ export async function expireSubscriptionsService() {
   console.log(
     `AUTO EXPIRY: ${data?.length || 0} subscription(s) expired.`
   );
+
+  return data || [];
+}
+// ==========================================================
+// DELIVERY SIZE OVERRIDES
+// ==========================================================
+
+const ALLOWED_OVERRIDE_SIZES = [
+  "500ml",
+  "1L",
+  "2L",
+  "3L",
+  "5L",
+];
+
+function validateDeliveryOverrideSize(size) {
+  if (!ALLOWED_OVERRIDE_SIZES.includes(size)) {
+    throw new Error(
+      `Invalid delivery size "${size}". Allowed sizes: ${ALLOWED_OVERRIDE_SIZES.join(", ")}`
+    );
+  }
+}
+
+
+// ==========================================================
+// GET DELIVERY OVERRIDES
+// ==========================================================
+
+export async function getSubscriptionDeliveryOverridesService(
+  subscriptionId
+) {
+  if (!subscriptionId) {
+    throw new Error("Subscription ID is required");
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("subscription_delivery_overrides")
+    .select(`
+      id,
+      subscription_id,
+      product_id,
+      delivery_date,
+      size,
+      quantity,
+      status,
+      created_at,
+      updated_at,
+      products (
+        id,
+        name
+      )
+    `)
+    .eq("subscription_id", subscriptionId)
+    .order("delivery_date", {
+      ascending: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
+}
+
+
+// ==========================================================
+// SAVE PRODUCT-SPECIFIC DELIVERY OVERRIDES
+// ==========================================================
+
+export async function saveSubscriptionDeliveryOverridesService(
+  subscriptionId,
+  overrides
+) {
+  if (!subscriptionId) {
+    throw new Error("Subscription ID is required");
+  }
+
+  if (!Array.isArray(overrides) || overrides.length === 0) {
+    throw new Error("No delivery overrides provided");
+  }
+
+  // Verify subscription and its subscribed products.
+  const {
+    data: subscription,
+    error: subscriptionError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .select(`
+      id,
+      status,
+      start_date,
+      end_date,
+      subscription_items (
+        product_id
+      )
+    `)
+    .eq("id", subscriptionId)
+    .single();
+
+  if (subscriptionError) {
+    throw subscriptionError;
+  }
+
+  if (!subscription) {
+    throw new Error("Subscription not found");
+  }
+
+  if (subscription.status !== "Active") {
+    throw new Error(
+      "Only active subscriptions can have delivery overrides"
+    );
+  }
+
+  const subscribedProductIds = new Set(
+    (subscription.subscription_items || []).map(
+      (item) => item.product_id
+    )
+  );
+
+  const seenKeys = new Set();
+
+  const records = overrides.map((override) => {
+    const deliveryDate = String(
+      override.delivery_date || ""
+    ).trim();
+
+    const productId = String(
+      override.product_id || ""
+    ).trim();
+
+    const size = String(
+      override.size || ""
+    ).trim();
+
+    const quantity = Number(override.quantity);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) {
+      throw new Error(
+        `Invalid delivery date: ${deliveryDate}`
+      );
+    }
+
+    if (
+      !productId ||
+      !subscribedProductIds.has(productId)
+    ) {
+      throw new Error(
+        `Product ${productId || "(missing)"} is not part of this subscription`
+      );
+    }
+
+    validateDeliveryOverrideSize(size);
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new Error(
+        `Invalid quantity for ${deliveryDate}`
+      );
+    }
+
+    if (
+      subscription.start_date &&
+      deliveryDate < subscription.start_date
+    ) {
+      throw new Error(
+        `Override date ${deliveryDate} is before subscription start date`
+      );
+    }
+
+    if (
+      subscription.end_date &&
+      deliveryDate > subscription.end_date
+    ) {
+      throw new Error(
+        `Override date ${deliveryDate} is after subscription end date`
+      );
+    }
+
+    const uniqueKey = `${deliveryDate}:${productId}`;
+
+    if (seenKeys.has(uniqueKey)) {
+      throw new Error(
+        `Duplicate override for product ${productId} on ${deliveryDate}`
+      );
+    }
+
+    seenKeys.add(uniqueKey);
+
+    return {
+      subscription_id: subscriptionId,
+      product_id: productId,
+      delivery_date: deliveryDate,
+      size,
+      quantity,
+      status: "Scheduled",
+      updated_at: new Date().toISOString(),
+    };
+  });
+
+  const { data, error } = await supabaseAdmin
+    .from("subscription_delivery_overrides")
+    .upsert(records, {
+      onConflict:
+        "subscription_id,delivery_date,product_id",
+    })
+    .select();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
+}
+
+
+// ==========================================================
+// DELETE ONE PRODUCT'S DELIVERY OVERRIDE
+// ==========================================================
+
+export async function deleteSubscriptionDeliveryOverrideService(
+  subscriptionId,
+  deliveryDate,
+  productId
+) {
+  if (!subscriptionId) {
+    throw new Error("Subscription ID is required");
+  }
+
+  if (!deliveryDate) {
+    throw new Error("Delivery date is required");
+  }
+
+  if (!productId) {
+    throw new Error("Product ID is required");
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("subscription_delivery_overrides")
+    .delete()
+    .eq("subscription_id", subscriptionId)
+    .eq("delivery_date", deliveryDate)
+    .eq("product_id", productId)
+    .select();
+
+  if (error) {
+    throw error;
+  }
 
   return data || [];
 }

@@ -4,12 +4,20 @@ import {
 
 export async function validateCoupon(req, res) {
   try {
-    const { code, amount } = req.body;
+    const { code, billing_id } = req.body;
+
+    if (!code || !billing_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Coupon code and billing ID are required.",
+      });
+    }
 
     const { data, error } =
       await validateCouponService({
         code,
-        amount,
+        billing_id,
+        customer_id: req.user?.id,
       });
 
     if (error) {
@@ -24,10 +32,7 @@ export async function validateCoupon(req, res) {
       coupon: data,
     });
   } catch (error) {
-    console.error(
-      "Coupon Controller Error:",
-      error
-    );
+    console.error("Coupon Controller Error:", error);
 
     return res.status(500).json({
       success: false,

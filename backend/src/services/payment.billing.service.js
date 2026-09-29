@@ -20,19 +20,18 @@ export async function createBillingPaymentOrderService({
     }
 
     const { data: bill, error: billError } = await supabaseAdmin
-      .from("billing")
-      .select(`
-        id,
-        invoice_number,
-        customer_id,
-        total_amount,
-        calculated_total_amount,
-        payment_status,
-        payment_method
-      `)
-      .eq("id", billing_id)
-      .eq("customer_id", customer_id)
-      .single();
+  .from("billing")
+  .select(`
+    id,
+    invoice_number,
+    customer_id,
+    total_amount,
+    payment_status,
+    payment_method
+  `)
+  .eq("id", billing_id)
+  .eq("customer_id", customer_id)
+  .single();
 
     if (billError || !bill) {
       console.error("Billing lookup error:", billError);
@@ -77,20 +76,16 @@ export async function createBillingPaymentOrderService({
       };
     }
 
-    const amount = Number(
-  bill.calculated_total_amount ??
-  bill.total_amount ??
-  0
-);
+   const amount = Number(bill.total_amount ?? 0);
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return {
-        data: null,
-        error: {
-          message: "Billing amount must be greater than zero.",
-        },
-      };
-    }
+if (!Number.isFinite(amount) || amount <= 0) {
+  return {
+    data: null,
+    error: {
+      message: "Billing amount must be greater than zero.",
+    },
+  };
+}
 
     const order = await razorpay.orders.create({
       amount: Math.round(amount * 100),

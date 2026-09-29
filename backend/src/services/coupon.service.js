@@ -1,148 +1,276 @@
 import { supabaseAdmin } from "../config/supabase.js";
 
-export async function validateCouponService({ code, amount }) {
+const roundMoney = (value) =>
+  Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
+const fail = (message) => ({
+  data: null,
+  error: { message },
+});
+
+export async function validateCouponService({
+  code,
+  billing_id,
+  customer_id,
+}) {
   try {
     const normalizedCode = String(code || "")
       .trim()
       .toUpperCase();
 
-    const originalAmount = Number(amount);
-
     if (!normalizedCode) {
-      return {
-        data: null,
-        error: { message: "Please enter a coupon code." },
-      };
+      return fail("Please enter a coupon code.");
     }
+
+    if (!billing_id || !customer_id) {
+      return fail("Invoice and customer details are required.");
+    }
+
+    // 1. Fetch the invoice from the database.
+    // Never use an amount supplied by the frontend.
+    const { data: bill, error: billError } =
+      await supabaseAdmin
+        .from("billing")
+        .select(`
+          id,
+          customer_id,
+          invoice_type,
+          payment_method,
+          payment_status,
+          subtotal,
+          gst_amount,
+          gst,
+          discount,
+          total_amount,
+          coupon_id,
+          coupon_code
+        `)
+        .eq("id", billing_id)
+        .eq("customer_id", customer_id)
+        .maybeSingle();
+
+    if (billError) {
+      console.error("Invoice lookup error:", billError);
+      return fail("Unable to verify invoice.");
+    }
+
+    if (!bill) {
+      return fail("Invoice not found or access denied.");
+    }
+
+    const paymentStatus = String(
+      bill.payment_status || ""
+    ).trim().toLowerCase();
+
+    if (
+      ["paid", "completed", "success", "successful"].includes(
+        paymentStatus
+      )
+    ) {
+      return fail(
+        "This invoice is already paid. Coupons cannot be applied."
+      );
+    }
+
+    if (
+      !["pending", "unpaid", "due", ""].includes(paymentStatus)
+    ) {
+      return fail(
+        "Coupon cannot be applied to this invoice status."
+      );
+    }
+
+    // Allow subscription invoices and postpaid/COD invoices.
+    const invoiceType = String(
+      bill.invoice_type || ""
+    ).trim().toLowerCase();
+
+    const paymentMethod = String(
+      bill.payment_method || ""
+    ).trim().toLowerCase();
+
+    const isSubscriptionInvoice =
+      invoiceType === "subscription";
+
+    const isPostpaidInvoice =
+      ["cod", "postpaid", "cash on delivery"].includes(
+        paymentMethod
+      );
+
+    if (!isSubscriptionInvoice && !isPostpaidInvoice) {
+      return fail(
+        "Coupons are not available for this invoice type."
+      );
+    }
+
+    // 2. Get the actual amount currently due.
+    // Existing invoice discount is already included in total_amount.
+    const originalAmount = roundMoney(bill.total_amount);
 
     if (
       !Number.isFinite(originalAmount) ||
       originalAmount <= 0
     ) {
-      return {
-        data: null,
-        error: { message: "Invalid subscription amount." },
-      };
+      return fail("This invoice has no payable amount.");
     }
 
-    // Find active coupon
-    const { data: coupon, error } = await supabaseAdmin
-      .from("coupons")
-      .select("*")
-      .eq("code", normalizedCode)
-      .eq("is_active", true)
-      .maybeSingle();
+    // 3. Find the coupon.
+    const { data: coupon, error: couponError } =
+      await supabaseAdmin
+        .from("coupons")
+        .select("*")
+        .ilike("code", normalizedCode)
+        .eq("is_active", true)
+        .maybeSingle();
 
-    if (error) {
-      console.error("Coupon lookup error:", error);
-
-      return {
-        data: null,
-        error: { message: "Unable to validate coupon." },
-      };
+    if (couponError) {
+      console.error("Coupon lookup error:", couponError);
+      return fail("Unable to validate coupon.");
     }
 
     if (!coupon) {
-      return {
-        data: null,
-        error: {
-          message: "Invalid or inactive coupon code.",
-        },
-      };
+      return fail("Invalid or inactive coupon code.");
     }
 
-    // Check coupon dates
+    // 4. Validate coupon dates using date-only values.
     const today = new Date()
       .toISOString()
-      .split("T")[0];
+      .slice(0, 10);
 
-    if (
-      coupon.start_date &&
-      today < coupon.start_date
-    ) {
-      return {
-        data: null,
-        error: {
-          message: "This coupon is not active yet.",
-        },
-      };
+    const startDate =
+      coupon.start_date || null;
+
+    const endDate =
+      coupon.end_date ||
+      coupon.expiry_date ||
+      null;
+
+    if (startDate && today < startDate) {
+      return fail("This coupon is not active yet.");
     }
 
-    if (
-      coupon.end_date &&
-      today > coupon.end_date
-    ) {
-      return {
-        data: null,
-        error: {
-          message: "This coupon has expired.",
-        },
-      };
+    if (endDate && today > endDate) {
+      return fail("This coupon has expired.");
     }
 
-    // Check usage limit
-    if (
-      coupon.usage_limit !== null &&
-      Number(coupon.used_count || 0) >=
-        Number(coupon.usage_limit)
-    ) {
-      return {
-        data: null,
-        error: {
-          message: "Coupon usage limit reached.",
-        },
-      };
+    // 5. Validate the global usage limit.
+    if (coupon.usage_limit !== null) {
+      const usageLimit = Number(coupon.usage_limit);
+      const usedCount = Number(coupon.used_count || 0);
+
+      if (
+        Number.isFinite(usageLimit) &&
+        usedCount >= usageLimit
+      ) {
+        return fail("Coupon usage limit reached.");
+      }
     }
 
-    // Check minimum subscription amount
-    const minimumAmount = Number(
-      coupon.minimum_amount || 0
-    );
+    // 6. Check customer-specific restrictions.
+    const {
+      data: restrictedCustomers,
+      error: restrictionError,
+    } = await supabaseAdmin
+      .from("coupon_customers")
+      .select("customer_id")
+      .eq("coupon_id", coupon.id);
 
-    if (originalAmount < minimumAmount) {
-      return {
-        data: null,
-        error: {
-          message: `Minimum subscription amount is ₹${minimumAmount}.`,
-        },
-      };
-    }
-
-    // Calculate discount
-    let discount = 0;
-
-    if (coupon.discount_type === "FIXED") {
-      discount = Number(coupon.discount_value);
-    } else if (
-      coupon.discount_type === "PERCENTAGE"
-    ) {
-      discount =
-        (originalAmount *
-          Number(coupon.discount_value)) /
-        100;
-    }
-
-    // Apply maximum discount if configured
-    if (
-      coupon.maximum_discount !== null &&
-      coupon.maximum_discount !== undefined
-    ) {
-      discount = Math.min(
-        discount,
-        Number(coupon.maximum_discount)
+    if (restrictionError) {
+      console.error(
+        "Coupon customer lookup error:",
+        restrictionError
+      );
+      return fail(
+        "Unable to verify coupon eligibility."
       );
     }
 
-    // Discount cannot exceed subscription amount
-    discount = Math.min(
-      Math.max(discount, 0),
-      originalAmount
+    // If customer rows exist, only listed customers qualify.
+    if (
+      restrictedCustomers?.length > 0 &&
+      !restrictedCustomers.some(
+        (item) => item.customer_id === customer_id
+      )
+    ) {
+      return fail(
+        "This coupon is not available for your account."
+      );
+    }
+
+    // 7. Validate minimum bill amount.
+    const minimumAmount = Number(
+      coupon.minimum_amount ??
+      coupon.minimum_order ??
+      0
     );
 
-    discount = Number(discount.toFixed(2));
+    if (
+      Number.isFinite(minimumAmount) &&
+      originalAmount < minimumAmount
+    ) {
+      return fail(
+        `Minimum bill amount is ₹${minimumAmount.toFixed(2)}.`
+      );
+    }
 
-    const finalAmount = Number(
-      (originalAmount - discount).toFixed(2)
+    // 8. Calculate discount.
+    const discountType = String(
+      coupon.discount_type || ""
+    ).trim().toUpperCase();
+
+    const discountValue = Number(
+      coupon.discount_value
+    );
+
+    if (
+      !Number.isFinite(discountValue) ||
+      discountValue <= 0
+    ) {
+      return fail("Invalid coupon discount configuration.");
+    }
+
+    let discount = 0;
+
+    if (
+      discountType === "FIXED" ||
+      discountType === "FLAT"
+    ) {
+      discount = discountValue;
+    } else if (
+      discountType === "PERCENTAGE" ||
+      discountType === "PERCENT"
+    ) {
+      discount =
+        (originalAmount * discountValue) / 100;
+    } else {
+      return fail("Unsupported coupon discount type.");
+    }
+
+    // Apply maximum discount.
+    const maximumDiscount =
+      coupon.maximum_discount;
+
+    if (
+      maximumDiscount !== null &&
+      maximumDiscount !== undefined &&
+      Number.isFinite(Number(maximumDiscount))
+    ) {
+      discount = Math.min(
+        discount,
+        Number(maximumDiscount)
+      );
+    }
+
+    // Discount cannot exceed invoice amount.
+    discount = roundMoney(
+      Math.min(
+        Math.max(discount, 0),
+        originalAmount
+      )
+    );
+
+    const finalAmount = roundMoney(
+      originalAmount - discount
     );
 
     return {
@@ -153,17 +281,18 @@ export async function validateCouponService({ code, amount }) {
         original_amount: originalAmount,
         discount,
         final_amount: finalAmount,
+        billing_id: bill.id,
       },
       error: null,
     };
   } catch (error) {
-    console.error("Validate Coupon Service Error:", error);
+    console.error(
+      "Validate Coupon Service Error:",
+      error
+    );
 
-    return {
-      data: null,
-      error: {
-        message: "Something went wrong validating coupon.",
-      },
-    };
+    return fail(
+      "Something went wrong validating coupon."
+    );
   }
 }

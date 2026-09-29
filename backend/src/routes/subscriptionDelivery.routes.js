@@ -9,49 +9,54 @@ import {
   getCustomerDeliverySummary,
   bulkAssignSubscriptionDeliveries,
   updateSubscriptionDeliveryStatus,
+  getSubscriptionDeliveryOverrides,
+  saveSubscriptionDeliveryOverrides,
+  deleteSubscriptionDeliveryOverride,
 } from "../controllers/subscriptionDelivery.controller.js";
 
 const router = express.Router();
 
-router.post(
-  "/generate",
-  generateTodayDeliveries
-);
+// Delivery generation
+router.post("/generate", generateTodayDeliveries);
 
-router.get(
-  "/",
-  getTodayDeliveries
-);
+// Today's deliveries
+router.get("/", getTodayDeliveries);
 
+// Customer summary
 router.get(
   "/customer/:customerId/summary",
   getCustomerDeliverySummary
 );
 
+// Product-specific delivery size overrides.
+// Keep these routes before generic /:id routes.
 router.get(
-  "/:id",
-  getDeliveryById
+  "/:subscriptionId/delivery-overrides",
+  getSubscriptionDeliveryOverrides
 );
 
-router.put(
-  "/bulk-assign",
-  bulkAssignSubscriptionDeliveries
+router.post(
+  "/:subscriptionId/delivery-overrides",
+  saveSubscriptionDeliveryOverrides
 );
 
-router.put(
-  "/:id/assign",
-  assignSubscriptionDelivery
+router.delete(
+  "/:subscriptionId/delivery-overrides/:deliveryDate/:productId",
+  deleteSubscriptionDeliveryOverride
 );
 
-// ✅ Subscription delivery status
+// Generic delivery routes
+router.get("/:id", getDeliveryById);
+
+router.put("/bulk-assign", bulkAssignSubscriptionDeliveries);
+
+router.put("/:id/assign", assignSubscriptionDelivery);
+
 router.put(
   "/:deliveryId/status",
   updateSubscriptionDeliveryStatus
 );
 
-router.delete(
-  "/:id",
-  deleteDelivery
-);
+router.delete("/:id", deleteDelivery);
 
 export default router;

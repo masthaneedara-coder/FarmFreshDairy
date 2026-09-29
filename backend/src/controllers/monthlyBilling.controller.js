@@ -3,7 +3,8 @@ import {
   getMonthlyBills,
   getCustomerMonthlyBill,
   markMonthlyBillPaid,
-  getMonthlyBillDetails
+  getMonthlyBillDetails,
+  applyMonthlyBillCoupon,
 } from "../services/monthlyBilling.service.js";
 
 // ======================================
@@ -68,21 +69,37 @@ export async function getBills(req, res) {
 // Get Single Customer Bill
 // GET /api/monthly-bills/:customerId?month=8&year=2026
 // ======================================
+
 export async function getCustomerBill(req, res) {
+  try {
+    const { subscriptionId } = req.params;
+    const { month, year } = req.query;
 
-  const { subscriptionId } = req.params;
-  const { month, year } = req.query;
+    if (!month || !year) {
+      return res.status(400).json({
+        success: false,
+        message: "Month and year are required.",
+      });
+    }
 
-  const bill = await getCustomerMonthlyBill(
+    const bill = await getCustomerMonthlyBill(
       subscriptionId,
-      month,
-      year
-  );
+      Number(month),
+      Number(year)
+    );
 
-  res.json({
+    return res.json({
       success: true,
-      bill
-  });
+      bill,
+    });
+  } catch (err) {
+    console.error("Get Customer Bill Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
 }
 
 // ======================================
@@ -134,6 +151,53 @@ export async function getBillDetails(req, res) {
     return res.status(500).json({
       success: false,
       message: err.message,
+    });
+  }
+}
+// ======================================
+// Apply Coupon to Existing Monthly Bill
+// POST /api/monthly-bills/:id/apply-coupon
+// ======================================
+export async function applyCouponToMonthlyBill(req, res) {
+  try {
+    const { id } = req.params;
+    const { couponCode } = req.body;
+
+    // Customer ID must come from authenticated user
+    const customerId = req.user?.id;
+
+    if (!customerId) {
+      return res.status(401).json({
+        success: false,
+        message: "Please log in to apply a coupon.",
+      });
+    }
+
+    if (!id || !couponCode?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Bill ID and coupon code are required.",
+      });
+    }
+
+    const result = await applyMonthlyBillCoupon({
+      billId: id,
+      customerId,
+      code: couponCode.trim(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Coupon applied successfully.",
+      bill: result.bill,
+      coupon: result.coupon,
+    });
+  } catch (err) {
+    console.error("Apply Coupon Error:", err);
+
+    return res.status(400).json({
+      success: false,
+      message: err.message || "Unable to apply coupon.",
     });
   }
 }
