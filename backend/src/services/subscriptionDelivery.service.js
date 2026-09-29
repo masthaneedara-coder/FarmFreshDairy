@@ -1381,7 +1381,9 @@ export async function saveSubscriptionDeliveryOverridesService(
     throw new Error("Subscription ID is required");
   }
 
-  if (!Array.isArray(overrides) || overrides.length === 0) {
+  const rangeRequest = overrides && !Array.isArray(overrides) &&
+    overrides.start_date && overrides.end_date && overrides.product_id;
+  if (!rangeRequest && (!Array.isArray(overrides) || overrides.length === 0)) {
     throw new Error("No delivery overrides provided");
   }
 
@@ -1396,6 +1398,10 @@ export async function saveSubscriptionDeliveryOverridesService(
       status,
       start_date,
       end_date,
+      frequency,
+      is_paused,
+      pause_from,
+      pause_to,
       subscription_items (
         product_id
       )
@@ -1423,9 +1429,68 @@ export async function saveSubscriptionDeliveryOverridesService(
     )
   );
 
+  let overridesToSave = overrides;
+  if (rangeRequest) {
+    const startDate = String(overrides.start_date).trim();
+    const endDate = String(overrides.end_date).trim();
+    const productId = String(overrides.product_id).trim();
+    const size = String(overrides.size || "").trim();
+    const quantity = Number(overrides.quantity);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || startDate > endDate) {
+      throw new Error("Select a valid From date and To date");
+    }
+    if (!subscribedProductIds.has(productId)) {
+      throw new Error("Selected product is not part of this subscription");
+    }
+    validateDeliveryOverrideSize(size);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new Error("Quantity must be a positive whole number");
+    }
+    if (subscription.start_date && startDate < subscription.start_date) {
+      throw new Error("From date is before the subscription start date");
+    }
+    if (subscription.end_date && endDate > subscription.end_date) {
+      throw new Error("To date is after the subscription end date");
+    }
+
+    // Build one override row for each scheduled delivery date in the inclusive range.
+    // Use the same eligibility function as delivery generation, including frequency and pause dates.
+    const today = new Date().toISOString().slice(0, 10);
+    const expanded = [];
+    const cursor = new Date(`${startDate}T12:00:00`);
+    const last = new Date(`${endDate}T12:00:00`);
+    while (cursor <= last) {
+      const dateString = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+      if (dateString >= today && shouldGenerateDelivery(subscription, dateString)) {
+        // Do not rewrite an existing delivery record; its delivery item pricing is already fixed.
+        const { data: existingDelivery, error: existingDeliveryError } = await supabaseAdmin
+          .from("subscription_deliveries")
+          .select("id,status")
+          .eq("subscription_id", subscriptionId)
+          .eq("delivery_date", dateString)
+          .maybeSingle();
+        if (existingDeliveryError) throw existingDeliveryError;
+        if (!existingDelivery) {
+          expanded.push({
+            delivery_date: dateString,
+            product_id: productId,
+            size,
+            quantity,
+          });
+        }
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    if (!expanded.length) {
+      throw new Error("No future scheduled delivery dates in the selected range are available to change. Choose future dates that have not already been generated.");
+    }
+    overridesToSave = expanded;
+  }
+
   const seenKeys = new Set();
 
-  const records = overrides.map((override) => {
+  const records = overridesToSave.map((override) => {
     const deliveryDate = String(
       override.delivery_date || ""
     ).trim();
@@ -1512,6 +1577,24 @@ export async function saveSubscriptionDeliveryOverridesService(
 
   if (error) {
     throw error;
+  }
+
+  if (rangeRequest) {
+    const unitPrice = await getProductSizePrice(
+      String(overrides.product_id).trim(),
+      String(overrides.size).trim()
+    );
+    return {
+      overrides: data || [],
+      pricing: {
+        scheduled_delivery_count: records.length,
+        size: String(overrides.size).trim(),
+        quantity: Number(overrides.quantity),
+        unit_price: unitPrice,
+        estimated_total: records.length * Number(overrides.quantity) * unitPrice,
+        note: "Estimate for selected-range deliveries; monthly bill should use actual generated delivery item totals.",
+      },
+    };
   }
 
   return data || [];
