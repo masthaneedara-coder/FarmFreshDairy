@@ -14,7 +14,6 @@ export async function getAllSubscriptionsService() {
       id,
       customer_id,
       address_id,
-      product,
       quantity,
       delivery_time,
       total_amount,
@@ -61,8 +60,9 @@ export async function getAllSubscriptionsService() {
       phone:
         customer?.phone || "-",
 
-      product:
-        sub.product || "Milk",
+      // Your subscriptions table does not have
+      // a "product" column.
+      product: "Milk",
 
       qty:
         sub.quantity || "1",
