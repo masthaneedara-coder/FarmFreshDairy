@@ -30,6 +30,7 @@ export async function getTodayDeliveriesService() {
         *,
         products(
           id,
+          size,
           name,
           image
         )
@@ -140,6 +141,7 @@ export async function updateDeliveryStatusService(
       subscription_delivery_items(
         id,
         quantity,
+        size,
         unit_price,
         total_price
       )

@@ -4,80 +4,120 @@ import { supabaseAdmin } from "../config/supabase.js";
 // ======================================
 // Get All Subscriptions
 // ======================================
+// ======================================
+// Get All Subscriptions - OPTIMIZED
+// ======================================
 export async function getAllSubscriptionsService() {
   const { data: subscriptions, error } = await supabaseAdmin
     .from("subscriptions")
-    .select("*")
+    .select(`
+      id,
+      customer_id,
+      address_id,
+      product,
+      quantity,
+      delivery_time,
+      total_amount,
+      status,
+      is_paused,
+      pause_from,
+      pause_to,
+      start_date,
+      end_date,
+      created_at,
+
+      customers(
+        full_name,
+        phone
+      ),
+
+      addresses(
+        house_no,
+        street,
+        area
+      )
+    `)
     .order("created_at", { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    console.error(
+      "Get All Subscriptions Error:",
+      error
+    );
 
-  const result = [];
+    throw error;
+  }
 
-  for (const sub of subscriptions) {
-    
-    // Customer
-    const { data: customer } = await supabaseAdmin
-      .from("customers")
-      .select("full_name, phone")
-      .eq("id", sub.customer_id)
-      .single();
+  return (subscriptions || []).map((sub) => {
+    const customer = sub.customers;
+    const address = sub.addresses;
 
-    // Address
-    const { data: address } = await supabaseAdmin
-      .from("addresses")
-      .select("*")
-      .eq("id", sub.address_id)
-      .single();
-      result.push({
-        subscriptionId: sub.id,
+    return {
+      subscriptionId: sub.id,
 
-        customerName: customer?.full_name || "-",
+      customerName:
+        customer?.full_name || "-",
 
-        phone: customer?.phone || "-",
+      phone:
+        customer?.phone || "-",
 
-        product: sub.product || "Milk",
+      product:
+        sub.product || "Milk",
 
-        qty: sub.quantity || "1",
+      qty:
+        sub.quantity || "1",
 
-        deliveryType: sub.delivery_time,
+      deliveryType:
+        sub.delivery_time,
 
-        monthlyAmount: sub.total_amount,
+      monthlyAmount:
+        sub.total_amount,
 
-        // ==============================
-        // Subscription Status
-        // ==============================
-       status: sub.is_paused === true
+      // ==============================
+      // Subscription Status
+      // ==============================
+      status:
+        sub.is_paused === true
           ? "Paused"
           : sub.status,
 
-        // Keep the original pause information
-        
+      // ==============================
+      // Pause Information
+      // ==============================
+      is_paused:
+        sub.is_paused === true,
 
-        // ==============================
-        // Pause Information
-        // ==============================
-        is_paused: sub.is_paused === true,
-        pause_from: sub.pause_from || null,
-        pause_to: sub.pause_to || null,
+      pause_from:
+        sub.pause_from || null,
 
-        startDate: sub.start_date,
+      pause_to:
+        sub.pause_to || null,
 
-        expireDate: sub.end_date,
+      // ==============================
+      // Dates
+      // ==============================
+      startDate:
+        sub.start_date,
 
-        address: address
-          ? `${address.house_no}, ${address.street}`
-          : "-",
+      expireDate:
+        sub.end_date,
 
-        area: address?.area || "-",
-      });
+      // ==============================
+      // Address
+      // ==============================
+      address: address
+        ? `${address.house_no || ""}${
+            address.house_no && address.street
+              ? ", "
+              : ""
+          }${address.street || ""}`
+        : "-",
 
- 
-  }
-
-  return result;
+      area:
+        address?.area || "-",
+    };
+  });
 }
-
 // ======================================
 // Update Subscription Status
 // ======================================

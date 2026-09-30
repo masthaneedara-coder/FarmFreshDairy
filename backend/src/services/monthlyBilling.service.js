@@ -262,6 +262,7 @@ async function getSubscriptionDeliveries(
         total_price,
         products(
           id,
+          size,
           name,
           gst
         )
