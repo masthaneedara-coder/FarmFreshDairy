@@ -15,7 +15,7 @@ const router = express.Router();
 router.get("/", getAllBills);
 
 router.get(
-  "/subscription",
+  "/subscription-bills",
   getSubscriptionBills
 );
 
