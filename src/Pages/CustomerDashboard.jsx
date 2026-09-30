@@ -3416,7 +3416,7 @@ export default function CustomerDashboard() {
 
           <button
             className="dashboard-bottom-item"
-            onClick={() => navigate("/products")}
+            onClick={() => navigate("/subscription/create/:productId")}
           >
             <RefreshCw size={18} />
             Subscribe

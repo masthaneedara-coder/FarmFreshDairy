@@ -332,38 +332,109 @@ const stats = useMemo(() => {
     const eligible = expiringSoonSubscriptions.filter((sub) =>
       String(sub.phone || sub.mobile || "").replace(/\D/g, "").length >= 10
     );
+
     if (!eligible.length) {
       alert("No customers with valid phone numbers are expiring within the next 5 days.");
       return;
     }
-    if (!window.confirm(`Open WhatsApp reminders for ${eligible.length} customer(s)? You must press Send in each WhatsApp chat.`)) return;
+
+    if (!window.confirm(
+      `Open WhatsApp renewal reminders for ${eligible.length} customer(s)? You must press Send in each WhatsApp chat.`
+    )) return;
+
     eligible.forEach((sub, index) => {
       const rawPhone = String(sub.phone || sub.mobile || "").replace(/\D/g, "");
       const phone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
       const name = sub.customerName || sub.name || "Customer";
       const expiry = formatDate(sub.expireDate || sub.endDate);
       const days = getRemainingDays(sub.expireDate || sub.endDate);
-      const message = `Dear ${name},\n\nThis is a friendly reminder that your FarmFreshDairy subscription will expire ${days === 0 ? "today" : `in ${days} day(s)`}, on ${expiry}.\n\nKindly renew your subscription to ensure uninterrupted fresh milk delivery.\n\nThank you for choosing FarmFreshDairy! 🥛\n\nBest regards,\nFarmFreshDairy Team`;
-      window.setTimeout(() => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer"), index * 350);
+
+      const message = `🥛 Subscription Renewal Reminder – FarmFreshDairy
+
+Dear ${name},
+
+Greetings from FarmFreshDairy! 🌿
+
+This is a friendly reminder that your milk subscription is scheduled to expire ${days === 0 ? "today" : `in ${days} day(s)`}, on ${expiry}.
+
+To continue receiving your fresh buffalo milk without interruption, kindly renew your subscription before the expiry date.
+
+👉 Renew Your Subscription:
+https://farm-fresh-dairy.vercel.app/auth
+
+Thank you for choosing FarmFreshDairy. We truly appreciate your continued trust and support. ❤️
+
+Warm regards,
+FarmFreshDairy Team
+Freshness Delivered to Your Doorstep 🥛`;
+
+      window.setTimeout(
+        () => window.open(
+          `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+          "_blank",
+          "noopener,noreferrer"
+        ),
+        index * 350
+      );
     });
   };
 
   const openWhatsAppReminder = (sub, expired = false) => {
     const rawPhone = String(sub.phone || sub.mobile || "").replace(/\D/g, "");
+
     if (!rawPhone) {
       alert("Customer phone number is not available.");
       return;
     }
 
-    // WhatsApp requires country code. Add India's 91 when a 10-digit number is stored.
     const phone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
     const customerName = sub.customerName || sub.name || "Customer";
     const expiry = formatDate(sub.expireDate || sub.endDate);
-    const message = expired
-      ? `Dear ${customerName},\n\nThis is a friendly reminder that your FarmFreshDairy subscription expired on ${expiry}.\n\nKindly renew your subscription to resume your fresh milk deliveries.\n\nThank you for choosing FarmFreshDairy! 🥛\n\nBest regards,\nFarmFreshDairy Team`
-      : `Dear ${customerName},\n\nThis is a friendly reminder that your FarmFreshDairy subscription will expire in ${getRemainingDays(sub.expireDate || sub.endDate)} days, on ${expiry}.\n\nKindly renew your subscription to ensure uninterrupted fresh milk delivery.\n\nThank you for choosing FarmFreshDairy! 🥛\n\nBest regards,\nFarmFreshDairy Team`;
+    const days = getRemainingDays(sub.expireDate || sub.endDate);
 
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+    const message = expired
+      ? `🥛 Subscription Renewal Reminder – FarmFreshDairy
+
+Dear ${customerName},
+
+Greetings from FarmFreshDairy! 🌿
+
+Your milk subscription expired on ${expiry}.
+
+To continue receiving your fresh buffalo milk, kindly renew your subscription today.
+
+👉 Renew Your Subscription:
+https://farm-fresh-dairy.vercel.app/auth
+
+Thank you for choosing FarmFreshDairy. We truly appreciate your continued trust and support. ❤️
+
+Warm regards,
+FarmFreshDairy Team
+Freshness Delivered to Your Doorstep 🥛`
+      : `🥛 Subscription Renewal Reminder – FarmFreshDairy
+
+Dear ${customerName},
+
+Greetings from FarmFreshDairy! 🌿
+
+This is a friendly reminder that your milk subscription is scheduled to expire ${days === 0 ? "today" : `in ${days} day(s)`}, on ${expiry}.
+
+To continue receiving your fresh buffalo milk without interruption, kindly renew your subscription before the expiry date.
+
+👉 Renew Your Subscription:
+https://farm-fresh-dairy.vercel.app/auth
+
+Thank you for choosing FarmFreshDairy. We truly appreciate your continued trust and support. ❤️
+
+Warm regards,
+FarmFreshDairy Team
+Freshness Delivered to Your Doorstep 🥛`;
+
+    window.open(
+      `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   };
 
   const isExpired = (expireDate) => {
@@ -436,8 +507,8 @@ const stats = useMemo(() => {
           <div className="flex-1">
             <p className="font-black text-green-800">FarmFreshDairy Renewal Reminders</p>
             <p className="text-sm text-slate-600 mt-1">
-              Send WhatsApp reminders to active customers whose subscriptions expire within the next 5 days.
-              The logo is displayed here in the admin panel; the standard WhatsApp click-to-chat link sends text only.
+              Send WhatsApp renewal reminders to active customers whose subscriptions expire within the next 5 days.
+              The message includes the FarmFreshDairy renewal portal link. The FarmFreshDairy logo is displayed in the admin panel; standard WhatsApp click-to-chat opens a text message and does not attach an image automatically.
             </p>
           </div>
           <span className="inline-flex w-fit rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700 border border-green-100">Brand logo</span>
