@@ -755,15 +755,8 @@ export async function renewSubscriptionService(
   }
 
   // ==========================================
-  // 2. Validate renewal data
+  // 2. Validate renewal amount
   // ==========================================
-
-  if (!endDate) {
-    return {
-      data: null,
-      error: new Error("Renewal end date is required."),
-    };
-  }
 
   if (
     totalAmount === undefined ||
@@ -786,35 +779,94 @@ export async function renewSubscriptionService(
   }
 
   // ==========================================
-  // 3. Determine renewal billing period
+  // 3. Calculate renewal dates
+  //
+  // Rules:
+  // - More than 2 days remaining -> backend rejects renewal.
+  // - 2 days remaining -> starts the day after expiry.
+  // - 1 day remaining -> starts the day after expiry.
+  // - Expiry day -> starts the next day.
+  // - Already expired -> starts TODAY.
+  //
+  // Example:
+  // Expiry: 01 Oct
+  // Renew on 01 Oct -> Start: 02 Oct -> End: 01 Nov
+  // Renew on 02 Oct -> Start: 02 Oct -> End: 01 Nov
   // ==========================================
 
   const today = new Date();
 
-  today.setHours(0, 0, 0, 0);
+  const todayIST = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(today);
 
-  const currentEndDate = new Date(
-    `${currentSubscription.end_date}T00:00:00`
+  const todayDate = new Date(`${todayIST}T00:00:00`);
+
+  const currentEndDate = currentSubscription.end_date
+    ? new Date(`${currentSubscription.end_date}T00:00:00`)
+    : null;
+
+  if (
+    !currentEndDate ||
+    Number.isNaN(currentEndDate.getTime())
+  ) {
+    return {
+      data: null,
+      error: new Error("Current subscription expiry date is invalid."),
+    };
+  }
+
+  // Number of calendar days remaining.
+  const daysRemaining = Math.floor(
+    (
+      currentEndDate.getTime() -
+      todayDate.getTime()
+    ) /
+      (1000 * 60 * 60 * 24)
   );
 
-  let renewalStart = new Date(today);
+  // Renewal is allowed only in the final 2 days
+  // or after the subscription has expired.
+  if (daysRemaining > 2) {
+    return {
+      data: null,
+      error: new Error(
+        `Renewal is available only during the last 2 days of the subscription. ${daysRemaining} days remaining.`
+      ),
+    };
+  }
 
-  // If subscription has not expired,
-  // renewal starts the day after current end date.
-  if (
-    currentSubscription.end_date &&
-    !Number.isNaN(currentEndDate.getTime()) &&
-    currentEndDate >= today
-  ) {
+  let renewalStart;
+
+  if (currentEndDate >= todayDate) {
+    // Active / expiry day:
+    // renewal starts the day after the existing expiry.
     renewalStart = new Date(currentEndDate);
-
     renewalStart.setDate(
       renewalStart.getDate() + 1
     );
+  } else {
+    // Already expired:
+    // renewal starts TODAY.
+    renewalStart = new Date(todayDate);
   }
 
   const renewalStartDate =
     renewalStart.toISOString().split("T")[0];
+
+  // Monthly period:
+  // start 01 Oct -> end 31 Oct
+  // start 02 Oct -> end 01 Nov
+  const renewalEnd = new Date(renewalStart);
+  renewalEnd.setDate(
+    renewalEnd.getDate() + 30
+  );
+
+  const renewalEndDate =
+    renewalEnd.toISOString().split("T")[0];
 
   // ==========================================
   // 4. Payment information
@@ -845,7 +897,7 @@ export async function renewSubscriptionService(
       : renewalAmount;
 
   // ==========================================
-  // 5. Generate new invoice number
+  // 5. Generate invoice number
   // ==========================================
 
   let invoiceNumber;
@@ -866,6 +918,7 @@ export async function renewSubscriptionService(
   // ==========================================
 
   const previousSubscription = {
+    start_date: currentSubscription.start_date,
     end_date: currentSubscription.end_date,
     total_amount: currentSubscription.total_amount,
     status: currentSubscription.status,
@@ -893,22 +946,18 @@ export async function renewSubscriptionService(
   } = await supabaseAdmin
     .from("subscriptions")
     .update({
-      end_date: endDate,
-
+      start_date: renewalStartDate,
+      end_date: renewalEndDate,
       total_amount: renewalAmount,
-
       status: "Active",
-
+      is_paused: false,
+      pause_from: null,
+      pause_to: null,
       payment_method: paymentMethod,
-
       payment_status: paymentStatus,
-
       payment_date: paymentDate,
-
       payment_reference: paymentReference,
-
       payment_amount: paymentAmount,
-
       updated_at: new Date().toISOString(),
     })
     .eq("id", subscriptionId)
