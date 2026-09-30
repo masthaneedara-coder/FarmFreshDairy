@@ -89,6 +89,8 @@ export default function AdminMonthlyReport() {
         .toLowerCase();
 
       switch (statusFilter) {
+        case "Active":
+          return subscriptionStatus === "active";
         case "Pending":
           return paymentStatus === "pending";
         case "Paid":
@@ -623,6 +625,7 @@ export default function AdminMonthlyReport() {
                 "
               >
                 <option value="All">All Statuses</option>
+                <option value="Active">Active</option>
                 <option value="Pending">Pending</option>
                 <option value="Paid">Paid</option>
                 <option value="Cancelled">Cancelled</option>

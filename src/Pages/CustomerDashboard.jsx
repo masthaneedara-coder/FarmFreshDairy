@@ -30,6 +30,7 @@ import {
   resumeSubscriptionApi,
   getSubscriptionDeliverySummary,
   fetchCustomerSubscriptions,
+  renewSubscription,
 } from "../config/api";
 import PauseSubscriptionModal from "../Components/subscription/PauseSubscriptionModal";
 import { useAuthSession } from "../context/AuthSessionContext";
@@ -92,6 +93,7 @@ export default function CustomerDashboard() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [deliverySummaries, setDeliverySummaries] = useState({});
   const [statusUpdatingId, setStatusUpdatingId] = useState("");
+  const [renewingId, setRenewingId] = useState("");
   const [expandedSubscriptionId, setExpandedSubscriptionId] = useState(null);
   const [showOlderOrders, setShowOlderOrders] = useState(false);
   const [expandedOrderId, setExpandedOrderId] = useState(null);
@@ -333,6 +335,88 @@ export default function CustomerDashboard() {
     }
   };
 
+  const handleRenew = async (subscription) => {
+    if (!subscription?.id) {
+      alert("Subscription ID is missing.");
+      return;
+    }
+
+    const monthlyAmount = Number(subscription.monthlyAmount || 0);
+
+    if (!Number.isFinite(monthlyAmount) || monthlyAmount <= 0) {
+      alert("Renewal amount is not available for this subscription.");
+      return;
+    }
+
+    const expired = isSubscriptionExpired(subscription.expireDate);
+    const remainingDays = getRemainingDays(subscription.expireDate);
+
+    // Renewal is available only during the last 2 days or after expiry.
+    if (!expired && (remainingDays === null || remainingDays > 2)) {
+      alert("Renewal is available only during the last 2 days of the subscription.");
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const currentEnd = subscription.expireDate
+      ? new Date(`${subscription.expireDate}T00:00:00`)
+      : null;
+
+    if (!currentEnd || Number.isNaN(currentEnd.getTime())) {
+      alert("Current subscription expiry date is invalid.");
+      return;
+    }
+
+    // Before expiry: renewal starts the day after the current expiry.
+    // After expiry: renewal starts today.
+    const renewalStart = expired
+      ? new Date(today)
+      : new Date(currentEnd.getTime());
+
+    if (!expired) {
+      renewalStart.setDate(renewalStart.getDate() + 1);
+    }
+
+    const renewalEnd = new Date(renewalStart);
+    renewalEnd.setDate(renewalEnd.getDate() + 30);
+
+    const startDate = renewalStart.toISOString().split("T")[0];
+    const endDate = renewalEnd.toISOString().split("T")[0];
+
+    const confirmed = window.confirm(
+      `Renew this ${subscription.size || "milk"} subscription for 30 days?\n\n` +
+        `Amount: ${formatMoney(monthlyAmount)}\n` +
+        `Start date: ${formatDate(startDate)}\n` +
+        `End date: ${formatDate(endDate)}`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setRenewingId(subscription.id);
+
+      // The backend is authoritative for renewal dates. Do not send an
+      // expiry date calculated by the browser as the source of truth.
+      await renewSubscription(subscription.id, {
+        total_amount: monthlyAmount,
+        payment_method: subscription.payment_method || "COD",
+        payment_status: "Pending",
+        payment_amount: monthlyAmount,
+      });
+
+      await loadDashboard();
+
+      alert("Subscription renewed successfully.");
+    } catch (err) {
+      console.error("Renewal failed:", err);
+      alert(err?.message || "Unable to renew subscription.");
+    } finally {
+      setRenewingId("");
+    }
+  };
+
   const handlePauseConfirm = async (pauseFrom, pauseTo) => {
     try {
       setLoading(true);
@@ -356,9 +440,35 @@ export default function CustomerDashboard() {
     }
   };
 
-  const activeSubscriptions = subscriptions.filter(
+  // Show all current subscriptions. If there is no current one,
+  // keep the most recently created non-cancelled/stopped expired
+  // subscription visible so the customer can renew it the same day.
+  const nonExpiredSubscriptions = subscriptions.filter(
     (sub) => !isSubscriptionExpired(sub.expireDate)
   );
+
+  const latestRenewableExpiredSubscription = [...subscriptions]
+    .filter((sub) => {
+      const status = (sub.status || "").toLowerCase();
+      return (
+        isSubscriptionExpired(sub.expireDate) &&
+        status !== "cancelled" &&
+        status !== "canceled" &&
+        status !== "stopped"
+      );
+    })
+    .sort((a, b) => {
+      const aDate = new Date(a.created_at || a.createdAt || 0).getTime();
+      const bDate = new Date(b.created_at || b.createdAt || 0).getTime();
+      return bDate - aDate;
+    })[0];
+
+  const activeSubscriptions =
+    nonExpiredSubscriptions.length > 0
+      ? nonExpiredSubscriptions
+      : latestRenewableExpiredSubscription
+        ? [latestRenewableExpiredSubscription]
+        : [];
 
   if (loading) {
     return (
@@ -1452,7 +1562,7 @@ export default function CustomerDashboard() {
 
         .subscription-buttons {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 7px;
           margin-top: 11px;
         }
@@ -1485,10 +1595,34 @@ export default function CustomerDashboard() {
           color: white;
         }
 
+        .subscription-btn.renew {
+          background: linear-gradient(135deg, #059669, #10b981);
+          color: white;
+          box-shadow: 0 7px 16px rgba(5,150,105,.18);
+        }
+
+        .subscription-btn.renew-disabled {
+          background: #e5e7eb;
+          color: #9ca3af;
+          box-shadow: none;
+          cursor: not-allowed;
+          opacity: 0.85;
+        }
+
         .subscription-btn.manage {
           border: 1px solid #a7f3d0;
           background: white;
           color: #047857;
+        }
+
+        .renew-spin {
+          animation: dashSpin .75s linear infinite;
+        }
+
+        @media (max-width: 560px) {
+          .subscription-buttons {
+            grid-template-columns: 1fr;
+          }
         }
 
         .empty-card {
@@ -2709,6 +2843,10 @@ export default function CustomerDashboard() {
                 const isActive = !isPaused && status === "active";
                 const isStopped = status === "stopped";
                 const remainingDays = getRemainingDays(sub.expireDate);
+                const isExpired = isSubscriptionExpired(sub.expireDate);
+                const canRenew =
+                  isExpired ||
+                  (remainingDays !== null && remainingDays <= 2);
                 const isExpanded = expandedSubscriptionId === sub.id;
 
                 const progressPercent =
@@ -2947,6 +3085,29 @@ export default function CustomerDashboard() {
                               : "Activate"}
                           </button>
                         )}
+
+                        <button
+                          onClick={() => handleRenew(sub)}
+                          disabled={
+                            !canRenew ||
+                            renewingId === sub.id ||
+                            statusUpdatingId === sub.id
+                          }
+                          title={
+                            canRenew
+                              ? "Renew subscription"
+                              : `Renewal available when 2 days or less remain`
+                          }
+                          className={`subscription-btn renew ${
+                            !canRenew ? "renew-disabled" : ""
+                          }`}
+                        >
+                          <RefreshCw
+                            size={13}
+                            className={renewingId === sub.id ? "renew-spin" : ""}
+                          />
+                          {renewingId === sub.id ? "Renewing..." : "Renew"}
+                        </button>
 
                         <button
                           onClick={() =>

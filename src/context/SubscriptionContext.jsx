@@ -161,17 +161,56 @@ export function SubscriptionProvider({ children }) {
     await loadSubscriptionData(subscription.customer_id);
   };
 
-  const renew = async (endDate, totalAmount) => {
-    if (!subscription) return;
+ const renew = async (endDate, totalAmount) => {
+  if (!subscription) return;
+
+  try {
+    /*
+     * Renew for 30 days after the current subscription expiry.
+     *
+     * Example:
+     * Current expiry = 2026-10-20
+     * New expiry     = 2026-11-19
+     */
+
+    const currentEndDate = new Date(`${endDate}T00:00:00`);
+
+    if (Number.isNaN(currentEndDate.getTime())) {
+      throw new Error("Invalid subscription expiry date.");
+    }
+
+    currentEndDate.setDate(
+      currentEndDate.getDate() + 30
+    );
+
+    const newEndDate = currentEndDate
+      .toISOString()
+      .split("T")[0];
+
+    console.log("Renewing subscription:", {
+      subscriptionId: subscription.id,
+      oldEndDate: endDate,
+      newEndDate,
+      totalAmount,
+    });
 
     await renewCustomerSubscription(
       subscription.id,
-      endDate,
+      newEndDate,
       totalAmount
     );
 
-    await loadSubscriptionData(subscription.customer_id);
-  };
+    await loadSubscriptionData(
+      subscription.customer_id
+    );
+
+    return true;
+
+  } catch (err) {
+    console.error("Renew subscription error:", err);
+    throw err;
+  }
+};
   
 
   return (
