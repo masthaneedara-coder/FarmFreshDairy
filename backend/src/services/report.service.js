@@ -30,7 +30,10 @@ export async function getMonthlyDeliveryReportService(month, year) {
           size,
           unit_price,
           products(
-            name
+            id,
+            name,
+            size,
+            image
           )
         )
       `)

@@ -256,6 +256,7 @@ async function getSubscriptionDeliveries(
       subscription_delivery_items(
         id,
         product_id,
+        size,
         quantity,
         unit_price,
         total_price,

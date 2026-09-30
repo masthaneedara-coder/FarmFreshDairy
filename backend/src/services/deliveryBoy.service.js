@@ -185,6 +185,7 @@ export const getDeliveryBoyHistoryService = async (deliveryBoyId) => {
       subscription_delivery_items(
         id,
         quantity,
+        size,
         unit_price,
         total_price,
         size,
