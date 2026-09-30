@@ -43,43 +43,113 @@ export async function getMonthlyDeliveryReportService(month, year) {
 
   for (const subscription of subscriptions) {
 
-    const { count: deliveredDays } =
-      await supabaseAdmin
-        .from("subscription_deliveries")
-        .select("*", {
-          count: "exact",
-          head: true,
-        })
-        .eq("subscription_id", subscription.id)
-        .eq("status", "Delivered")
-        .gte("delivery_date", firstDay)
-        .lte("delivery_date", lastDay);
+    // =====================================================
+    // SUBSCRIPTION PERIOD
+    // =====================================================
 
-    const { count: missedDays } =
-      await supabaseAdmin
-        .from("subscription_deliveries")
-        .select("*", {
-          count: "exact",
-          head: true,
-        })
-        .eq("subscription_id", subscription.id)
-        .eq("status", "Missed")
-        .gte("delivery_date", firstDay)
-        .lte("delivery_date", lastDay);
+    const subscriptionStartDate =
+      subscription.start_date
+        ? String(subscription.start_date).slice(0, 10)
+        : null;
+
+    const subscriptionEndDate =
+      subscription.end_date
+        ? String(subscription.end_date).slice(0, 10)
+        : null;
+
+    // =====================================================
+    // EFFECTIVE DELIVERY DATE RANGE
+    // =====================================================
+    // Use the later of:
+    //   - first day of selected month
+    //   - subscription start date
+    //
+    // And the earlier of:
+    //   - last day of selected month
+    //   - subscription end date
+    // =====================================================
+
+    const effectiveStartDate =
+      subscriptionStartDate &&
+      subscriptionStartDate > firstDay
+        ? subscriptionStartDate
+        : firstDay;
+
+    const effectiveEndDate =
+      subscriptionEndDate &&
+      subscriptionEndDate < lastDay
+        ? subscriptionEndDate
+        : lastDay;
+
+    // If there is no valid overlap, there are no deliveries
+    // belonging to this subscription for this month.
+    let deliveredDays = 0;
+    let missedDays = 0;
+
+    if (effectiveStartDate <= effectiveEndDate) {
+
+      const { count: deliveredCount, error: deliveredError } =
+        await supabaseAdmin
+          .from("subscription_deliveries")
+          .select("*", {
+            count: "exact",
+            head: true,
+          })
+          .eq("subscription_id", subscription.id)
+          .eq("status", "Delivered")
+          .gte("delivery_date", effectiveStartDate)
+          .lte("delivery_date", effectiveEndDate);
+
+      if (deliveredError) {
+        throw deliveredError;
+      }
+
+      deliveredDays = deliveredCount || 0;
+
+      const { count: missedCount, error: missedError } =
+        await supabaseAdmin
+          .from("subscription_deliveries")
+          .select("*", {
+            count: "exact",
+            head: true,
+          })
+          .eq("subscription_id", subscription.id)
+          .eq("status", "Missed")
+          .gte("delivery_date", effectiveStartDate)
+          .lte("delivery_date", effectiveEndDate);
+
+      if (missedError) {
+        throw missedError;
+      }
+
+      missedDays = missedCount || 0;
+    }
+
+    // =====================================================
+    // PRODUCT / RATE
+    // =====================================================
 
     const item = subscription.subscription_items?.[0];
 
-    const quantity = Number(item?.quantity || 1);
+    const quantity =
+      Number(item?.quantity || 1);
 
     const dailyRate =
       Number(item?.unit_price || 0);
 
     const billAmount =
-      Number(deliveredDays || 0) * dailyRate;
+      Number(deliveredDays) * dailyRate;
+
+    // =====================================================
+    // REPORT
+    // =====================================================
 
     report.push({
-      customerId: subscription.customer_id,
-      subscriptionId: subscription.id,
+      customerId:
+        subscription.customer_id,
+
+      subscriptionId:
+        subscription.id,
 
       customerName:
         subscription.customers?.full_name,
@@ -98,13 +168,13 @@ ${subscription.addresses?.city || ""}`,
         item?.products?.name,
 
       quantity,
-      size: item?.size,
 
-      deliveredDays:
-        deliveredDays || 0,
+      size:
+        item?.size,
 
-      missedDays:
-        missedDays || 0,
+      deliveredDays,
+
+      missedDays,
 
       dailyRate,
 
@@ -123,4 +193,3 @@ ${subscription.addresses?.city || ""}`,
 
   return report;
 }
-  
