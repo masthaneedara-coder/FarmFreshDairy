@@ -32,6 +32,11 @@ export default function AdminMonthlyReport() {
   const [drawerOpen, setDrawerOpen] =
     useState(false);
 
+  const [statusFilter, setStatusFilter] =
+    useState("All");
+
+  const [searchTerm, setSearchTerm] = useState("");
+
   // ==========================================
   // LOAD REPORT
   // ==========================================
@@ -60,32 +65,64 @@ export default function AdminMonthlyReport() {
   }
 
   // ==========================================
-  // STATISTICS
+  // FILTER REPORT BY PAYMENT / SUBSCRIPTION STATUS
   // ==========================================
 
-  const totalCustomers =
-    customers.length;
+  const reportCustomers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
 
-  const totalDelivered =
-    customers.reduce(
-      (sum, c) =>
-        sum + Number(c.deliveredDays || 0),
-      0
-    );
+    return customers.filter((c) => {
+      const customerName = String(c.customerName || "").toLowerCase();
+      const phone = String(c.phone || "").replace(/\D/g, "");
+      const searchPhone = normalizedSearch.replace(/\D/g, "");
+      const matchesSearch =
+        !normalizedSearch ||
+        customerName.includes(normalizedSearch) ||
+        (searchPhone && phone.includes(searchPhone));
 
-  const totalMissed =
-    customers.reduce(
-      (sum, c) =>
-        sum + Number(c.missedDays || 0),
-      0
-    );
+      if (!matchesSearch) return false;
+      const paymentStatus = String(c.paymentStatus || "")
+        .trim()
+        .toLowerCase();
+      const subscriptionStatus = String(c.status || "")
+        .trim()
+        .toLowerCase();
 
-  const totalRevenue =
-    customers.reduce(
-      (sum, c) =>
-        sum + Number(c.billAmount || 0),
-      0
-    );
+      switch (statusFilter) {
+        case "Pending":
+          return paymentStatus === "pending";
+        case "Paid":
+          return paymentStatus === "paid";
+        case "Cancelled":
+          return ["cancelled", "canceled"].includes(subscriptionStatus);
+        case "Stopped":
+          return subscriptionStatus === "stopped";
+        default:
+          return true;
+      }
+    });
+  }, [customers, statusFilter, searchTerm]);
+
+  // ==========================================
+  // STATISTICS - FOLLOW CURRENT FILTER
+  // ==========================================
+
+  const totalCustomers = reportCustomers.length;
+
+  const totalDelivered = reportCustomers.reduce(
+    (sum, c) => sum + Number(c.deliveredDays || 0),
+    0
+  );
+
+  const totalMissed = reportCustomers.reduce(
+    (sum, c) => sum + Number(c.missedDays || 0),
+    0
+  );
+
+  const totalRevenue = reportCustomers.reduce(
+    (sum, c) => sum + Number(c.billAmount || 0),
+    0
+  );
 
   // ==========================================
   // VIEW BILL
@@ -357,15 +394,6 @@ export default function AdminMonthlyReport() {
     month: "long",
   });
 
-  // ==========================================
-  // SORT / DISPLAY
-  // ==========================================
-
-  const reportCustomers = useMemo(
-    () => customers,
-    [customers]
-  );
-
   return (
     <div className="min-h-screen bg-slate-50 p-3 sm:p-5 lg:p-6">
 
@@ -486,9 +514,10 @@ export default function AdminMonthlyReport() {
 
             <div className="
               grid
-              grid-cols-2
+              grid-cols-1
               gap-2
               sm:flex
+              sm:flex-wrap
             ">
 
               <select
@@ -561,6 +590,44 @@ export default function AdminMonthlyReport() {
                   focus:ring-green-100
                 "
               />
+
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search name or phone..."
+                aria-label="Search customers by name or phone number"
+                className="
+                  w-full sm:w-64
+                  border border-gray-200
+                  bg-white rounded-2xl
+                  px-4 py-3 outline-none
+                  font-semibold shadow-sm
+                  focus:border-green-500
+                  focus:ring-4 focus:ring-green-100
+                "
+              />
+
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                aria-label="Filter report by status"
+                className="
+                  w-full sm:w-auto
+                  border border-gray-200
+                  bg-white rounded-2xl
+                  px-4 py-3 outline-none
+                  font-semibold shadow-sm
+                  focus:border-green-500
+                  focus:ring-4 focus:ring-green-100
+                "
+              >
+                <option value="All">All Statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Paid">Paid</option>
+                <option value="Cancelled">Cancelled</option>
+                <option value="Stopped">Stopped</option>
+              </select>
 
             </div>
 
@@ -725,17 +792,31 @@ export default function AdminMonthlyReport() {
             EMPTY
         ======================================== */}
 
-        {!loading &&
-          customers.length === 0 && (
-            <EmptyReport />
-          )}
+        {!loading && customers.length === 0 && (
+          <EmptyReport />
+        )}
+
+        {!loading && customers.length > 0 && reportCustomers.length === 0 && (
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8 text-center">
+            <div className="text-4xl mb-3">🔍</div>
+            <h3 className="text-xl font-black text-gray-900">No Records Found</h3>
+            <p className="text-gray-500 mt-2">No customers match your search and selected status for {monthName} {year}.</p>
+            <button
+              type="button"
+              onClick={() => { setSearchTerm(""); setStatusFilter("All"); }}
+              className="mt-4 rounded-xl bg-green-600 px-5 py-3 font-bold text-white hover:bg-green-700"
+            >
+              Clear Filters
+            </button>
+          </div>
+        )}
 
         {/* ========================================
             MOBILE CARDS
         ======================================== */}
 
         {!loading &&
-          customers.length > 0 && (
+          reportCustomers.length > 0 && (
 
           <div className="
             md:hidden
@@ -777,7 +858,7 @@ export default function AdminMonthlyReport() {
         ======================================== */}
 
         {!loading &&
-          customers.length > 0 && (
+          reportCustomers.length > 0 && (
 
           <div className="
             hidden

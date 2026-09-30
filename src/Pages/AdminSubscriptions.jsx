@@ -17,59 +17,66 @@ export default function AdminSubscriptions() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
+  // Performance: only render/load summaries for the visible page.
+  const PAGE_SIZE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
   async function loadSubscriptions() {
   try {
     setLoading(true);
 
-    console.log("Loading started");
-
     const data = await getAllSubscriptions();
-    console.log("API Data:", data);
 
-data.forEach((sub) => {
-  if (sub.is_paused === true) {
-    console.log("🟡 PAUSED CUSTOMER:", {
-      customer: sub.customerName,
-      status: sub.status,
-      is_paused: sub.is_paused,
-      pause_from: sub.pause_from,
-      pause_to: sub.pause_to,
-    });
-  }
-});
-
-    console.log("API Data:", data);
-
-    setSubscriptions(data);
-    for (const sub of data) {
-      const id = sub.subscriptionId || sub.id;
-
-      if (id) {
-        loadDeliverySummary(id);
-      }
-    }
-
+    setSubscriptions(Array.isArray(data) ? data : []);
+    setDeliverySummary({});
+    setCurrentPage(1);
   } catch (err) {
-    console.error(err);
+    console.error("Load subscriptions error:", err);
+    setSubscriptions([]);
   } finally {
-    console.log("Loading finished");
     setLoading(false);
   }
 }
-async function loadDeliverySummary(subscriptionId) {
+
+async function loadPageDeliverySummaries(pageSubscriptions) {
+  const idsToLoad = pageSubscriptions
+    .map((sub) => sub.subscriptionId || sub.id)
+    .filter(Boolean)
+    .filter((id) => !deliverySummary[id]);
+
+  if (!idsToLoad.length) return;
+
   try {
-    console.log("Loading summary for:", subscriptionId);
+    const results = await Promise.all(
+      idsToLoad.map(async (subscriptionId) => {
+        try {
+          const summary = await getDeliverySummary(subscriptionId);
+          return [subscriptionId, summary];
+        } catch (error) {
+          console.error("Delivery Summary Error:", subscriptionId, error);
+          return [
+            subscriptionId,
+            {
+              delivered: 0,
+              outForDelivery: 0,
+              pending: 0,
+              missed: 0,
+              total: 0
+            }
+          ];
+        }
+      })
+    );
 
-    const summary = await getDeliverySummary(subscriptionId);
-
-    console.log("Summary Response:", summary);
-
-    setDeliverySummary((prev) => ({
-      ...prev,
-      [subscriptionId]: summary,
-    }));
-  } catch (err) {
-    console.error("Delivery Summary Error:", err);
+    setDeliverySummary((prev) => {
+      const next = { ...prev };
+      results.forEach(([id, summary]) => {
+        next[id] = summary;
+      });
+      return next;
+    });
+  } catch (error) {
+    console.error("Page delivery summaries error:", error);
   }
 }
 
@@ -109,22 +116,57 @@ const getDisplayStatus = (sub) => {
   return sub.status || "Unknown";
 };
 
-const filteredSubscriptions = subscriptions.filter((subscription) => {
-  const displayStatus = getDisplayStatus(subscription);
+const filteredSubscriptions = useMemo(() => {
+  const searchText = search.trim().toLowerCase();
 
-  const matchesSearch =
-    `${subscription.customerName || ""} ${
-      subscription.phone || ""
-    } ${subscription.product || ""}`
-      .toLowerCase()
-      .includes(search.toLowerCase());
+  return subscriptions.filter((subscription) => {
+    const displayStatus = getDisplayStatus(subscription);
 
-  const matchesStatus =
-  statusFilter === "All" ||
-  displayStatus === statusFilter;
+    const matchesSearch =
+      !searchText ||
+      `${subscription.customerName || ""} ${
+        subscription.phone || ""
+      } ${subscription.product || ""}`
+        .toLowerCase()
+        .includes(searchText);
 
-  return matchesSearch && matchesStatus;
-});
+    const matchesStatus =
+      statusFilter === "All" ||
+      displayStatus === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+}, [subscriptions, search, statusFilter]);
+
+const totalPages = Math.max(
+  1,
+  Math.ceil(filteredSubscriptions.length / PAGE_SIZE)
+);
+
+const visibleSubscriptions = useMemo(() => {
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  return filteredSubscriptions.slice(
+    startIndex,
+    startIndex + PAGE_SIZE
+  );
+}, [filteredSubscriptions, currentPage]);
+
+useEffect(() => {
+  if (currentPage > totalPages) {
+    setCurrentPage(totalPages);
+  }
+}, [currentPage, totalPages]);
+
+useEffect(() => {
+  if (!loading && visibleSubscriptions.length > 0) {
+    loadPageDeliverySummaries(visibleSubscriptions);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [loading, currentPage, visibleSubscriptions]);
+
+useEffect(() => {
+  setCurrentPage(1);
+}, [search, statusFilter]);
 
 const stats = useMemo(() => {
   const total = subscriptions.length;
@@ -279,6 +321,51 @@ const stats = useMemo(() => {
     );
   };
 
+  // Active, non-paused subscriptions expiring today through the next 5 days.
+  const expiringSoonSubscriptions = subscriptions.filter((sub) => {
+    const remainingDays = getRemainingDays(sub.expireDate || sub.endDate);
+    return getDisplayStatus(sub) === "Active" && sub.is_paused !== true && remainingDays !== null && remainingDays >= 0 && remainingDays <= 5;
+  });
+
+  // WhatsApp requires the admin to press Send in each chat. Browsers may block bulk tabs.
+  const openBulkWhatsAppReminders = () => {
+    const eligible = expiringSoonSubscriptions.filter((sub) =>
+      String(sub.phone || sub.mobile || "").replace(/\D/g, "").length >= 10
+    );
+    if (!eligible.length) {
+      alert("No customers with valid phone numbers are expiring within the next 5 days.");
+      return;
+    }
+    if (!window.confirm(`Open WhatsApp reminders for ${eligible.length} customer(s)? You must press Send in each WhatsApp chat.`)) return;
+    eligible.forEach((sub, index) => {
+      const rawPhone = String(sub.phone || sub.mobile || "").replace(/\D/g, "");
+      const phone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+      const name = sub.customerName || sub.name || "Customer";
+      const expiry = formatDate(sub.expireDate || sub.endDate);
+      const days = getRemainingDays(sub.expireDate || sub.endDate);
+      const message = `Dear ${name},\n\nThis is a friendly reminder that your FarmFreshDairy subscription will expire ${days === 0 ? "today" : `in ${days} day(s)`}, on ${expiry}.\n\nKindly renew your subscription to ensure uninterrupted fresh milk delivery.\n\nThank you for choosing FarmFreshDairy! 🥛\n\nBest regards,\nFarmFreshDairy Team`;
+      window.setTimeout(() => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer"), index * 350);
+    });
+  };
+
+  const openWhatsAppReminder = (sub, expired = false) => {
+    const rawPhone = String(sub.phone || sub.mobile || "").replace(/\D/g, "");
+    if (!rawPhone) {
+      alert("Customer phone number is not available.");
+      return;
+    }
+
+    // WhatsApp requires country code. Add India's 91 when a 10-digit number is stored.
+    const phone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+    const customerName = sub.customerName || sub.name || "Customer";
+    const expiry = formatDate(sub.expireDate || sub.endDate);
+    const message = expired
+      ? `Dear ${customerName},\n\nThis is a friendly reminder that your FarmFreshDairy subscription expired on ${expiry}.\n\nKindly renew your subscription to resume your fresh milk deliveries.\n\nThank you for choosing FarmFreshDairy! 🥛\n\nBest regards,\nFarmFreshDairy Team`
+      : `Dear ${customerName},\n\nThis is a friendly reminder that your FarmFreshDairy subscription will expire in ${getRemainingDays(sub.expireDate || sub.endDate)} days, on ${expiry}.\n\nKindly renew your subscription to ensure uninterrupted fresh milk delivery.\n\nThank you for choosing FarmFreshDairy! 🥛\n\nBest regards,\nFarmFreshDairy Team`;
+
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  };
+
   const isExpired = (expireDate) => {
     if (!expireDate) return false;
 
@@ -298,26 +385,62 @@ const stats = useMemo(() => {
         {/* HERO */}
         <div className="rounded-[26px] sm:rounded-[30px] bg-gradient-to-r from-green-700 via-emerald-600 to-green-700 p-4 sm:p-6 text-white shadow-xl">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <p className="text-white/80 text-xs sm:text-sm font-semibold">
-                ADMIN SUBSCRIPTION CONTROL
-              </p>
-              <h1 className="text-2xl sm:text-3xl font-black mt-1">
-                🔁 Subscription Management
-              </h1>
-              <p className="text-white/90 mt-2 text-sm">
-                Manage customer plans, validity, payments and delivery status.
-              </p>
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="shrink-0 rounded-2xl bg-white p-2 shadow-lg">
+                <img
+                  src="/farmfresh-logo.png"
+                  alt="FarmFreshDairy logo"
+                  className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl"
+                />
+              </div>
+              <div className="min-w-0">
+                <p className="text-white/80 text-xs sm:text-sm font-semibold">
+                  FARMFRESHDAIRY • ADMIN SUBSCRIPTION CONTROL
+                </p>
+                <h1 className="text-2xl sm:text-3xl font-black mt-1">
+                  🔁 Subscription Management
+                </h1>
+                <p className="text-white/90 mt-2 text-sm">
+                  Manage customer plans, validity, payments and delivery status.
+                </p>
+              </div>
             </div>
 
-            <button
-              onClick={loadSubscriptions}
-              disabled={loading}
-              className="w-full lg:w-auto px-5 py-3 rounded-2xl bg-white text-green-700 font-black shadow-lg hover:shadow-xl active:scale-95 transition disabled:opacity-60"
-            >
-              {loading ? "Refreshing..." : "↻ Refresh"}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+              <button
+                type="button"
+                onClick={openBulkWhatsAppReminders}
+                disabled={loading || expiringSoonSubscriptions.length === 0}
+                className="w-full lg:w-auto px-5 py-3 rounded-2xl bg-amber-300 text-green-950 font-black shadow-lg hover:bg-amber-200 active:scale-95 transition disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                💬 Send Expiry Reminders ({expiringSoonSubscriptions.length})
+              </button>
+              <button
+                onClick={loadSubscriptions}
+                disabled={loading}
+                className="w-full lg:w-auto px-5 py-3 rounded-2xl bg-white text-green-700 font-black shadow-lg hover:shadow-xl active:scale-95 transition disabled:opacity-60"
+              >
+                {loading ? "Refreshing..." : "↻ Refresh"}
+              </button>
+            </div>
           </div>
+        </div>
+
+        {/* BRANDED EXPIRY REMINDER NOTE */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-3xl border border-green-100 bg-white p-4 shadow-sm">
+          <img
+            src="/farmfresh-logo.png"
+            alt="FarmFreshDairy logo"
+            className="h-14 w-14 object-contain rounded-xl border border-green-100 bg-white p-1"
+          />
+          <div className="flex-1">
+            <p className="font-black text-green-800">FarmFreshDairy Renewal Reminders</p>
+            <p className="text-sm text-slate-600 mt-1">
+              Send WhatsApp reminders to active customers whose subscriptions expire within the next 5 days.
+              The logo is displayed here in the admin panel; the standard WhatsApp click-to-chat link sends text only.
+            </p>
+          </div>
+          <span className="inline-flex w-fit rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700 border border-green-100">Brand logo</span>
         </div>
 
         {/* STATS */}
@@ -398,7 +521,7 @@ const stats = useMemo(() => {
           </div>
         ) : (
           <div className="space-y-5">
-            {filteredSubscriptions.map((sub, index) => {
+            {visibleSubscriptions.map((sub, index) => {
               const expireDate = sub.expireDate || sub.endDate;
               const remainingDays = getRemainingDays(expireDate);
               const expired = isExpired(expireDate);
@@ -592,6 +715,24 @@ const stats = useMemo(() => {
                             🟠 Renewal required soon.
                           </p>
                         )}
+
+                      {expired ? (
+                        <button
+                          type="button"
+                          onClick={() => openWhatsAppReminder(sub, true)}
+                          className="mt-4 w-full sm:w-auto rounded-2xl bg-red-600 hover:bg-red-700 text-white px-5 py-3 font-black shadow-md active:scale-95 transition"
+                        >
+                          💬 Send Expired Message on WhatsApp
+                        </button>
+                      ) : remainingDays !== null && remainingDays >= 0 && remainingDays <= 5 && getDisplayStatus(sub) === "Active" ? (
+                        <button
+                          type="button"
+                          onClick={() => openWhatsAppReminder(sub, false)}
+                          className="mt-4 w-full sm:w-auto rounded-2xl bg-green-600 hover:bg-green-700 text-white px-5 py-3 font-black shadow-md active:scale-95 transition"
+                        >
+                          💬 Send 5-Day Renewal Reminder
+                        </button>
+                      ) : null}
                     </div>
 
                     {/* PAYMENT */}
@@ -736,6 +877,60 @@ const stats = useMemo(() => {
                 </div>
               );
             })}
+
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white rounded-3xl shadow-md border border-slate-100 p-4">
+              <p className="text-sm font-semibold text-slate-500">
+                Showing{" "}
+                <span className="font-black text-slate-700">
+                  {(currentPage - 1) * PAGE_SIZE + 1}
+                </span>
+                {" "}–{" "}
+                <span className="font-black text-slate-700">
+                  {Math.min(
+                    currentPage * PAGE_SIZE,
+                    filteredSubscriptions.length
+                  )}
+                </span>
+                {" "}of{" "}
+                <span className="font-black text-slate-700">
+                  {filteredSubscriptions.length}
+                </span>
+                {" "}subscriptions
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((page) => Math.max(1, page - 1))
+                  }
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white font-black text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                  ← Previous
+                </button>
+
+                <span className="px-4 py-2 rounded-xl bg-green-50 text-green-700 font-black">
+                  {currentPage} / {totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((page) =>
+                      Math.min(totalPages, page + 1)
+                    )
+                  }
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white font-black text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
+
           </div>
         )}
       </div>

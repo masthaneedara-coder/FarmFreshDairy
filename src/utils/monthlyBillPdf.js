@@ -115,7 +115,52 @@ export async function generateMonthlyBillPDF(
 
     return size || "-";
   };
+  // =====================================================
+  // FILTER DELIVERIES FOR THIS SUBSCRIPTION
+  // =====================================================
 
+  const getDateOnly = (value) => {
+    if (!value) return null;
+
+    const text = String(value);
+
+    // Handles:
+    // 2026-09-10
+    // 2026-09-10T00:00:00
+    // 2026-09-10T00:00:00+05:30
+    return text.slice(0, 10);
+  };
+
+  const subscriptionStartDate =
+    getDateOnly(subscription.start_date);
+
+  const subscriptionEndDate =
+    getDateOnly(subscription.end_date);
+
+  const billDeliveries = deliveries.filter((delivery) => {
+    const deliveryDate =
+      getDateOnly(delivery.delivery_date);
+
+    if (!deliveryDate) return false;
+
+    // If subscription dates are available,
+    // only include deliveries inside the subscription period.
+    if (
+      subscriptionStartDate &&
+      deliveryDate < subscriptionStartDate
+    ) {
+      return false;
+    }
+
+    if (
+      subscriptionEndDate &&
+      deliveryDate > subscriptionEndDate
+    ) {
+      return false;
+    }
+
+    return true;
+  });
   const drawRoundedCard = (
     x,
     y,
@@ -408,20 +453,25 @@ export async function generateMonthlyBillPDF(
   // =====================================================
 
   const rows = [];
+  let serialNumber = 1;
 
-  deliveries.forEach((delivery) => {
+  billDeliveries.forEach((delivery) => {
     const items =
       delivery.subscription_delivery_items || [];
 
     items.forEach((item) => {
       rows.push([
+        serialNumber++,
+
         formatDate(
           delivery.delivery_date
         ),
 
         item.products?.name || "-",
 
-        normalizeSize(item.size),
+        normalizeSize(
+        item.size || item.products?.size
+      ),
 
         Number(item.quantity || 0),
 
@@ -465,6 +515,7 @@ export async function generateMonthlyBillPDF(
     tableWidth: contentWidth,
 
     head: [[
+      "S.No",
       "Date",
       "Product",
       "Size",
@@ -507,27 +558,27 @@ export async function generateMonthlyBillPDF(
 
     columnStyles: {
       0: {
-        cellWidth: 24,
+        cellWidth: 10,
         halign: "center",
       },
 
       1: {
-        cellWidth: 39,
+        cellWidth: 23,
+        halign: "center",
       },
 
       2: {
+        cellWidth: 37,
+      },
+
+      3: {
         cellWidth: 20,
         halign: "center",
       },
 
-      3: {
-        cellWidth: 13,
-        halign: "center",
-      },
-
       4: {
-        cellWidth: 23,
-        halign: "right",
+        cellWidth: 12,
+        halign: "center",
       },
 
       5: {
@@ -537,6 +588,11 @@ export async function generateMonthlyBillPDF(
 
       6: {
         cellWidth: 25,
+        halign: "right",
+      },
+
+      7: {
+        cellWidth: 28,
         halign: "center",
       },
     },
@@ -544,7 +600,7 @@ export async function generateMonthlyBillPDF(
     didParseCell(data) {
       if (
         data.section === "body" &&
-        data.column.index === 6
+        data.column.index === 7
       ) {
         const status =
           String(data.cell.raw || "")
@@ -578,7 +634,7 @@ export async function generateMonthlyBillPDF(
   const sizeSummaryMap =
     new Map();
 
-  deliveries.forEach((delivery) => {
+  billDeliveries.forEach((delivery) => {
 
     if (delivery.status === "Delivered") {
 

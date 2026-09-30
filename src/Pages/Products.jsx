@@ -110,26 +110,67 @@ export default function Products() {
   /* ----------------------------------
      SIZE PRICE CALCULATION
   ---------------------------------- */
-  const getPrice = (basePrice, size) => {
-    const price = toNumber(basePrice, 0);
+ const getPrice = (basePrice, size, productName = "") => {
+  const price = toNumber(basePrice, 0);
 
+  const normalizedProductName = String(productName || "")
+    .trim()
+    .toLowerCase();
+
+  // -----------------------------------------
+  // BUFFALO MILK PRICING
+  // -----------------------------------------
+  if (normalizedProductName === "buffalo milk") {
     switch (size) {
-      case "250ml":
-        return Math.round(price * 0.25);
       case "500ml":
-        return Math.round(price * 0.5);
+        return 45;
+
       case "1L":
-        return Math.round(price);
+        return 85;
+
+      case "250ml":
+        return 25;
+
       case "2L":
-        return Math.round(price * 2);
+        return 170;
+
       case "3L":
-        return Math.round(price * 3);
+        return 255;
+
       case "5L":
-        return Math.round(price * 5);
+        return 425;
+
       default:
-        return Math.round(price);
+        return 85;
     }
-  };
+  }
+
+  // -----------------------------------------
+  // DEFAULT PRICING FOR OTHER PRODUCTS
+  // -----------------------------------------
+  switch (size) {
+    case "250ml":
+      return Math.round(price * 0.25);
+
+    case "500ml":
+      return Math.round(price * 0.5);
+
+    case "1L":
+      return Math.round(price);
+
+    case "2L":
+      return Math.round(price * 2);
+
+    case "3L":
+      return Math.round(price * 3);
+
+    case "5L":
+      return Math.round(price * 5);
+
+    default:
+      return Math.round(price);
+  }
+};
 
   /* ----------------------------------
      LOAD PRODUCTS
@@ -204,7 +245,11 @@ export default function Products() {
   const handleAddToCart = async (product) => {
     const qty = quantities[product.id] || 1;
     const size = selectedSizes[product.id] || "1L";
-    const price = getPrice(product.price, size);
+    const price = getPrice(
+  product.price,
+  size,
+  product.name
+);
 
     if (!customer) {
       setToast("Please login to add products to cart");
@@ -413,7 +458,11 @@ export default function Products() {
             {visibleProducts.map((product, index) => {
               const currentSize = selectedSizes[product.id] || "1L";
               const currentQty = quantities[product.id] || 1;
-              const currentPrice = getPrice(product.price, currentSize);
+              const currentPrice = getPrice(
+  product.price,
+  currentSize,
+  product.name
+);
               const stock = toNumber(product.stock, 0);
               const lowStock = stock > 0 && stock <= 5;
 
