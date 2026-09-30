@@ -14,7 +14,6 @@ export async function getAllSubscriptionsService() {
       id,
       customer_id,
       address_id,
-      quantity,
       delivery_time,
       total_amount,
       status,
@@ -34,6 +33,14 @@ export async function getAllSubscriptionsService() {
         house_no,
         street,
         area
+      ),
+
+      subscription_items(
+        quantity,
+        size,
+        products(
+          name
+        )
       )
     `)
     .order("created_at", { ascending: false });
@@ -51,22 +58,46 @@ export async function getAllSubscriptionsService() {
     const customer = sub.customers;
     const address = sub.addresses;
 
+    // Get first subscription item
+    const item = Array.isArray(sub.subscription_items)
+      ? sub.subscription_items[0]
+      : sub.subscription_items;
+
+    const product = item?.products;
+
     return {
       subscriptionId: sub.id,
 
+      // ==============================
+      // Customer
+      // ==============================
       customerName:
         customer?.full_name || "-",
 
       phone:
         customer?.phone || "-",
 
-      // Your subscriptions table does not have
-      // a "product" column.
-      product: "Milk",
+      // ==============================
+      // Product
+      // ==============================
+      product:
+        product?.name || "Milk",
 
+      // ==============================
+      // Quantity
+      // ==============================
       qty:
-        sub.quantity || "1",
+        item?.quantity || "1",
 
+      // ==============================
+      // Size
+      // ==============================
+      size:
+        item?.size || "-",
+
+      // ==============================
+      // Delivery
+      // ==============================
       deliveryType:
         sub.delivery_time,
 
@@ -118,6 +149,7 @@ export async function getAllSubscriptionsService() {
     };
   });
 }
+
 // ======================================
 // Update Subscription Status
 // ======================================
