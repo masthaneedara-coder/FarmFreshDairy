@@ -492,6 +492,10 @@ export async function generateMonthlyBills(
 // ======================================================
 // GET ALL MONTHLY BILLS
 // ======================================================
+// IMPORTANT:
+// Refresh unpaid bills from actual delivery items
+// so approved Extra Milk is included immediately.
+// ======================================================
 
 export async function getMonthlyBills(
   month,
@@ -500,11 +504,17 @@ export async function getMonthlyBills(
   const {
     month: numericMonth,
     year: numericYear,
+    fromDate,
+    toDate,
   } = getMonthDateRange(month, year);
 
+
+  // ======================================
+  // 1. Get existing monthly bills
+  // ======================================
   const {
-    data,
-    error,
+    data: bills,
+    error: billsError,
   } = await supabaseAdmin
     .from("monthly_bills")
     .select(`
@@ -515,7 +525,9 @@ export async function getMonthlyBills(
         phone
       ),
       subscriptions(
-        id
+        id,
+        customer_id,
+        status
       )
     `)
     .eq("month", numericMonth)
@@ -524,11 +536,118 @@ export async function getMonthlyBills(
       ascending: false,
     });
 
-  if (error) throw error;
+  if (billsError) {
+    throw billsError;
+  }
 
-  return data || [];
+
+  // ======================================
+  // 2. Refresh unpaid bills
+  // ======================================
+  for (const bill of bills || []) {
+
+    // Never modify a paid bill automatically
+    if (
+      String(bill.payment_status || "")
+        .toLowerCase() === "paid"
+    ) {
+      continue;
+    }
+
+
+    if (!bill.subscription_id) {
+      continue;
+    }
+
+
+    // ======================================
+    // Get actual deliveries
+    // ======================================
+    const deliveries =
+      await getSubscriptionDeliveries(
+        bill.subscription_id,
+        fromDate,
+        toDate
+      );
+
+
+    // ======================================
+    // Recalculate from delivery items
+    // ======================================
+    const calculated =
+      calculateDeliveredBill(deliveries);
+
+
+    // No delivered days
+    if (calculated.deliveredDays === 0) {
+      continue;
+    }
+
+
+    // ======================================
+    // Update monthly bill
+    // ======================================
+    const {
+      data: updatedBill,
+      error: updateError,
+    } = await supabaseAdmin
+      .from("monthly_bills")
+      .update({
+        delivered_days:
+          calculated.deliveredDays,
+
+        missed_days:
+          calculated.missedDays,
+
+        subtotal:
+          calculated.subtotal,
+
+        discount:
+          calculated.discount,
+
+        total_amount:
+          calculated.totalAmount,
+
+        updated_at:
+          new Date().toISOString(),
+      })
+      .eq("id", bill.id)
+      .neq("payment_status", "Paid")
+      .select(`
+        *,
+        customers(
+          id,
+          full_name,
+          phone
+        ),
+        subscriptions(
+          id,
+          customer_id,
+          status
+        )
+      `)
+      .maybeSingle();
+
+
+    if (updateError) {
+      console.error(
+        "Monthly Bill Refresh Error:",
+        updateError
+      );
+
+      throw updateError;
+    }
+
+
+    // Replace old bill with refreshed bill
+    if (updatedBill) {
+      Object.assign(bill, updatedBill);
+    }
+  }
+
+
+  return bills || [];
 }
-
 // ======================================================
 // GET CUSTOMER MONTHLY BILL
 // ======================================================
