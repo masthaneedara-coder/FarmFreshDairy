@@ -59,11 +59,12 @@ export async function createExtraMilkRequestService(data) {
 
   return request;
 }
+
+
 // ======================================
 // Admin List
 // ======================================
 export async function getExtraMilkRequestsService() {
-
   const { data, error } = await supabaseAdmin
     .from("extra_milk_requests")
     .select(`
@@ -91,11 +92,11 @@ export async function getExtraMilkRequestsService() {
   return data;
 }
 
+
 // ======================================
 // Customer History
 // ======================================
 export async function getCustomerExtraMilkService(customerId) {
-
   const { data, error } = await supabaseAdmin
     .from("extra_milk_requests")
     .select(`
@@ -115,13 +116,16 @@ export async function getCustomerExtraMilkService(customerId) {
   return data;
 }
 
-// ======================================
-// Approve
-// ======================================
+
 // ======================================
 // Approve Extra Milk
 // ======================================
 export async function approveExtraMilkService(id) {
+
+  console.log("=================================");
+  console.log("APPROVE EXTRA MILK");
+  console.log("Request ID:", id);
+  console.log("=================================");
 
   // ======================================
   // 1. Get Extra Milk Request
@@ -141,41 +145,64 @@ export async function approveExtraMilkService(id) {
     .eq("id", id)
     .single();
 
-  if (requestError) throw requestError;
+  if (requestError) {
+    console.error("Request Fetch Error:", requestError);
+    throw requestError;
+  }
 
   if (!request) {
     throw new Error("Extra milk request not found");
   }
 
-  // Prevent duplicate approval
-  if (request.status === "Approved") {
-    return request;
-  }
+  console.log("EXTRA MILK REQUEST:", request);
 
   // ======================================
   // 2. Approve Request
   // ======================================
-  const {
-    data: approvedRequest,
-    error: approveError,
-  } = await supabaseAdmin
-    .from("extra_milk_requests")
-    .update({
-      status: "Approved",
-      approved_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
+  //
+  // IMPORTANT:
+  // Even if it is already Approved, we continue
+  // because the delivery item may be missing.
+  //
+  if (request.status !== "Approved") {
 
-  if (approveError) throw approveError;
+    const {
+      data: approvedRequest,
+      error: approveError,
+    } = await supabaseAdmin
+      .from("extra_milk_requests")
+      .update({
+        status: "Approved",
+        approved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (approveError) {
+      console.error("Approve Error:", approveError);
+      throw approveError;
+    }
+
+    console.log("REQUEST APPROVED:", approvedRequest);
+
+    // Update local request status
+    request.status = "Approved";
+  } else {
+    console.log(
+      "Request already Approved. Checking delivery synchronization..."
+    );
+  }
 
   // ======================================
   // 3. Get Today's Date
   // ======================================
-  const today =
-    new Date().toISOString().split("T")[0];
+  const today = new Date()
+    .toISOString()
+    .split("T")[0];
+
+  console.log("TODAY:", today);
 
   // ======================================
   // 4. Check whether request applies today
@@ -184,8 +211,13 @@ export async function approveExtraMilkService(id) {
     today < request.from_date ||
     today > request.to_date
   ) {
-    return approvedRequest;
+    console.log("Extra milk does not apply today.");
+
+    return request;
   }
+
+  console.log("Extra milk applies today.");
+
 
   // ======================================
   // 5. Find Today's Subscription Delivery
@@ -195,12 +227,28 @@ export async function approveExtraMilkService(id) {
     error: deliveryError,
   } = await supabaseAdmin
     .from("subscription_deliveries")
-    .select("id")
-    .eq("subscription_id", request.subscription_id)
-    .eq("delivery_date", today)
+    .select(`
+      id,
+      delivery_number,
+      delivery_date,
+      status
+    `)
+    .eq(
+      "subscription_id",
+      request.subscription_id
+    )
+    .eq(
+      "delivery_date",
+      today
+    )
     .maybeSingle();
 
   if (deliveryError) {
+    console.error(
+      "Today's Delivery Query Error:",
+      deliveryError
+    );
+
     throw deliveryError;
   }
 
@@ -208,99 +256,205 @@ export async function approveExtraMilkService(id) {
   // No delivery generated yet
   // ======================================
   if (!delivery) {
+
     console.log(
-      "No today's delivery found. Generator will add extra milk."
+      "No today's delivery found."
     );
 
-    return approvedRequest;
+    console.log(
+      "Daily delivery generator will add the extra milk."
+    );
+
+    return request;
   }
 
+  console.log(
+    "TODAY'S DELIVERY FOUND:",
+    delivery
+  );
+
+
   // ======================================
-  // 6. Check if extra item already exists
+  // 6. Check if THIS request already exists
   // ======================================
+  //
+  // IMPORTANT:
+  // We use extra_milk_request_id.
+  //
   const {
     data: existingItem,
     error: existingError,
   } = await supabaseAdmin
     .from("subscription_delivery_items")
-    .select("id")
-    .eq("delivery_id", delivery.id)
-    .eq("product_id", request.product_id)
-    .eq("size", request.size)
-    .eq("is_extra", true)
+    .select(`
+      id,
+      delivery_id,
+      product_id,
+      quantity,
+      size,
+      unit_price,
+      total_price,
+      is_extra,
+      extra_milk_request_id
+    `)
+    .eq(
+      "delivery_id",
+      delivery.id
+    )
+    .eq(
+      "extra_milk_request_id",
+      request.id
+    )
     .maybeSingle();
 
   if (existingError) {
+    console.error(
+      "Existing Extra Item Check Error:",
+      existingError
+    );
+
     throw existingError;
   }
 
-  // Prevent duplicate item
+  // ======================================
+  // Already added
+  // ======================================
   if (existingItem) {
+
     console.log(
-      "Extra milk item already exists:",
+      "================================="
+    );
+
+    console.log(
+      "EXTRA MILK ALREADY EXISTS"
+    );
+
+    console.log(
+      "Request ID:",
+      request.id
+    );
+
+    console.log(
+      "Delivery:",
+      delivery.delivery_number
+    );
+
+    console.log(
+      "Existing Item:",
       existingItem.id
     );
 
-    return approvedRequest;
+    console.log(
+      "================================="
+    );
+
+    return request;
   }
 
- // ======================================
-// 7. Get Product Size Price
-// ======================================
-const {
-  data: productSize,
-  error: productSizeError,
-} = await supabaseAdmin
-  .from("product_sizes")
-  .select(`
-    id,
-    product_id,
-    label,
-    price,
-    is_active
-  `)
-  .eq("product_id", request.product_id)
-  .eq("is_active", true)
-  .ilike("label", request.size)
-  .maybeSingle();
 
-if (productSizeError) {
-  throw productSizeError;
-}
+  // ======================================
+  // 7. Get Product Size Price
+  // ======================================
+  //
+  // We fetch active sizes and normalize spaces
+  // so both:
+  //
+  // 500ml
+  // 500 ml
+  //
+  // will work.
+  //
+  const {
+    data: productSizes,
+    error: productSizeError,
+  } = await supabaseAdmin
+    .from("product_sizes")
+    .select(`
+      id,
+      product_id,
+      label,
+      price,
+      is_active
+    `)
+    .eq(
+      "product_id",
+      request.product_id
+    )
+    .eq(
+      "is_active",
+      true
+    );
 
-if (!productSize) {
-  throw new Error(
-    `Price not found for ${request.size}`
+  if (productSizeError) {
+    console.error(
+      "Product Size Query Error:",
+      productSizeError
+    );
+
+    throw productSizeError;
+  }
+
+  const requestedSize = String(
+    request.size || ""
+  )
+    .trim()
+    .replace(/\s+/g, "")
+    .toLowerCase();
+
+  const productSize = (productSizes || []).find(
+    (item) =>
+      String(item.label || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .toLowerCase() === requestedSize
   );
-}
 
-console.log("Extra Milk Size:", productSize.label);
-console.log("Extra Milk Unit Price:", productSize.price);
-
-  if (productError) {
-    throw productError;
+  if (!productSize) {
+    throw new Error(
+      `Price not found for ${request.size}`
+    );
   }
 
- // ======================================
-// 8. Calculate Price
-// ======================================
-const unitPrice = Number(
-  productSize.price || 0
-);
+  console.log(
+    "Extra Milk Size:",
+    productSize.label
+  );
 
-const quantity =
-  Number(request.quantity || 0);
+  console.log(
+    "Extra Milk Unit Price:",
+    productSize.price
+  );
 
-const totalPrice =
-  quantity * unitPrice;
 
-console.log("=================================");
-console.log("EXTRA MILK DELIVERY PRICE");
-console.log("Size:", request.size);
-console.log("Unit Price:", unitPrice);
-console.log("Quantity:", quantity);
-console.log("Total:", totalPrice);
-console.log("=================================");
+  // ======================================
+  // 8. Calculate Price
+  // ======================================
+  const unitPrice = Number(
+    productSize.price || 0
+  );
+
+  const quantity = Number(
+    request.quantity || 0
+  );
+
+  if (quantity <= 0) {
+    throw new Error(
+      "Extra milk quantity must be greater than 0."
+    );
+  }
+
+  const totalPrice =
+    quantity * unitPrice;
+
+  console.log("=================================");
+  console.log("EXTRA MILK DELIVERY PRICE");
+  console.log("Request ID:", request.id);
+  console.log("Size:", request.size);
+  console.log("Unit Price:", unitPrice);
+  console.log("Quantity:", quantity);
+  console.log("Total:", totalPrice);
+  console.log("=================================");
+
 
   // ======================================
   // 9. Insert Extra Delivery Item
@@ -312,40 +466,92 @@ console.log("=================================");
     .from("subscription_delivery_items")
     .insert({
       delivery_id: delivery.id,
-      product_id: request.product_id,
+
+      product_id:
+        request.product_id,
+
       quantity,
-      size: request.size,
-      unit_price: unitPrice,
-      total_price: totalPrice,
+
+      size:
+        request.size,
+
+      unit_price:
+        unitPrice,
+
+      total_price:
+        totalPrice,
+
       is_extra: true,
+
+extra_request_id: request.id,
+
+extra_milk_request_id: request.id,
     })
     .select()
     .single();
 
   if (extraItemError) {
+
+    console.error(
+      "Extra Milk Delivery Item Insert Error:",
+      extraItemError
+    );
+
     throw extraItemError;
   }
 
+  console.log("=================================");
   console.log(
-    "Extra milk added to today's delivery:",
-    extraItem
+    "EXTRA MILK SUCCESSFULLY ADDED"
   );
+  console.log(
+    "Delivery:",
+    delivery.delivery_number
+  );
+  console.log(
+    "Request ID:",
+    request.id
+  );
+  console.log(
+    "Item ID:",
+    extraItem.id
+  );
+  console.log(
+    "Quantity:",
+    quantity
+  );
+  console.log(
+    "Size:",
+    request.size
+  );
+  console.log(
+    "Price:",
+    totalPrice
+  );
+  console.log("=================================");
+
 
   // ======================================
   // 10. Return Approved Request
   // ======================================
-  return approvedRequest;
+  return request;
 }
+
+
 // ======================================
 // Reject
 // ======================================
 export async function rejectExtraMilkService(id) {
 
-  const { data, error } = await supabaseAdmin
+  const {
+    data,
+    error,
+  } = await supabaseAdmin
     .from("extra_milk_requests")
     .update({
       status: "Rejected",
-      updated_at: new Date().toISOString(),
+      updated_at:
+        new Date().toISOString(),
     })
     .eq("id", id)
     .select()
@@ -355,18 +561,26 @@ export async function rejectExtraMilkService(id) {
 
   return data;
 }
+
+
+// ======================================
+// Cancel Extra Milk
+// ======================================
 export async function cancelExtraMilkService(id) {
 
-  const { data, error } =
-    await supabaseAdmin
-      .from("extra_milk_requests")
-      .update({
-        status: "Cancelled",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select()
-      .single();
+  const {
+    data,
+    error,
+  } = await supabaseAdmin
+    .from("extra_milk_requests")
+    .update({
+      status: "Cancelled",
+      updated_at:
+        new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
 
   if (error) throw error;
 
