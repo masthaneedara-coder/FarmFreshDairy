@@ -559,7 +559,7 @@ export async function fetchSubscriptionHistory(customerId) {
   const data = await getJSON(
     `${API_URL}/subscriptions/history/${customerId}`
   );
-  return data.history;
+   return data.subscriptions || [];
 }
 
 export async function fetchBillingSummary(customerId) {

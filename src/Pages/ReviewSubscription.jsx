@@ -1,6 +1,9 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { createSubscription } from "../config/api";
-import { useState } from "react";
+import {
+  createSubscription,
+  fetchSubscriptionHistory
+} from "../config/api";
+import { useEffect, useState } from "react";
 import SubscriptionPaymentModal from "../Components/subscription/SubscriptionPaymentModal";
 
 export default function ReviewSubscription() {
@@ -8,6 +11,9 @@ export default function ReviewSubscription() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showExistingSubscriptionModal, setShowExistingSubscriptionModal] = useState(false);
+  const [checkingExistingSubscription, setCheckingExistingSubscription] = useState(false);
+  const [existingSubscription, setExistingSubscription] = useState(null);
 
   const handlePayment = async (payment) => {
     console.log("Razorpay Key:", import.meta.env.VITE_RAZORPAY_KEY_ID);
@@ -25,6 +31,124 @@ export default function ReviewSubscription() {
           ? new Date().toISOString()
           : null,
     });
+  };
+
+  // Check for an existing current subscription automatically when
+  // the Review Subscription page opens. Active and Paused both count.
+  const checkExistingSubscription = async () => {
+    try {
+      setCheckingExistingSubscription(true);
+
+      const customerData = localStorage.getItem("customer");
+
+      if (!customerData) {
+        console.log("ReviewSubscription: customer not found.");
+        return;
+      }
+
+      const customer = JSON.parse(customerData);
+
+      if (!customer?.id) {
+        console.log("ReviewSubscription: customer ID missing.");
+        return;
+      }
+
+      console.log(
+        "ReviewSubscription: checking subscription history for:",
+        customer.id
+      );
+
+      const response = await fetchSubscriptionHistory(customer.id);
+
+      console.log(
+        "ReviewSubscription: subscription history:",
+        response
+      );
+
+      // fetchSubscriptionHistory now returns the subscriptions array.
+      // Keep support for { subscriptions: [] } / { history: [] } as well.
+      const subscriptions = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.subscriptions)
+        ? response.subscriptions
+        : Array.isArray(response?.history)
+        ? response.history
+        : [];
+
+      console.log(
+        "ReviewSubscription: subscriptions found:",
+        subscriptions
+      );
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      /*
+       * Active and Paused subscriptions both trigger the popup.
+       * Expired / Cancelled / Stopped subscriptions are ignored.
+       */
+      const currentSubscription = subscriptions.find((subscription) => {
+        if (!subscription) return false;
+
+        const status = String(subscription.status || "")
+          .trim()
+          .toLowerCase();
+
+        if (status !== "active" && status !== "paused") {
+          return false;
+        }
+
+        if (!subscription.end_date) {
+          return true;
+        }
+
+        const endDate = new Date(
+          `${String(subscription.end_date).slice(0, 10)}T23:59:59`
+        );
+
+        if (Number.isNaN(endDate.getTime())) {
+          return false;
+        }
+
+        return endDate >= today;
+      });
+
+      console.log(
+        "ReviewSubscription: existing current subscription:",
+        currentSubscription || null
+      );
+
+      if (currentSubscription) {
+        setExistingSubscription(currentSubscription);
+        setShowExistingSubscriptionModal(true);
+      } else {
+        setExistingSubscription(null);
+      }
+    } catch (error) {
+      console.error(
+        "ReviewSubscription: subscription check failed:",
+        error
+      );
+    } finally {
+      setCheckingExistingSubscription(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!state) return;
+
+    checkExistingSubscription();
+  }, [state]);
+
+  // Payment can only be opened normally from the Review page.
+  // The existing-subscription confirmation is already handled on page load.
+  const handleActivateClick = () => {
+    setShowPaymentModal(true);
+  };
+
+  const continueWithNewSubscription = () => {
+    setShowExistingSubscriptionModal(false);
+    setShowPaymentModal(true);
   };
 
   async function handleActivate(payment = {}) {
@@ -357,7 +481,7 @@ export default function ReviewSubscription() {
 
                 <button
                   type="button"
-                  onClick={() => setShowPaymentModal(true)}
+                  onClick={handleActivateClick}
                   disabled={loading}
                   className="group relative w-full overflow-hidden rounded-2xl bg-emerald-600 py-4 font-black text-white shadow-xl shadow-emerald-600/20 transition hover:-translate-y-1 hover:bg-emerald-700 hover:shadow-2xl active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -396,7 +520,7 @@ export default function ReviewSubscription() {
           </button>
           <button
             type="button"
-            onClick={() => setShowPaymentModal(true)}
+            onClick={handleActivateClick}
             disabled={loading}
             className="flex-[1.6] rounded-2xl bg-gradient-to-r from-emerald-600 to-green-600 py-3 text-sm font-black text-white shadow-lg shadow-emerald-600/20 transition active:scale-[.98] disabled:opacity-60"
           >
@@ -404,6 +528,197 @@ export default function ReviewSubscription() {
           </button>
         </div>
       </div>
+
+      {showExistingSubscriptionModal && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/55 px-2 py-2 sm:px-4 sm:py-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="existing-subscription-title"
+        >
+          <div className="flex max-h-[78vh] w-full max-w-[340px] flex-col overflow-hidden rounded-[1.35rem] border border-emerald-100 bg-white shadow-[0_30px_100px_rgba(0,0,0,.25)] sm:max-h-[78vh] sm:rounded-[1.75rem]">
+            <div className="shrink-0 bg-gradient-to-br from-emerald-700 via-emerald-600 to-green-500 px-3 py-2 text-white sm:px-4 sm:py-2.5">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white p-0.5 shadow-md ring-1 ring-white/30 sm:h-10 sm:w-10">
+                  <img
+                    src="/farmfresh-logo.png"
+                    alt="FarmFreshDairy logo"
+                    className="h-full w-full rounded-full object-contain"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2
+                    id="existing-subscription-title"
+                    className="text-[15px] font-black leading-tight tracking-tight sm:text-base"
+                  >
+                    You already have a subscription
+                  </h2>
+                  <p className="mt-0.5 text-[9px] leading-3 text-emerald-50 sm:text-[10px] sm:leading-3.5">
+                    You already have a current subscription. You can continue to create another one if you wish.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-2.5 sm:p-4">
+              {existingSubscription && (() => {
+                const item = existingSubscription.subscription_items?.[0] || {};
+                const product = item.products || item.product || {};
+                const address = existingSubscription.addresses || existingSubscription.address || {};
+                const status = String(existingSubscription.status || "")
+                  .trim()
+                  .toLowerCase();
+                const statusLabel =
+                  status.charAt(0).toUpperCase() + status.slice(1);
+                const addressText = [
+                  address.house_no,
+                  address.street,
+                  address.area,
+                  address.city,
+                  address.state,
+                  address.pincode,
+                ]
+                  .filter(Boolean)
+                  .join(", ");
+
+                return (
+                  <div className="mb-3 rounded-xl border border-emerald-100 bg-emerald-50/70 p-2.5 sm:mb-3 sm:p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-700">
+                        Existing Subscription
+                      </p>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${
+                          status === "paused"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-emerald-100 text-emerald-800"
+                        }`}
+                      >
+                        {statusLabel}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+                      <div className="rounded-lg bg-white p-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Product
+                        </p>
+                        <p className="mt-0.5 text-xs font-black text-slate-800">
+                          {product.name || existingSubscription.product_name || "Buffalo Milk"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-white p-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Size / Qty
+                        </p>
+                        <p className="mt-0.5 text-xs font-black text-slate-800">
+                          {item.size || existingSubscription.size || "1L"} × {item.quantity || existingSubscription.quantity || 1}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-white p-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Start Date
+                        </p>
+                        <p className="mt-0.5 text-xs font-black text-slate-800">
+                          {existingSubscription.start_date || "-"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-white p-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Expiry Date
+                        </p>
+                        <p className="mt-0.5 text-xs font-black text-slate-800">
+                          {existingSubscription.end_date || "-"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-white p-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Delivery
+                        </p>
+                        <p className="mt-0.5 text-xs font-black text-slate-800">
+                          {existingSubscription.delivery_time || "-"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-white p-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          Frequency
+                        </p>
+                        <p className="mt-0.5 text-xs font-black text-slate-800">
+                          {existingSubscription.frequency || "Daily"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-white p-2 col-span-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                              Monthly Amount
+                            </p>
+                            <p className="mt-1 text-base font-black text-emerald-700">
+                              ₹{Number(existingSubscription.total_amount || 0).toLocaleString("en-IN")}
+                            </p>
+                          </div>
+                          {existingSubscription.paused_days != null && (
+                            <div className="text-right">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                Paused Days
+                              </p>
+                              <p className="mt-0.5 text-xs font-black text-slate-800">
+                                {existingSubscription.paused_days}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {addressText && (
+                        <div className="rounded-lg bg-white p-2 col-span-2">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                            Delivery Address
+                          </p>
+                          <p className="mt-0.5 text-xs font-bold leading-4 text-slate-700">
+                            {addressText}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+            </div>
+
+            <div className="shrink-0 border-t border-slate-100 bg-white p-2.5 sm:p-4">
+              <div className="mb-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-center text-[11px] font-semibold leading-4 text-amber-900 sm:text-xs">
+                Your existing subscription will remain unchanged.
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowExistingSubscriptionModal(false)}
+                  className="w-full rounded-xl border-2 border-slate-200 bg-white px-3 py-2.5 text-xs font-black text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 active:scale-[.98] sm:rounded-2xl sm:px-4 sm:py-3.5 sm:text-sm"
+                >
+                  No, Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={continueWithNewSubscription}
+                  className="w-full rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-black text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-[.98] sm:rounded-2xl sm:px-4 sm:py-3.5 sm:text-sm"
+                >
+                  Yes, Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <SubscriptionPaymentModal
         open={showPaymentModal}
