@@ -695,14 +695,26 @@ export async function fetchDeliveryOrders(deliveryBoyId) {
 //   );
 // }
 export async function getMonthlyDeliveryReport(month, year) {
+  const cacheBuster = Date.now();
+
   const res = await fetch(
-    `${API_URL}/reports/monthly-delivery?month=${month}&year=${year}`
+    `${API_URL}/reports/monthly-delivery?month=${month}&year=${year}&_t=${cacheBuster}`,
+    {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    }
   );
 
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data.message);
+    throw new Error(
+      data.message || "Failed to load monthly delivery report"
+    );
   }
 
   return data;
