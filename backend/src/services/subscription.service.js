@@ -932,6 +932,14 @@ export async function renewSubscriptionService(
       currentSubscription.payment_reference,
     payment_amount:
       currentSubscription.payment_amount,
+    is_paused:
+      currentSubscription.is_paused,
+    pause_from:
+      currentSubscription.pause_from,
+    pause_to:
+      currentSubscription.pause_to,
+    paused_days:
+      currentSubscription.paused_days,
     updated_at:
       currentSubscription.updated_at,
   };
@@ -953,6 +961,7 @@ export async function renewSubscriptionService(
       is_paused: false,
       pause_from: null,
       pause_to: null,
+      paused_days: 0,
       payment_method: paymentMethod,
       payment_status: paymentStatus,
       payment_date: paymentDate,
@@ -1194,10 +1203,57 @@ export async function getSubscriptionDeliverySummaryService(subscriptionId) {
     total,
   };
 }
+// ==========================================================
+// Pause History Helpers
+// Uses public.subscription_pauses
+// ==========================================================
+
+function calculateInclusiveDays(fromDate, toDate) {
+  if (!fromDate || !toDate) return 0;
+
+  const from = new Date(`${fromDate}T00:00:00+05:30`);
+  const to = new Date(`${toDate}T00:00:00+05:30`);
+
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    return 0;
+  }
+
+  if (to < from) return 0;
+
+  return (
+    Math.floor(
+      (to.getTime() - from.getTime()) /
+        (1000 * 60 * 60 * 24)
+    ) + 1
+  );
+}
+
+function getYesterdayIST() {
+  const now = new Date();
+
+  const todayIST = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+
+  const yesterday = new Date(`${todayIST}T00:00:00+05:30`);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(yesterday);
+}
+
 export async function pauseSubscriptionService(
   subscriptionId,
   pauseFrom,
-  pauseTo
+  pauseTo,
+  reason = null
 ) {
   console.log("=================================");
   console.log("Pause Service");
@@ -1205,32 +1261,104 @@ export async function pauseSubscriptionService(
   console.log("Pause From:", pauseFrom);
   console.log("Pause To:", pauseTo);
 
-  const result = await supabaseAdmin
-  .from("subscriptions")
-  .update({
-    status: "Paused",
-    is_paused: true,
-    pause_from: pauseFrom,
-    pause_to: pauseTo,
-    updated_at: new Date().toISOString(),
-  })
-    .eq("id", subscriptionId)
-    .select();
+  if (!subscriptionId || !pauseFrom || !pauseTo) {
+    throw new Error(
+      "Subscription ID, pause from date and pause to date are required."
+    );
+  }
 
-  console.log("Supabase Result:");
-  console.log(result);
+  const pauseFromDate = new Date(`${pauseFrom}T00:00:00+05:30`);
+  const pauseToDate = new Date(`${pauseTo}T00:00:00+05:30`);
+
+  if (
+    Number.isNaN(pauseFromDate.getTime()) ||
+    Number.isNaN(pauseToDate.getTime()) ||
+    pauseToDate < pauseFromDate
+  ) {
+    throw new Error("Invalid pause date range.");
+  }
+
+  // Get subscription first so the pause history is tied to a real subscription.
+  const {
+    data: subscription,
+    error: subscriptionError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .select("id, customer_id, is_paused, pause_from, pause_to")
+    .eq("id", subscriptionId)
+    .single();
+
+  if (subscriptionError) {
+    throw subscriptionError;
+  }
+
+  if (!subscription) {
+    throw new Error("Subscription not found.");
+  }
+
+  if (subscription.is_paused) {
+    throw new Error("Subscription is already paused.");
+  }
+
+  const totalDays = calculateInclusiveDays(
+    pauseFrom,
+    pauseTo
+  );
+
+  // Save the permanent pause history first.
+  const {
+    data: pauseRecord,
+    error: pauseHistoryError,
+  } = await supabaseAdmin
+    .from("subscription_pauses")
+    .insert({
+      subscription_id: subscription.id,
+      pause_from: pauseFrom,
+      pause_to: pauseTo,
+      total_days: totalDays,
+      reason,
+      status: "Active",
+    })
+    .select()
+    .single();
+
+  if (pauseHistoryError) {
+    throw pauseHistoryError;
+  }
+
+  const {
+    data: updatedSubscription,
+    error: updateError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .update({
+      status: "Paused",
+      is_paused: true,
+      pause_from: pauseFrom,
+      pause_to: pauseTo,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", subscriptionId)
+    .select()
+    .single();
+
+  if (updateError) {
+    // Do not leave a history record if the subscription update failed.
+    await supabaseAdmin
+      .from("subscription_pauses")
+      .delete()
+      .eq("id", pauseRecord.id);
+
+    throw updateError;
+  }
+
+  console.log("Pause history created:", pauseRecord.id);
+  console.log("Supabase Result:", updatedSubscription);
   console.log("=================================");
 
-  if (result.error) {
-    throw result.error;
-  }
-
-  if (!result.data || result.data.length === 0) {
-    throw new Error("No subscription was updated.");
-  }
-
-  return result.data[0];
+  return updatedSubscription;
 }
+
 export async function resumeSubscriptionService(
   subscriptionId
 ) {
@@ -1238,9 +1366,6 @@ export async function resumeSubscriptionService(
   console.log("RESUME SUBSCRIPTION");
   console.log("Subscription ID:", subscriptionId);
 
-  // ==========================================
-  // 1. Get current subscription
-  // ==========================================
   const {
     data: subscription,
     error,
@@ -1254,112 +1379,74 @@ export async function resumeSubscriptionService(
     throw error;
   }
 
-  console.log(
-    "Current subscription:",
-    subscription
-  );
-
-  // ==========================================
-  // 2. IMPORTANT
-  // If subscription is already active,
-  // DO NOT add paused days again.
-  // ==========================================
   if (
     subscription.is_paused !== true ||
     !subscription.pause_from
   ) {
-    console.log(
-      "Subscription is already active."
-    );
-
+    console.log("Subscription is already active.");
     return subscription;
   }
 
-  // ==========================================
-  // 3. Use TODAY as resume date
-  // ==========================================
-  const today =
-    new Date()
-      .toISOString()
-      .split("T")[0];
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 
-  const pauseFrom =
-    new Date(
-      `${subscription.pause_from}T00:00:00`
-    );
+  // The resume date itself is not a paused delivery day.
+  // Example: pause 11 Aug and resume 12 Aug = 1 paused day.
+  const actualPauseTo = getYesterdayIST();
 
-  const resumeDate =
-    new Date(
-      `${today}T00:00:00`
-    );
+  const pausedDaysThisPeriod = calculateInclusiveDays(
+    subscription.pause_from,
+    actualPauseTo
+  );
 
-  // ==========================================
-  // 4. Calculate COMPLETED paused days
-  //
-  // Same day:
-  // 11 Aug → 11 Aug = 0
-  //
-  // One day:
-  // 11 Aug → 12 Aug = 1
-  //
-  // Two days:
-  // 11 Aug → 13 Aug = 2
-  // ==========================================
-  const differenceInMs =
-    resumeDate.getTime() -
-    pauseFrom.getTime();
-
-  const pausedDaysThisPeriod =
-    Math.max(
-      0,
-      Math.floor(
-        differenceInMs /
-          (1000 * 60 * 60 * 24)
-      )
-    );
-
-  // ==========================================
-  // 5. Existing paused days
-  // ==========================================
   const previousPausedDays =
-    Number(
-      subscription.paused_days || 0
-    );
+    Number(subscription.paused_days || 0);
 
   const totalPausedDays =
-    previousPausedDays +
-    pausedDaysThisPeriod;
+    previousPausedDays + pausedDaysThisPeriod;
 
-  console.log(
-    "Pause From:",
-    subscription.pause_from
-  );
+  // Find the current open history record.
+  const {
+    data: openPause,
+    error: pauseHistoryFetchError,
+  } = await supabaseAdmin
+    .from("subscription_pauses")
+    .select("*")
+    .eq("subscription_id", subscriptionId)
+    .eq("status", "Active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  console.log(
-    "Resume Date:",
-    today
-  );
+  if (pauseHistoryFetchError) {
+    throw pauseHistoryFetchError;
+  }
 
-  console.log(
-    "Paused Days This Period:",
-    pausedDaysThisPeriod
-  );
+  if (openPause) {
+    const historyUpdate = {
+      pause_to:
+        pausedDaysThisPeriod > 0
+          ? actualPauseTo
+          : openPause.pause_from,
+      total_days: pausedDaysThisPeriod,
+      status: "Completed",
+    };
 
-  console.log(
-    "Previous Paused Days:",
-    previousPausedDays
-  );
+    const {
+      error: pauseHistoryUpdateError,
+    } = await supabaseAdmin
+      .from("subscription_pauses")
+      .update(historyUpdate)
+      .eq("id", openPause.id);
 
-  console.log(
-    "Total Paused Days:",
-    totalPausedDays
-  );
-    // ==========================================
-  // 6. Resume subscription
-  //
-  // IMPORTANT:
-  // Do NOT change end_date.
-  // ==========================================
+    if (pauseHistoryUpdateError) {
+      throw pauseHistoryUpdateError;
+    }
+  }
 
   const {
     data: resumedSubscription,
@@ -1383,21 +1470,17 @@ export async function resumeSubscriptionService(
     throw resumeUpdateError;
   }
 
-  console.log(
-    "Subscription successfully resumed."
-  );
-
-  console.log(
-    "Final subscription:",
-    resumedSubscription
-  );
-
+  console.log("Pause From:", subscription.pause_from);
+  console.log("Resume Date:", today);
+  console.log("Paused Days This Period:", pausedDaysThisPeriod);
+  console.log("Previous Paused Days:", previousPausedDays);
+  console.log("Total Paused Days:", totalPausedDays);
+  console.log("Subscription successfully resumed.");
   console.log("=================================");
 
   return resumedSubscription;
 }
 
- 
 // ==========================================
 // Automatically resume subscriptions
 // whose pause period has completed
@@ -1408,10 +1491,6 @@ export async function resumeSubscriptionService(
 // ==========================================
 export async function autoResumePausedSubscriptionsService() {
   try {
-    // ==========================================
-    // TODAY IN IST
-    // ==========================================
-
     const today = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Kolkata",
       year: "numeric",
@@ -1423,10 +1502,6 @@ export async function autoResumePausedSubscriptionsService() {
     console.log("AUTO RESUME CHECK");
     console.log("IST Today:", today);
     console.log("=================================");
-
-    // ==========================================
-    // FIND EXPIRED PAUSED SUBSCRIPTIONS
-    // ==========================================
 
     const {
       data: pausedSubscriptions,
@@ -1451,65 +1526,71 @@ export async function autoResumePausedSubscriptionsService() {
 
     const resumedSubscriptions = [];
 
-    // ==========================================
-    // RESUME EACH SUBSCRIPTION
-    // ==========================================
-
     for (const subscription of pausedSubscriptions || []) {
       try {
-        // --------------------------------------
-        // Calculate paused days
-        // --------------------------------------
-
-        const pauseFrom = new Date(
-          `${subscription.pause_from}T00:00:00+05:30`
-        );
-
-        const pauseTo = new Date(
-          `${subscription.pause_to}T00:00:00+05:30`
-        );
-
         const pausedDaysThisPeriod =
-          Math.floor(
-            (
-              pauseTo.getTime() -
-              pauseFrom.getTime()
-            ) /
-              (1000 * 60 * 60 * 24)
-          ) + 1;
+          calculateInclusiveDays(
+            subscription.pause_from,
+            subscription.pause_to
+          );
 
         const previousPausedDays =
           Number(subscription.paused_days || 0);
 
         const totalPausedDays =
-          previousPausedDays +
-          pausedDaysThisPeriod;
+          previousPausedDays + pausedDaysThisPeriod;
 
-        console.log("---------------------------------");
-        console.log(
-          "Subscription:",
-          subscription.id
-        );
-        console.log(
-          "Pause From:",
-          subscription.pause_from
-        );
-        console.log(
-          "Pause To:",
-          subscription.pause_to
-        );
-        console.log(
-          "Paused Days:",
-          pausedDaysThisPeriod
-        );
-        console.log(
-          "Total Paused Days:",
-          totalPausedDays
-        );
+        // Find the corresponding open history record.
+        const {
+          data: openPause,
+          error: pauseHistoryFetchError,
+        } = await supabaseAdmin
+          .from("subscription_pauses")
+          .select("*")
+          .eq("subscription_id", subscription.id)
+          .eq("status", "Active")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        // --------------------------------------
-        // RESUME
-        // --------------------------------------
+        if (pauseHistoryFetchError) {
+          throw pauseHistoryFetchError;
+        }
+
+        if (openPause) {
+          const {
+            error: pauseHistoryUpdateError,
+          } = await supabaseAdmin
+            .from("subscription_pauses")
+            .update({
+              pause_to: subscription.pause_to,
+              total_days: pausedDaysThisPeriod,
+              status: "Completed",
+            })
+            .eq("id", openPause.id);
+
+          if (pauseHistoryUpdateError) {
+            throw pauseHistoryUpdateError;
+          }
+        } else {
+          // Safety fallback for pauses created before history integration.
+          const {
+            error: pauseHistoryInsertError,
+          } = await supabaseAdmin
+            .from("subscription_pauses")
+            .insert({
+              subscription_id: subscription.id,
+              pause_from: subscription.pause_from,
+              pause_to: subscription.pause_to,
+              total_days: pausedDaysThisPeriod,
+              reason: "Auto-resume history recovery",
+              status: "Completed",
+            });
+
+          if (pauseHistoryInsertError) {
+            throw pauseHistoryInsertError;
+          }
+        }
 
         const {
           data: resumedSubscription,
@@ -1519,12 +1600,9 @@ export async function autoResumePausedSubscriptionsService() {
           .update({
             status: "Active",
             is_paused: false,
-
             pause_from: null,
             pause_to: null,
-
             paused_days: totalPausedDays,
-
             updated_at: new Date().toISOString(),
           })
           .eq("id", subscription.id)
@@ -1536,17 +1614,18 @@ export async function autoResumePausedSubscriptionsService() {
           throw resumeError;
         }
 
-        resumedSubscriptions.push(
-          resumedSubscription
-        );
+        resumedSubscriptions.push(resumedSubscription);
 
-        console.log(
-          `✅ AUTO RESUMED: ${subscription.id}`
-        );
-
+        console.log("---------------------------------");
+        console.log("AUTO RESUMED:", subscription.id);
+        console.log("Pause From:", subscription.pause_from);
+        console.log("Pause To:", subscription.pause_to);
+        console.log("Paused Days:", pausedDaysThisPeriod);
+        console.log("Total Paused Days:", totalPausedDays);
+        console.log("---------------------------------");
       } catch (error) {
         console.error(
-          `❌ Failed to resume ${subscription.id}:`,
+          `Failed to resume ${subscription.id}:`,
           error.message
         );
       }
@@ -1555,14 +1634,12 @@ export async function autoResumePausedSubscriptionsService() {
     console.log(
       `AUTO RESUME COMPLETED: ${resumedSubscriptions.length}`
     );
-
     console.log("=================================");
 
     return resumedSubscriptions;
-
   } catch (error) {
     console.error(
-      "❌ Auto resume service failed:",
+      "Auto resume service failed:",
       error
     );
 
