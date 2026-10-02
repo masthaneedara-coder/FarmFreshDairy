@@ -1,30 +1,49 @@
 import { supabaseAdmin } from "../config/supabase.js";
 
 // =====================================================
-// MONTHLY DELIVERY REPORT
+// MONTHLY DELIVERY REPORT - OPTIMIZED
+// =====================================================
+// Important performance change:
+// The old implementation performed:
+//   1 subscription query
+//   + 1 delivery query per subscription
+//   + 1 delivery-item query per delivered delivery.
+//
+// This version performs only three database reads:
+//   1) subscriptions
+//   2) all deliveries for those subscriptions
+//   3) all delivery items for those deliveries
+//
+// The report calculations remain the same.
 // =====================================================
 
-export async function getMonthlyDeliveryReportService(
-  month,
-  year
-) {
+export async function getMonthlyDeliveryReportService(month, year) {
   const numericMonth = Number(month);
   const numericYear = Number(year);
+
+  if (
+    !Number.isInteger(numericMonth) ||
+    numericMonth < 1 ||
+    numericMonth > 12 ||
+    !Number.isInteger(numericYear) ||
+    numericYear < 2000
+  ) {
+    throw new Error("Invalid month or year.");
+  }
 
   const firstDay =
     `${numericYear}-${String(numericMonth).padStart(2, "0")}-01`;
 
-  const lastDay =
-    new Date(
-      numericYear,
-      numericMonth,
-      0
-    )
-      .toISOString()
-      .split("T")[0];
+  const lastDay = new Date(
+    numericYear,
+    numericMonth,
+    0
+  )
+    .toISOString()
+    .split("T")[0];
 
   // =====================================================
-  // GET SUBSCRIPTIONS
+  // 1. GET SUBSCRIPTIONS
   // =====================================================
 
   const {
@@ -57,47 +76,138 @@ export async function getMonthlyDeliveryReportService(
         )
       )
     `)
-    .lte(
-      "start_date",
-      lastDay
-    )
-    .or(
-      `end_date.is.null,end_date.gte.${firstDay}`
-    );
+    .lte("start_date", lastDay)
+    .or(`end_date.is.null,end_date.gte.${firstDay}`);
 
   if (subscriptionError) {
     throw subscriptionError;
   }
 
+  const activeSubscriptions = subscriptions || [];
+
+  if (activeSubscriptions.length === 0) {
+    return [];
+  }
+
+  const subscriptionIds = activeSubscriptions.map(
+    (subscription) => subscription.id
+  );
+
+  // =====================================================
+  // 2. GET ALL DELIVERIES IN ONE QUERY
+  // =====================================================
+
+  const {
+    data: deliveries,
+    error: deliveryError,
+  } = await supabaseAdmin
+    .from("subscription_deliveries")
+    .select(`
+      id,
+      delivery_date,
+      status,
+      subscription_id
+    `)
+    .in("subscription_id", subscriptionIds)
+    .gte("delivery_date", firstDay)
+    .lte("delivery_date", lastDay)
+    .order("delivery_date", {
+      ascending: true,
+    });
+
+  if (deliveryError) {
+    throw deliveryError;
+  }
+
+  const allDeliveries = deliveries || [];
+
+  // =====================================================
+  // 3. GET ALL DELIVERY ITEMS IN ONE QUERY
+  // =====================================================
+
+  const deliveryIds = allDeliveries.map(
+    (delivery) => delivery.id
+  );
+
+  let allDeliveryItems = [];
+
+  if (deliveryIds.length > 0) {
+    const {
+      data: deliveryItems,
+      error: deliveryItemError,
+    } = await supabaseAdmin
+      .from("subscription_delivery_items")
+      .select(`
+        id,
+        delivery_id,
+        product_id,
+        size,
+        quantity,
+        unit_price,
+        total_price,
+        is_extra,
+        extra_request_id,
+        extra_milk_request_id
+      `)
+      .in("delivery_id", deliveryIds);
+
+    if (deliveryItemError) {
+      throw deliveryItemError;
+    }
+
+    allDeliveryItems = deliveryItems || [];
+  }
+
+  // =====================================================
+  // GROUP DATA IN MEMORY
+  // =====================================================
+
+  const deliveriesBySubscription = new Map();
+
+  for (const delivery of allDeliveries) {
+    if (!deliveriesBySubscription.has(delivery.subscription_id)) {
+      deliveriesBySubscription.set(
+        delivery.subscription_id,
+        []
+      );
+    }
+
+    deliveriesBySubscription
+      .get(delivery.subscription_id)
+      .push(delivery);
+  }
+
+  const itemsByDelivery = new Map();
+
+  for (const deliveryItem of allDeliveryItems) {
+    if (!itemsByDelivery.has(deliveryItem.delivery_id)) {
+      itemsByDelivery.set(
+        deliveryItem.delivery_id,
+        []
+      );
+    }
+
+    itemsByDelivery
+      .get(deliveryItem.delivery_id)
+      .push(deliveryItem);
+  }
+
+  // =====================================================
+  // BUILD REPORT
+  // =====================================================
+
   const report = [];
 
-  // =====================================================
-  // PROCESS EACH SUBSCRIPTION
-  // =====================================================
-
-  for (const subscription of subscriptions || []) {
-
-    // ===================================================
-    // SUBSCRIPTION PERIOD
-    // ===================================================
-
+  for (const subscription of activeSubscriptions) {
     const subscriptionStartDate =
       subscription.start_date
-        ? String(
-            subscription.start_date
-          ).slice(0, 10)
+        ? String(subscription.start_date).slice(0, 10)
         : null;
 
     const subscriptionEndDate =
       subscription.end_date
-        ? String(
-            subscription.end_date
-          ).slice(0, 10)
+        ? String(subscription.end_date).slice(0, 10)
         : null;
-
-    // ===================================================
-    // EFFECTIVE DELIVERY DATE RANGE
-    // ===================================================
 
     const effectiveStartDate =
       subscriptionStartDate &&
@@ -113,278 +223,93 @@ export async function getMonthlyDeliveryReportService(
 
     let deliveredDays = 0;
     let missedDays = 0;
-
-    // ===================================================
-    // PRODUCT / SUBSCRIPTION RATE
-    // ===================================================
+    let deliveredQuantity = 0;
+    let billAmount = 0;
+    let extraAmount = 0;
+    let extraQuantity = 0;
 
     const item =
       subscription.subscription_items?.[0];
 
-    const normalQuantity =
-      Number(
-        item?.quantity || 1
-      );
+    const normalQuantity = Number(
+      item?.quantity || 1
+    );
 
-    const dailyRate =
-      Number(
-        item?.unit_price || 0
-      );
+    const dailyRate = Number(
+      item?.unit_price || 0
+    );
 
-    // ===================================================
-    // DELIVERY TOTALS
-    // ===================================================
+    const subscriptionDeliveries =
+      deliveriesBySubscription.get(subscription.id) || [];
 
-    let deliveredQuantity = 0;
+    for (const delivery of subscriptionDeliveries) {
+      const deliveryDate = String(
+        delivery.delivery_date || ""
+      ).slice(0, 10);
 
-    let billAmount = 0;
-
-    let extraAmount = 0;
-
-    let extraQuantity = 0;
-
-    // ===================================================
-    // GET DELIVERIES
-    // ===================================================
-
-    if (
-      effectiveStartDate <=
-      effectiveEndDate
-    ) {
-
-      const {
-        data: deliveries,
-        error: deliveryError,
-      } = await supabaseAdmin
-        .from("subscription_deliveries")
-        .select(`
-          id,
-          delivery_date,
-          status,
-          subscription_id
-        `)
-        .eq(
-          "subscription_id",
-          subscription.id
-        )
-        .gte(
-          "delivery_date",
-          effectiveStartDate
-        )
-        .lte(
-          "delivery_date",
-          effectiveEndDate
-        )
-        .order(
-          "delivery_date",
-          {
-            ascending: true,
-          }
-        );
-
-      if (deliveryError) {
-        throw deliveryError;
+      // Keep the same effective date-range behavior.
+      if (
+        deliveryDate < effectiveStartDate ||
+        deliveryDate > effectiveEndDate
+      ) {
+        continue;
       }
 
-      // =================================================
-      // PROCESS EACH DELIVERY
-      // =================================================
+      if (delivery.status === "Delivered") {
+        deliveredDays++;
+      }
 
-      for (const delivery of deliveries || []) {
+      if (delivery.status === "Missed") {
+        missedDays++;
+      }
 
-        // ===============================================
-        // DELIVERED DAYS
-        // ===============================================
+      if (delivery.status !== "Delivered") {
+        continue;
+      }
 
-        if (
-          delivery.status ===
-          "Delivered"
-        ) {
-          deliveredDays++;
-        }
+      const deliveryItems =
+        itemsByDelivery.get(delivery.id) || [];
 
-        // ===============================================
-        // MISSED DAYS
-        // ===============================================
-
-        if (
-          delivery.status ===
-          "Missed"
-        ) {
-          missedDays++;
-        }
-
-        // ===============================================
-        // ONLY DELIVERED ITEMS ARE BILLED
-        // ===============================================
-
-        if (
-          delivery.status !==
-          "Delivered"
-        ) {
-          continue;
-        }
-
-        // ===============================================
-        // GET DELIVERY ITEMS DIRECTLY
-        // ===============================================
-
-        const {
-          data: deliveryItems,
-          error: itemError,
-        } = await supabaseAdmin
-          .from("subscription_delivery_items")
-          .select(`
-            id,
-            delivery_id,
-            product_id,
-            size,
-            quantity,
-            unit_price,
-            total_price,
-            is_extra,
-            extra_request_id,
-            extra_milk_request_id
-          `)
-          .eq(
-            "delivery_id",
-            delivery.id
+      if (deliveryItems.length > 0) {
+        for (const deliveryItem of deliveryItems) {
+          const itemQuantity = Number(
+            deliveryItem.quantity || 0
           );
 
-        if (itemError) {
-          throw itemError;
-        }
+          const itemTotal = Number(
+            deliveryItem.total_price || 0
+          );
 
-        // ===============================================
-        // DELIVERY HAS ITEMS
-        // ===============================================
+          deliveredQuantity += itemQuantity;
+          billAmount += itemTotal;
 
-        if (
-          deliveryItems &&
-          deliveryItems.length > 0
-        ) {
-
-          for (
-            const deliveryItem
-            of deliveryItems
-          ) {
-
-            const itemQuantity =
-              Number(
-                deliveryItem.quantity || 0
-              );
-
-            const itemTotal =
-              Number(
-                deliveryItem.total_price || 0
-              );
-
-            // =========================================
-            // TOTAL DELIVERED QUANTITY
-            // REGULAR + EXTRA
-            // =========================================
-
-            deliveredQuantity +=
-              itemQuantity;
-
-            // =========================================
-            // BILL AMOUNT
-            // REGULAR + EXTRA
-            // =========================================
-
-            billAmount +=
-              itemTotal;
-
-            // =========================================
-            // EXTRA MILK
-            // =========================================
-
-            if (
-              deliveryItem.is_extra === true
-            ) {
-
-              extraQuantity +=
-                itemQuantity;
-
-              extraAmount +=
-                itemTotal;
-            }
+          if (deliveryItem.is_extra === true) {
+            extraQuantity += itemQuantity;
+            extraAmount += itemTotal;
           }
-
-        } else {
-
-          // =========================================
-          // FALLBACK FOR OLD DELIVERY RECORDS
-          // =========================================
-
-          deliveredQuantity +=
-            normalQuantity;
-
-          billAmount +=
-            dailyRate;
         }
+      } else {
+        // Preserve the old-record fallback.
+        deliveredQuantity += normalQuantity;
+        billAmount += dailyRate;
       }
     }
-
-    // ===================================================
-    // FINAL FALLBACK
-    // ===================================================
 
     if (
       deliveredDays > 0 &&
       billAmount === 0 &&
       dailyRate > 0
     ) {
-
       billAmount =
-        deliveredDays *
-        dailyRate;
+        deliveredDays * dailyRate;
     }
-
-    // ===================================================
-    // QUANTITY FALLBACK
-    // ===================================================
 
     const finalQuantity =
       deliveredQuantity > 0
         ? deliveredQuantity
         : normalQuantity;
 
-    // ===================================================
-    // DEBUG LOG
-    // ===================================================
-
-    console.log(
-      "MONTHLY DELIVERY REPORT:",
-      {
-        customer:
-          subscription.customers?.full_name,
-
-        subscriptionId:
-          subscription.id,
-
-        deliveredDays,
-
-        normalQuantity,
-
-        deliveredQuantity,
-
-        extraQuantity,
-
-        dailyRate,
-
-        extraAmount,
-
-        billAmount,
-      }
-    );
-
-    // ===================================================
-    // REPORT OBJECT
-    // ===================================================
-
     report.push({
-
       customerId:
         subscription.customer_id,
 
@@ -408,11 +333,6 @@ ${subscription.addresses?.city || ""}`,
       product:
         item?.products?.name,
 
-      // ================================================
-      // TOTAL DELIVERED QUANTITY
-      // REGULAR + EXTRA
-      // ================================================
-
       quantity:
         finalQuantity,
 
@@ -425,17 +345,9 @@ ${subscription.addresses?.city || ""}`,
 
       dailyRate,
 
-      // ================================================
-      // EXTRA MILK
-      // ================================================
-
       extraQuantity,
 
       extraAmount,
-
-      // ================================================
-      // FINAL BILL
-      // ================================================
 
       billAmount,
 
