@@ -460,8 +460,106 @@ const matchingSize = (sizes || []).find(
 
   return price;
 }
+// ==========================================================
+// AUTO RESUME PAUSED SUBSCRIPTIONS
+// ==========================================================
+
+export async function autoResumePausedSubscriptionsService() {
+  const today = new Date().toISOString().split("T")[0];
+
+  console.log("=================================");
+  console.log("AUTO RESUME CHECK");
+  console.log("Today:", today);
+
+  const {
+    data: subscriptions,
+    error: fetchError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .select(`
+      id,
+      customer_id,
+      status,
+      is_paused,
+      pause_from,
+      pause_to
+    `)
+    .eq("is_paused", true)
+    .lt("pause_to", today)
+    .in("status", ["Active", "Paused"]);
+
+  if (fetchError) {
+    console.error(
+      "Auto Resume Fetch Error:",
+      fetchError
+    );
+
+    throw fetchError;
+  }
+
+  if (!subscriptions || subscriptions.length === 0) {
+    console.log(
+      "AUTO RESUME: No subscriptions to resume."
+    );
+
+    return [];
+  }
+
+  const resumed = [];
+
+  for (const subscription of subscriptions) {
+
+    console.log(
+      "AUTO RESUMING SUBSCRIPTION:",
+      subscription.id
+    );
+
+    const {
+      data: updatedSubscription,
+      error: updateError,
+    } = await supabaseAdmin
+      .from("subscriptions")
+      .update({
+        status: "Active",
+        is_paused: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", subscription.id)
+      .select(`
+        id,
+        customer_id,
+        status,
+        is_paused,
+        pause_from,
+        pause_to
+      `)
+      .single();
+
+    if (updateError) {
+      console.error(
+        "Auto Resume Update Error:",
+        updateError
+      );
+
+      throw updateError;
+    }
+
+    resumed.push(updatedSubscription);
+  }
+
+  console.log(
+    `AUTO RESUME: ${resumed.length} subscription(s) resumed.`
+  );
+
+  return resumed;
+}
 export async function generateTodayDeliveriesService() {
   const today = new Date().toISOString().split("T")[0];
+   await autoResumePausedSubscriptionsService();
+
+  // ==========================================================
+  // GET ACTIVE SUBSCRIPTIONS
+  // ==========================================================
 
   // ==========================================================
   // GET ACTIVE SUBSCRIPTIONS
