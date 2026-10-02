@@ -13,9 +13,11 @@ import {
   renewSubscription,
   generateTodayDeliveriesController,
   getSubscriptionDeliverySummary,
-   pauseSubscription,
+  pauseSubscription,
   resumeSubscription,
-  
+  createRenewalLink,
+  getRenewalLinkDetails,
+  renewUsingLink,
 } from "../controllers/subscription.controller.js";
 
 const router = express.Router();
@@ -68,6 +70,20 @@ router.get(
 router.post("/:id/pause", pauseSubscription);
 
 router.post("/:id/resume", resumeSubscription);
+router.post(
+  "/:id/renewal-link",
+  createRenewalLink
+);
+
+router.get(
+  "/renew-link/:token",
+  getRenewalLinkDetails
+);
+
+router.post(
+  "/renew-link/:token",
+  renewUsingLink
+);
 
 
 export default router;
