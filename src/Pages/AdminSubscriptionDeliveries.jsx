@@ -34,6 +34,9 @@ export default function AdminSubscriptionDeliveries() {
   const [selectedDeliveryBoy, setSelectedDeliveryBoy] =
     useState("");
 
+  // Mobile delivery card expand/collapse state
+  const [expandedId, setExpandedId] = useState(null);
+
   // ==========================================
   // LOAD
   // ==========================================
@@ -545,495 +548,210 @@ async function handleRestoreToday(delivery) {
 
   if (loading && deliveries.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-
+      <div className="min-h-screen bg-[#f4faf7] px-3 py-4 sm:px-6">
         <style>{`
-          @keyframes skeletonPulse {
-            0%, 100% { opacity: .5; }
-            50% { opacity: 1; }
+          @keyframes ffShimmer {
+            0% { background-position: -700px 0; }
+            100% { background-position: 700px 0; }
           }
-
-          .skeleton {
-            animation: skeletonPulse 1.2s ease-in-out infinite;
+          .ff-skeleton {
+            background: linear-gradient(90deg,#e5f0ea 25%,#f8fcfa 42%,#e5f0ea 60%);
+            background-size: 900px 100%;
+            animation: ffShimmer 1.1s ease-in-out infinite;
           }
         `}</style>
-
-        <div className="max-w-7xl mx-auto">
-
-          <div className="h-9 w-72 bg-gray-200 rounded-xl skeleton" />
-
-          <div className="h-5 w-56 bg-gray-200 rounded-lg mt-3 skeleton" />
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
-
-            {[1, 2, 3, 4].map((item) => (
-              <div
-                key={item}
-                className="h-28 bg-white rounded-3xl shadow-sm skeleton"
-              />
+        <div className="mx-auto max-w-6xl">
+          <div className="ff-skeleton h-36 rounded-[28px]" />
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[1,2,3,4].map((n) => (
+              <div key={n} className="ff-skeleton h-24 rounded-3xl" />
             ))}
-
           </div>
-
-          <div className="h-24 bg-white rounded-3xl mt-5 skeleton" />
-
-          <div className="space-y-4 mt-5">
-
-            {[1, 2, 3].map((item) => (
-              <div
-                key={item}
-                className="h-52 bg-white rounded-3xl skeleton"
-              />
+          <div className="ff-skeleton mt-4 h-20 rounded-3xl" />
+          <div className="mt-4 space-y-3">
+            {[1,2,3].map((n) => (
+              <div key={n} className="ff-skeleton h-44 rounded-[26px]" />
             ))}
-
           </div>
-
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-3 sm:p-5 lg:p-6">
-
+    <div className="min-h-screen bg-[#f4faf7] text-slate-900">
       <style>{`
-        @keyframes deliveryFadeUp {
-          from {
-            opacity: 0;
-            transform: translateY(18px);
-          }
-
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+        @keyframes ffFadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-
-        @keyframes headerDrop {
-          from {
-            opacity: 0;
-            transform: translateY(-12px);
-          }
-
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+        @keyframes ffHeader {
+          from { opacity: 0; transform: translateY(-12px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-
-        @keyframes statusPulse {
-          0%, 100% {
-            transform: scale(1);
-          }
-
-          50% {
-            transform: scale(1.08);
-          }
+        @keyframes ffPulse {
+          0%,100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.18); opacity: .65; }
         }
-
-        .delivery-animation {
-          animation: deliveryFadeUp .45s ease-out both;
-        }
-
-        .header-animation {
-          animation: headerDrop .45s ease-out both;
-        }
-
-        .status-dot {
-          animation: statusPulse 2s ease-in-out infinite;
+        .ff-enter { animation: ffFadeUp .32s ease-out both; }
+        .ff-header { animation: ffHeader .35s ease-out both; }
+        .ff-dot { animation: ffPulse 1.8s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .ff-enter,.ff-header,.ff-dot { animation: none !important; }
         }
       `}</style>
 
-      <div className="max-w-7xl mx-auto">
-
-        {/* ==========================================
-            HEADER
-        ========================================== */}
-
-        <div className="header-animation mb-5">
-
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-
-            <div>
-
-              <div className="flex items-center gap-2">
-
-                <span className="text-3xl sm:text-4xl">
-                  🥛
-                </span>
-
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-gray-900">
-                  Subscription Deliveries
-                </h1>
-
+      <div className="mx-auto w-full max-w-7xl px-3 py-3 sm:px-5 lg:px-6">
+        {/* BRAND HEADER */}
+        <header className="ff-header overflow-hidden rounded-[28px] bg-gradient-to-br from-[#063d2b] via-[#087646] to-[#10a968] p-4 text-white shadow-[0_18px_45px_rgba(6,61,43,.16)] sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white p-1.5 shadow-lg sm:h-16 sm:w-16">
+                <img
+                  src="/logo.png"
+                  alt="Farm Fresh Dairy"
+                  className="h-full w-full object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
               </div>
 
-              <p className="text-gray-500 text-sm sm:text-base mt-1">
-                Manage Today's Milk Deliveries
-              </p>
-
+              <div className="min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-[.2em] text-emerald-100">
+                  Farm Fresh Dairy
+                </p>
+                <h1 className="truncate text-xl font-black sm:text-3xl">
+                  Today&apos;s Deliveries
+                </h1>
+                <p className="mt-0.5 text-xs text-emerald-50/85 sm:text-sm">
+                  Manage, assign and update milk deliveries
+                </p>
+              </div>
             </div>
 
             <button
+              type="button"
               onClick={handleGenerate}
               disabled={loading}
-              className="
-                w-full lg:w-auto
-                px-5 sm:px-6 py-3.5
-                rounded-2xl
-                bg-green-600
-                hover:bg-green-700
-                active:scale-95
-                text-white
-                font-black
-                shadow-lg shadow-green-600/20
-                transition-all duration-200
-                disabled:bg-gray-400
-                disabled:shadow-none
-              "
+              className="min-h-11 shrink-0 rounded-2xl bg-white px-3 text-xs font-black text-emerald-800 shadow-lg transition active:scale-95 disabled:opacity-50 sm:px-5 sm:text-sm"
             >
-              {loading
-                ? "⏳ Generating..."
-                : "⚡ Generate Today's Deliveries"}
+              {loading ? "⏳" : "⚡"}{" "}
+              <span className="hidden sm:inline">
+                {loading ? "Generating..." : "Generate Today"}
+              </span>
+              <span className="sm:hidden">Generate</span>
             </button>
-
           </div>
-        </div>
 
-        {/* ==========================================
-            STATS
-        ========================================== */}
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <HeaderStat label="Total" value={stats.total} icon="📦" />
+            <HeaderStat label="Pending" value={stats.pending} icon="🟠" />
+            <HeaderStat label="Assigned" value={stats.assigned} icon="🔵" />
+            <HeaderStat label="Delivered" value={stats.delivered} icon="✅" />
+          </div>
+        </header>
 
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-
-          <StatCard
-            icon="📦"
-            label="Total"
-            value={stats.total}
-            delay="0ms"
-          />
-
-          <StatCard
-            icon="🟠"
-            label="Pending"
-            value={stats.pending}
-            delay="60ms"
-          />
-
-          <StatCard
-            icon="🔵"
-            label="Assigned"
-            value={stats.assigned}
-            delay="120ms"
-          />
-
-          <StatCard
-            icon="✅"
-            label="Delivered"
-            value={stats.delivered}
-            delay="180ms"
-          />
-
-          <StatCard
-            icon="⏭️"
-            label="Skipped"
-            value={stats.skipped}
-            delay="240ms"
-          />
-
-        </div>
-
-        {/* ==========================================
-            SEARCH / FILTER
-        ========================================== */}
-
-        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-3 sm:p-4 mb-5">
-
-          <div className="flex flex-col md:flex-row gap-3">
-
-            <div className="relative flex-1">
-
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+        {/* MOBILE-FRIENDLY FILTER */}
+        <section className="ff-enter mt-3 rounded-[24px] border border-emerald-100 bg-white/95 p-3 shadow-[0_10px_30px_rgba(15,23,42,.07)] backdrop-blur-xl sm:mt-5 sm:p-4">
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <div className="relative">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                 🔎
               </span>
-
               <input
-                className="
-                  w-full
-                  border border-gray-200
-                  rounded-2xl
-                  pl-11 pr-4 py-3.5
-                  text-sm sm:text-base
-                  outline-none
-                  transition-all
-                  focus:border-green-500
-                  focus:ring-4
-                  focus:ring-green-100
-                "
-                placeholder="Search delivery / customer / phone / area"
+                className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-semibold outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+                placeholder="Search customer, phone, area or delivery no."
                 value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
+                onChange={(e) => setSearch(e.target.value)}
               />
-
             </div>
 
             <select
-              className="
-                w-full md:w-52
-                border border-gray-200
-                rounded-2xl
-                px-4 py-3.5
-                bg-white
-                outline-none
-                focus:border-green-500
-                focus:ring-4
-                focus:ring-green-100
-              "
+              className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 sm:w-48"
               value={status}
-              onChange={(e) =>
-                setStatus(e.target.value)
-              }
+              onChange={(e) => setStatus(e.target.value)}
             >
-              <option value="">
-                All Status
-              </option>
-
-              <option value="Pending">
-                Pending
-              </option>
-
-              <option value="Assigned">
-                Assigned
-              </option>
-
-              <option value="Out for Delivery">
-                Out for Delivery
-              </option>
-
-              <option value="Delivered">
-                Delivered
-              </option>
-
-              <option value="Missed">
-                Missed
-              </option>
-
-              <option value="Failed">
-                Failed
-              </option>
-
-              <option value="Cancelled">
-                Cancelled
-              </option>
-              <option value="Skipped">
-                Skipped
-              </option>
+              <option value="">All Status</option>
+              <option value="Pending">Pending</option>
+              <option value="Assigned">Assigned</option>
+              <option value="Out for Delivery">Out for Delivery</option>
+              <option value="Delivered">Delivered</option>
+              <option value="Missed">Missed</option>
+              <option value="Failed">Failed</option>
+              <option value="Cancelled">Cancelled</option>
+              <option value="Skipped">Skipped</option>
             </select>
-
           </div>
 
-        </div>
-
-        {/* ==========================================
-            BULK ASSIGN
-        ========================================== */}
-
-        {selectedDeliveries.length > 0 && (
-
-          <div className="
-            hidden md:block
-            delivery-animation
-            bg-green-50
-            border border-green-200
-            rounded-3xl
-            p-4
-            mb-5
-            shadow-sm
-          ">
-
-            <div className="
-              flex flex-col
-              lg:flex-row
-              lg:items-center
-              lg:justify-between
-              gap-4
-            ">
-
-              <div>
-
-                <p className="text-green-800 font-black text-lg">
-                  {selectedDeliveries.length}{" "}
-                  {selectedDeliveries.length === 1
-                    ? "Delivery"
-                    : "Deliveries"}{" "}
-                  Selected
-                </p>
-
-                <p className="text-sm text-green-600 mt-1">
-                  Choose a delivery boy to assign.
-                </p>
-
-              </div>
-
-              <div className="
-                flex flex-col
-                sm:flex-row
-                gap-2
-              ">
-
-                <select
-                  value={selectedDeliveryBoy}
-                  onChange={(e) =>
-                    setSelectedDeliveryBoy(
-                      e.target.value
-                    )
-                  }
-                  className="
-                    w-full sm:w-60
-                    border border-green-200
-                    bg-white
-                    rounded-2xl
-                    px-4 py-3
-                    outline-none
-                    focus:ring-4
-                    focus:ring-green-100
-                  "
-                >
-
-                  <option value="">
-                    Select Delivery Boy
-                  </option>
-
-                  {deliveryBoys.map((boy) => (
-                    <option
-                      key={boy.id}
-                      value={boy.id}
-                    >
-                      {boy.full_name}
-                    </option>
-                  ))}
-
-                </select>
-
-                <button
-                  onClick={handleBulkAssign}
-                  disabled={
-                    assigning ||
-                    !selectedDeliveryBoy
-                  }
-                  className="
-                    px-5 py-3
-                    rounded-2xl
-                    bg-green-600
-                    hover:bg-green-700
-                    active:scale-95
-                    text-white
-                    font-black
-                    transition-all
-                    disabled:bg-gray-300
-                    disabled:cursor-not-allowed
-                  "
-                >
-                  {assigning
-                    ? "⏳ Assigning..."
-                    : "🚚 Assign Selected"}
-                </button>
-
-                <button
-                  onClick={clearSelection}
-                  className="
-                    px-5 py-3
-                    rounded-2xl
-                    bg-white
-                    border border-gray-200
-                    hover:bg-gray-50
-                    active:scale-95
-                    text-gray-700
-                    font-bold
-                    transition-all
-                  "
-                >
-                  Clear
-                </button>
-
-              </div>
-
+          {(search || status) && (
+            <div className="mt-2 flex items-center justify-between px-1">
+              <span className="text-[11px] font-bold text-slate-400">
+                {filtered.length} result{filtered.length === 1 ? "" : "s"}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setStatus("");
+                }}
+                className="text-xs font-black text-emerald-700"
+              >
+                Clear
+              </button>
             </div>
+          )}
+        </section>
 
-          </div>
-        )}
-
-        {/* ==========================================
-            MOBILE BULK ASSIGN TOOLBAR
-        ========================================== */}
-
+        {/* MOBILE BULK CONTROLS */}
         {selectableDeliveries.length > 0 && (
-          <div className="md:hidden sticky top-2 z-30 mb-4 rounded-3xl border border-emerald-100 bg-white/95 p-3 shadow-[0_12px_35px_rgba(15,23,42,.10)] backdrop-blur-xl">
-            <div className="flex items-center justify-between gap-2">
+          <section className="ff-enter mt-3 md:hidden">
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={handleSelectAllAndAssign}
-                className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl px-3 text-xs font-black transition-all active:scale-[.97] ${
+                className={`min-h-11 flex-1 rounded-2xl px-3 text-xs font-black active:scale-[.97] ${
                   allSelected
                     ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "bg-slate-950 text-white shadow-lg shadow-slate-200"
+                    : "bg-slate-950 text-white shadow-lg"
                 }`}
               >
-                <span className="text-base">
-                  {allSelected ? "✓" : "☑️"}
-                </span>
-                {allSelected ? "Deselect All" : `Select All (${selectableDeliveries.length})`}
+                {allSelected
+                  ? "✓ Deselect All"
+                  : `☑ Select All (${selectableDeliveries.length})`}
               </button>
 
               {selectedDeliveries.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedDelivery(null);
-                    setAssignOpen(false);
+                  onClick={() =>
                     document
-                      .getElementById("mobile-bulk-assign")
-                      ?.scrollIntoView({ behavior: "smooth", block: "center" });
-                  }}
-                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white shadow-lg shadow-emerald-200 transition-all active:scale-[.97]"
+                      .getElementById("ff-mobile-assign")
+                      ?.scrollIntoView({ behavior: "smooth", block: "center" })
+                  }
+                  className="min-h-11 flex-1 rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white shadow-lg active:scale-[.97]"
                 >
                   🚚 Assign {selectedDeliveries.length}
                 </button>
               )}
             </div>
-
-            <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-bold text-slate-400">
-              <span>
-                {selectedDeliveries.length > 0
-                  ? `${selectedDeliveries.length} selected`
-                  : "Select deliveries to assign together"}
-              </span>
-              <span>{selectableDeliveries.length} available</span>
-            </div>
-          </div>
+          </section>
         )}
 
-        {/* ==========================================
-            MOBILE BULK ASSIGN PANEL
-        ========================================== */}
-
         {selectedDeliveries.length > 0 && (
-          <div
-            id="mobile-bulk-assign"
-            className="md:hidden delivery-animation mb-5 rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4 shadow-[0_16px_45px_rgba(16,185,129,.12)]"
+          <section
+            id="ff-mobile-assign"
+            className="ff-enter mt-3 rounded-[26px] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4 shadow-sm md:hidden"
           >
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
-                <p className="text-base font-black text-emerald-900">
-                  🚚 Assign deliveries
+                <p className="font-black text-emerald-900">
+                  🚚 Assign selected deliveries
                 </p>
                 <p className="mt-1 text-[11px] font-semibold text-emerald-700">
-                  {selectedDeliveries.length} deliveries selected
+                  {selectedDeliveries.length} selected
                 </p>
               </div>
-
               <button
                 type="button"
                 onClick={clearSelection}
@@ -1046,7 +764,7 @@ async function handleRestoreToday(delivery) {
             <select
               value={selectedDeliveryBoy}
               onChange={(e) => setSelectedDeliveryBoy(e.target.value)}
-              className="min-h-12 w-full rounded-2xl border border-emerald-200 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              className="min-h-12 w-full rounded-2xl border border-emerald-200 bg-white px-4 text-sm font-bold outline-none focus:ring-4 focus:ring-emerald-100"
             >
               <option value="">Select Delivery Boy</option>
               {deliveryBoys.map((boy) => (
@@ -1060,695 +778,326 @@ async function handleRestoreToday(delivery) {
               type="button"
               onClick={handleBulkAssign}
               disabled={assigning || !selectedDeliveryBoy}
-              className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-sm font-black text-white shadow-lg shadow-emerald-200 transition-all active:scale-[.98] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+              className="mt-3 min-h-12 w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-sm font-black text-white shadow-lg shadow-emerald-200 active:scale-[.98] disabled:opacity-40"
             >
-              {assigning ? (
-                <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                  Assigning {selectedDeliveries.length}...
-                </>
-              ) : (
-                <>🚚 Assign All {selectedDeliveries.length} Deliveries</>
-              )}
+              {assigning
+                ? `⏳ Assigning ${selectedDeliveries.length}...`
+                : `🚚 Assign All ${selectedDeliveries.length}`}
             </button>
-          </div>
+          </section>
         )}
 
-        {/* ==========================================
-            MOBILE CARDS
-        ========================================== */}
-
-        <div className="md:hidden space-y-4">
-
-          {filtered.length === 0 && (
-            <EmptyState />
-          )}
+        {/* MOBILE DELIVERY CARDS */}
+        <main className="mt-4 space-y-3 md:hidden">
+          {filtered.length === 0 && <EmptyState />}
 
           {filtered.map((delivery, index) => {
-
             const selectable = isDeliverySelectable(delivery);
-
-            const checked =
-              selectedDeliveries.includes(
-                delivery.id
-              );
-
-            const statusStyle =
-              getStatusStyle(delivery.status);
+            const checked = selectedDeliveries.includes(delivery.id);
+            const statusStyle = getStatusStyle(delivery.status);
+            const expanded = expandedId === delivery.id;
 
             return (
-              <div
+              <article
                 key={delivery.id}
-                className="
-                  delivery-animation
-                  bg-white
-                  rounded-3xl
-                  border border-gray-100
-                  shadow-sm
-                  overflow-hidden
-                  transition-all
-                  duration-300
-                  active:scale-[0.99]
-                "
-                style={{
-                  animationDelay:
-                    `${index * 55}ms`,
-                }}
+                className="ff-enter overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-[0_8px_25px_rgba(15,23,42,.06)]"
+                style={{ animationDelay: `${Math.min(index * 35, 280)}ms` }}
               >
+                {/* Always-visible summary */}
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() =>
+                    setExpandedId((current) =>
+                      current === delivery.id ? null : delivery.id
+                    )
+                  }
+                  className="flex min-h-[94px] w-full items-center gap-3 p-3 text-left active:bg-slate-50"
+                >
+                  {selectable ? (
+                    <span
+                      role="checkbox"
+                      aria-checked={checked}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleDeliverySelection(delivery.id);
+                      }}
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border-2 text-sm font-black ${
+                        checked
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-slate-200 bg-slate-50 text-slate-300"
+                      }`}
+                    >
+                      {checked ? "✓" : "☐"}
+                    </span>
+                  ) : (
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-300">
+                      —
+                    </span>
+                  )}
 
-                {/* Card Header */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        {delivery.delivery_number || "Delivery"}
+                      </p>
 
-                <div className="p-4 border-b border-gray-100">
+                      <span
+                        className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[9px] font-black ${statusStyle.badge}`}
+                      >
+                        <span
+                          className={`ff-dot h-1.5 w-1.5 rounded-full ${statusStyle.dot}`}
+                        />
+                        {delivery.status}
+                      </span>
+                    </div>
 
-                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="mt-1 truncate text-base font-black text-slate-900">
+                      {delivery.customers?.full_name || "-"}
+                    </h2>
 
-                    <div className="flex items-center gap-3 min-w-0">
+                    <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
+                      📍 {delivery.addresses?.area || "-"} ·{" "}
+                      {formatDate(delivery.delivery_date)}
+                    </p>
+                  </div>
 
-                      {selectable ? (
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-transform duration-300 ${
+                      expanded ? "rotate-180" : ""
+                    }`}
+                  >
+                    ↓
+                  </span>
+                </button>
+
+                {/* Expandable details */}
+                <div
+                  className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+                    expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                  }`}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                    <div className="border-t border-slate-100 p-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <InfoTile
+                          icon="📞"
+                          label="Phone"
+                          value={delivery.customers?.phone || "-"}
+                        />
+                        <InfoTile
+                          icon="🚚"
+                          label="Delivery Boy"
+                          value={
+                            delivery.delivery_boys?.full_name ||
+                            "Not Assigned"
+                          }
+                        />
+                      </div>
+
+                      <div className="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-[10px] font-black uppercase tracking-[.15em] text-emerald-700">
+                            Products
+                          </p>
+                          <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black text-emerald-700 shadow-sm">
+                            🥛 Milk
+                          </span>
+                        </div>
+                        <ProductItems delivery={delivery} mobile />
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        {selectable && (
+                          <button
+                            type="button"
+                            onClick={() => toggleDeliverySelection(delivery.id)}
+                            className={`min-h-11 rounded-2xl text-xs font-black active:scale-[.97] ${
+                              checked
+                                ? "bg-emerald-600 text-white"
+                                : "border border-slate-200 bg-white text-slate-700"
+                            }`}
+                          >
+                            {checked ? "✓ Selected" : "☐ Select"}
+                          </button>
+                        )}
+
                         <button
                           type="button"
-                          onClick={() =>
-                            toggleDeliverySelection(
-                              delivery.id
-                            )
-                          }
-                          className={`
-                            w-11 h-11
-                            rounded-2xl
-                            border-2
-                            flex items-center justify-center
-                            flex-shrink-0
-                            transition-all
-                            duration-200
-                            active:scale-90
-                            ${
-                              checked
-                                ? "bg-green-600 border-green-600 text-white"
-                                : "bg-white border-gray-200 text-gray-300"
-                            }
-                          `}
+                          onClick={() => openAssign(delivery)}
+                          className="min-h-11 rounded-2xl bg-blue-600 text-xs font-black text-white shadow-sm active:scale-[.97]"
                         >
-                          {checked ? "✓" : "☐"}
+                          🚚 Assign
                         </button>
-                      ) : (
-                        <div className="
-                          w-11 h-11
-                          rounded-2xl
-                          bg-gray-100
-                          flex items-center justify-center
-                          text-gray-300
-                          flex-shrink-0
-                        ">
-                          —
-                        </div>
-                      )}
-
-                      <div className="min-w-0">
-
-                        <p className="text-xs uppercase tracking-wide text-gray-400 font-bold">
-                          Delivery No
-                        </p>
-
-                        <h2 className="font-black text-gray-900 text-lg truncate">
-                          {delivery.delivery_number ||
-                            "-"}
-                        </h2>
-
                       </div>
 
-                    </div>
-
-                    <span
-                      className={`
-                        flex-shrink-0
-                        inline-flex
-                        items-center gap-1.5
-                        px-2.5 py-1.5
-                        rounded-full
-                        border
-                        text-xs
-                        font-black
-                        ${statusStyle.badge}
-                      `}
-                    >
-                      <span
-                        className={`
-                          status-dot
-                          w-2 h-2
-                          rounded-full
-                          ${statusStyle.dot}
-                        `}
-                      />
-
-                      {delivery.status}
-                    </span>
-
-                  </div>
-
-                </div>
-
-                {/* Customer */}
-
-                <div className="p-4">
-
-                  <div className="
-                    bg-slate-50
-                    rounded-2xl
-                    p-4
-                    border border-gray-100
-                  ">
-
-                    <div className="flex items-start gap-3">
-
-                      <div className="
-                        w-11 h-11
-                        rounded-xl
-                        bg-green-100
-                        flex items-center justify-center
-                        text-xl
-                        flex-shrink-0
-                      ">
-                        👤
-                      </div>
-
-                      <div className="min-w-0">
-
-                        <p className="font-black text-gray-900 truncate">
-                          {delivery.customers?.full_name ||
-                            "-"}
-                        </p>
-
-                        <p className="text-sm text-gray-500 mt-1">
-                          📞{" "}
-                          {delivery.customers?.phone ||
-                            "-"}
-                        </p>
-
-                        <p className="text-sm text-gray-500 mt-1">
-                          📍{" "}
-                          {delivery.addresses?.area ||
-                            "-"}
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                  </div>
-
-                  {/* Product */}
-
-                  <div className="
-                    mt-3
-                    rounded-2xl
-                    bg-green-50
-                    border border-green-100
-                    p-4
-                  ">
-
-                    <p className="
-                      text-xs
-                      uppercase
-                      tracking-wide
-                      text-green-600
-                      font-black
-                      mb-2
-                    ">
-                      Products
-                    </p>
-
-                    <ProductItems
-                      delivery={delivery}
-                      mobile
-                    />
-
-                  </div>
-
-                  {/* Delivery Details */}
-
-                  <div className="
-                    grid
-                    grid-cols-2
-                    gap-3
-                    mt-3
-                  ">
-
-                    <div className="
-                      bg-blue-50
-                      border border-blue-100
-                      rounded-2xl
-                      p-3
-                    ">
-
-                      <p className="text-xs text-gray-500 font-semibold">
-                        Delivery Date
-                      </p>
-
-                      <p className="font-black text-gray-900 mt-1">
-                        {formatDate(
-                          delivery.delivery_date
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        {delivery.status === "Assigned" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleStatusChange(
+                                delivery.id,
+                                "Out for Delivery"
+                              )
+                            }
+                            className="min-h-11 rounded-2xl border border-purple-200 bg-purple-50 px-2 text-xs font-black text-purple-700 active:scale-[.97]"
+                          >
+                            🚚 Out for Delivery
+                          </button>
                         )}
-                      </p>
 
+                        {delivery.status === "Out for Delivery" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleStatusChange(delivery.id, "Delivered")
+                            }
+                            className="min-h-11 rounded-2xl border border-emerald-200 bg-emerald-50 px-2 text-xs font-black text-emerald-700 active:scale-[.97]"
+                          >
+                            ✓ Delivered
+                          </button>
+                        )}
+
+                        {(delivery.status === "Pending" ||
+                          delivery.status === "Assigned") && (
+                          <button
+                            type="button"
+                            onClick={() => handleSkipToday(delivery)}
+                            className="min-h-11 rounded-2xl border border-orange-200 bg-orange-50 px-2 text-xs font-black text-orange-700 active:scale-[.97]"
+                          >
+                            ⏭ Skip Today
+                          </button>
+                        )}
+
+                        {delivery.status === "Skipped" && (
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreToday(delivery)}
+                            className="min-h-11 rounded-2xl border border-emerald-200 bg-emerald-50 px-2 text-xs font-black text-emerald-700 active:scale-[.97]"
+                          >
+                            ↩ Restore Today
+                          </button>
+                        )}
+                      </div>
                     </div>
-
-                    <div className="
-                      bg-purple-50
-                      border border-purple-100
-                      rounded-2xl
-                      p-3
-                    ">
-
-                      <p className="text-xs text-gray-500 font-semibold">
-                        Delivery Boy
-                      </p>
-
-                      <p className="font-black text-gray-900 mt-1 truncate">
-                        {delivery.delivery_boys
-                          ?.full_name ||
-                          "Not Assigned"}
-                      </p>
-
-                    </div>
-
                   </div>
-
                 </div>
-
-                {/* Actions */}
-
-                <div className="
-                  p-4
-                  bg-gray-50
-                  border-t border-gray-100
-                ">
-
-                  <div className="grid grid-cols-2 gap-2">
-
-                    {selectable && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          toggleDeliverySelection(
-                            delivery.id
-                          )
-                        }
-                        className={`
-                          py-3
-                          rounded-xl
-                          font-black
-                          transition-all
-                          active:scale-95
-                          ${
-                            checked
-                              ? "bg-green-600 text-white"
-                              : "bg-white border border-gray-200 text-gray-700"
-                          }
-                        `}
-                      >
-                        {checked
-                          ? "✓ Selected"
-                          : "☐ Select"}
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openAssign(delivery)
-                      }
-                      className="
-                        py-3
-                        rounded-xl
-                        bg-blue-600
-                        hover:bg-blue-700
-                        active:scale-95
-                        text-white
-                        font-black
-                        transition-all
-                      "
-                    >
-                      🚚 Assign
-                    </button>
-
-                  </div>
-
-                  {/* Status Controls */}
-
-                  <div className="
-                    grid
-                    grid-cols-2
-                    gap-2
-                    mt-2
-                  ">
-
-                    {delivery.status === "Assigned" && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleStatusChange(
-                            delivery.id,
-                            "Out for Delivery"
-                          )
-                        }
-                        className="
-                          py-2.5
-                          rounded-xl
-                          bg-purple-50
-                          border border-purple-200
-                          text-purple-700
-                          font-bold
-                          text-sm
-                          active:scale-95
-                          transition-all
-                        "
-                      >
-                        🚚 Out for Delivery
-                      </button>
-                    )}
-
-                    {delivery.status ===
-                      "Out for Delivery" && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleStatusChange(
-                            delivery.id,
-                            "Delivered"
-                          )
-                        }
-                        className="
-                          py-2.5
-                          rounded-xl
-                          bg-green-50
-                          border border-green-200
-                          text-green-700
-                          font-bold
-                          text-sm
-                          active:scale-95
-                          transition-all
-                        "
-                      >
-                        ✓ Delivered
-                      </button>
-                    )}
-                    {(delivery.status === "Pending" ||
-  delivery.status === "Assigned") && (
-  <button
-    type="button"
-    onClick={() =>
-      handleSkipToday(delivery)
-    }
-    className="
-      py-2.5
-      rounded-xl
-      bg-orange-50
-      border border-orange-200
-      text-orange-700
-      font-bold
-      text-sm
-      active:scale-95
-      transition-all
-    "
-  >
-    ⏭ Skip Today
-  </button>
-)}
-
-{delivery.status === "Skipped" && (
-  <button
-    type="button"
-    onClick={() =>
-      handleRestoreToday(delivery)
-    }
-    className="
-      py-2.5
-      rounded-xl
-      bg-green-50
-      border border-green-200
-      text-green-700
-      font-bold
-      text-sm
-      active:scale-95
-      transition-all
-    "
-  >
-    ↩ Restore Today
-  </button>
-)}
-
-                  </div>
-
-                </div>
-
-              </div>
+              </article>
             );
           })}
+        </main>
 
-        </div>
-
-        {/* ==========================================
-            DESKTOP TABLE
-        ========================================== */}
-
-        <div className="
-          hidden md:block
-          bg-white
-          rounded-3xl
-          shadow-sm
-          border border-gray-100
-          overflow-hidden
-        ">
-
+        {/* DESKTOP TABLE */}
+        <section className="mt-5 hidden overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm md:block">
           {filtered.length === 0 ? (
             <EmptyState />
           ) : (
             <div className="overflow-x-auto">
-
-              <table className="w-full">
-
-                <thead className="bg-green-700 text-white">
-
+              <table className="w-full min-w-[1250px]">
+                <thead className="bg-gradient-to-r from-[#087346] to-[#0a8b52] text-white">
                   <tr>
-
                     <th className="px-4 py-4 text-center">
                       <input
                         type="checkbox"
                         checked={allSelected}
-                        onChange={
-                          toggleSelectAll
-                        }
-                        className="w-5 h-5 accent-green-600 cursor-pointer"
+                        onChange={toggleSelectAll}
+                        className="h-5 w-5 cursor-pointer accent-emerald-600"
                       />
                     </th>
-
-                    <th className="px-4 py-4 text-left">
-                      Delivery No
-                    </th>
-
-                    <th className="px-4 py-4 text-left">
-                      Customer
-                    </th>
-
-                    <th className="px-4 py-4 text-left">
-                      Phone
-                    </th>
-
-                    <th className="px-4 py-4 text-left">
-                      Area
-                    </th>
-
-                    <th className="px-4 py-4 text-left">
-                      Delivery Boy
-                    </th>
-
-                    <th className="px-4 py-4 text-left">
-                      Date
-                    </th>
-
-                    <th className="px-4 py-4 text-left">
-                      Products
-                    </th>
-
-                    <th className="px-4 py-4 text-center">
-                      Status
-                    </th>
-
-                    <th className="px-4 py-4 text-center">
-                      Action
-                    </th>
-
+                    {[
+                      "Delivery No",
+                      "Customer",
+                      "Phone",
+                      "Area",
+                      "Delivery Boy",
+                      "Date",
+                      "Products",
+                      "Status",
+                      "Action",
+                    ].map((head) => (
+                      <th
+                        key={head}
+                        className="px-4 py-4 text-left text-xs font-black uppercase tracking-wide"
+                      >
+                        {head}
+                      </th>
+                    ))}
                   </tr>
-
                 </thead>
 
                 <tbody>
+                  {filtered.map((delivery, index) => {
+                    const selectable = isDeliverySelectable(delivery);
+                    const checked = selectedDeliveries.includes(delivery.id);
+                    const statusStyle = getStatusStyle(delivery.status);
 
-                  {filtered.map(
-                    (delivery, index) => {
-
-                      const selectable =
-                        isDeliverySelectable(delivery);
-
-                      const checked =
-                        selectedDeliveries.includes(
-                          delivery.id
-                        );
-
-                      const statusStyle =
-                        getStatusStyle(
-                          delivery.status
-                        );
-
-                      return (
-                        <tr
-                          key={delivery.id}
-                          className={`
-                            delivery-animation
-                            border-b
-                            border-gray-100
-                            transition-colors
-                            hover:bg-green-50/50
-                            ${
-                              checked
-                                ? "bg-green-50"
-                                : ""
-                            }
-                          `}
-                          style={{
-                            animationDelay:
-                              `${index * 35}ms`,
-                          }}
-                        >
-
-                          <td className="px-4 py-4 text-center">
-
-                            {selectable ? (
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() =>
-                                  toggleDeliverySelection(
-                                    delivery.id
-                                  )
-                                }
-                                className="w-5 h-5 accent-green-600 cursor-pointer"
-                              />
-                            ) : (
-                              <span className="text-gray-300">
-                                —
-                              </span>
-                            )}
-
-                          </td>
-
-                          <td className="px-4 py-4">
-
-                            <span className="font-black text-gray-900">
-                              {delivery.delivery_number}
-                            </span>
-
-                          </td>
-
-                          <td className="px-4 py-4">
-
-                            <div className="font-bold">
-                              {delivery.customers
-                                ?.full_name ||
-                                "-"}
-                            </div>
-
-                          </td>
-
-                          <td className="px-4 py-4 text-sm">
-                            {delivery.customers?.phone ||
-                              "-"}
-                          </td>
-
-                          <td className="px-4 py-4">
-                            {delivery.addresses?.area ||
-                              "-"}
-                          </td>
-
-                          <td className="px-4 py-4">
-
-                            <div className="font-bold">
-                              {delivery.delivery_boys
-                                ?.full_name ||
-                                "-"}
-                            </div>
-
-                            {delivery.delivery_boys && (
-                              <div className="text-xs text-green-600 mt-1">
-                                ✓ Assigned
-                              </div>
-                            )}
-
-                          </td>
-
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            {formatDate(
-                              delivery.delivery_date
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 min-w-[260px]">
-
-                            <ProductItems
-                              delivery={delivery}
+                    return (
+                      <tr
+                        key={delivery.id}
+                        className={`ff-enter border-b border-slate-100 transition hover:bg-emerald-50/40 ${
+                          checked ? "bg-emerald-50" : ""
+                        }`}
+                        style={{ animationDelay: `${Math.min(index * 20, 260)}ms` }}
+                      >
+                        <td className="px-4 py-4 text-center">
+                          {selectable ? (
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleDeliverySelection(delivery.id)}
+                              className="h-5 w-5 cursor-pointer accent-emerald-600"
                             />
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
 
-                          </td>
-
-                          <td className="px-4 py-4 text-center">
-
+                        <td className="px-4 py-4 font-black">
+                          {delivery.delivery_number || "-"}
+                        </td>
+                        <td className="px-4 py-4 font-black">
+                          {delivery.customers?.full_name || "-"}
+                        </td>
+                        <td className="px-4 py-4 text-sm">
+                          {delivery.customers?.phone || "-"}
+                        </td>
+                        <td className="px-4 py-4">
+                          {delivery.addresses?.area || "-"}
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="font-bold">
+                            {delivery.delivery_boys?.full_name ||
+                              "Not Assigned"}
+                          </div>
+                          {delivery.delivery_boys && (
+                            <div className="mt-1 text-xs font-bold text-emerald-600">
+                              ✓ Assigned
+                            </div>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-4">
+                          {formatDate(delivery.delivery_date)}
+                        </td>
+                        <td className="min-w-[260px] px-4 py-4">
+                          <ProductItems delivery={delivery} />
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span
+                            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-black ${statusStyle.badge}`}
+                          >
                             <span
-                              className={`
-                                inline-flex
-                                items-center
-                                gap-1.5
-                                px-3 py-1.5
-                                rounded-full
-                                border
-                                text-xs
-                                font-black
-                                ${statusStyle.badge}
-                              `}
-                            >
-
-                              <span
-                                className={`
-                                  w-2 h-2
-                                  rounded-full
-                                  ${statusStyle.dot}
-                                `}
-                              />
-
-                              {delivery.status}
-
-                            </span>
-
-                          </td>
-
-                          <td className="px-4 py-4">
-
+                              className={`h-2 w-2 rounded-full ${statusStyle.dot}`}
+                            />
+                            {delivery.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              onClick={() =>
-                                openAssign(
-                                  delivery
-                                )
-                              }
-                              className="
-                                px-4 py-2.5
-                                rounded-xl
-                                bg-blue-600
-                                hover:bg-blue-700
-                                active:scale-95
-                                text-white
-                                font-bold
-                                transition-all
-                              "
+                              onClick={() => openAssign(delivery)}
+                              className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-blue-700 active:scale-95"
                             >
                               Assign
                             </button>
@@ -1757,20 +1106,8 @@ async function handleRestoreToday(delivery) {
                               delivery.status === "Assigned") && (
                               <button
                                 type="button"
-                                onClick={() =>
-                                  handleSkipToday(delivery)
-                                }
-                                className="
-                                  ml-2
-                                  px-4 py-2.5
-                                  rounded-xl
-                                  bg-orange-500
-                                  hover:bg-orange-600
-                                  active:scale-95
-                                  text-white
-                                  font-bold
-                                  transition-all
-                                "
+                                onClick={() => handleSkipToday(delivery)}
+                                className="rounded-xl bg-orange-500 px-4 py-2.5 text-xs font-black text-white transition hover:bg-orange-600 active:scale-95"
                               >
                                 ⏭ Skip
                               </button>
@@ -1779,46 +1116,23 @@ async function handleRestoreToday(delivery) {
                             {delivery.status === "Skipped" && (
                               <button
                                 type="button"
-                                onClick={() =>
-                                  handleRestoreToday(delivery)
-                                }
-                                className="
-                                  ml-2
-                                  px-4 py-2.5
-                                  rounded-xl
-                                  bg-green-600
-                                  hover:bg-green-700
-                                  active:scale-95
-                                  text-white
-                                  font-bold
-                                  transition-all
-                                "
+                                onClick={() => handleRestoreToday(delivery)}
+                                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700 active:scale-95"
                               >
                                 ↩ Restore
                               </button>
                             )}
-
-                          </td>
-
-                        </tr>
-                      );
-                    }
-                  )}
-
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
-
               </table>
-
             </div>
           )}
-
-        </div>
-
+        </section>
       </div>
-
-      {/* ==========================================
-          ASSIGN MODAL
-      ========================================== */}
 
       <AssignSubscriptionDeliveryBoyModal
         open={assignOpen}
@@ -1829,90 +1143,56 @@ async function handleRestoreToday(delivery) {
         }}
         onAssigned={loadDeliveries}
       />
-
     </div>
   );
 }
 
-// ==========================================
-// STAT CARD
-// ==========================================
-
-function StatCard({
-  icon,
-  label,
-  value,
-  delay,
-}) {
+function HeaderStat({ icon, label, value }) {
   return (
-    <div
-      className="
-        delivery-animation
-        bg-white
-        border border-gray-100
-        rounded-3xl
-        shadow-sm
-        p-4
-        transition-all
-        duration-300
-        hover:-translate-y-1
-        hover:shadow-lg
-      "
-      style={{
-        animationDelay: delay,
-      }}
-    >
-
-      <div className="flex items-center gap-3">
-
-        <div className="
-          w-11 h-11
-          rounded-2xl
-          bg-green-50
-          flex items-center justify-center
-          text-xl
-        ">
-          {icon}
-        </div>
-
-        <div>
-
-          <p className="text-xs uppercase tracking-wide text-gray-400 font-bold">
-            {label}
-          </p>
-
-          <p className="text-2xl font-black text-gray-900 mt-0.5">
-            {value}
-          </p>
-
-        </div>
-
+    <div className="rounded-2xl bg-white/10 px-3 py-2.5 backdrop-blur">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[9px] font-black uppercase tracking-wider text-emerald-100">
+          {label}
+        </p>
+        <span className="text-sm">{icon}</span>
       </div>
-
+      <p className="mt-0.5 text-xl font-black">{value}</p>
     </div>
   );
 }
 
-// ==========================================
-// EMPTY STATE
-// ==========================================
+function InfoTile({ icon, label, value }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+      <div className="flex items-center gap-1.5">
+        <span>{icon}</span>
+        <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+          {label}
+        </span>
+      </div>
+      <p className="mt-1 truncate text-xs font-black text-slate-800">
+        {value}
+      </p>
+    </div>
+  );
+}
 
 function EmptyState() {
   return (
-    <div className="text-center py-14 px-5">
-
-      <div className="text-5xl mb-4">
-        📦
+    <div className="rounded-[28px] border border-slate-200 bg-white px-5 py-14 text-center shadow-sm">
+      <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl bg-emerald-50 p-3">
+        <img
+          src="/logo.png"
+          alt="Farm Fresh Dairy"
+          className="h-full w-full object-contain"
+        />
       </div>
-
-      <h2 className="text-xl sm:text-2xl font-black text-gray-800">
+      <h2 className="mt-5 text-xl font-black text-slate-800 sm:text-2xl">
         No Deliveries Found
       </h2>
-
-      <p className="text-sm text-gray-500 mt-2">
+      <p className="mt-2 text-sm text-slate-500">
         Try changing your search or status filter.
       </p>
-
     </div>
   );
 }
