@@ -1455,37 +1455,6 @@ export async function resumeSubscriptionService(
     previousPausedDays +
     pausedDaysThisPeriod;
 
-  // ==========================================
-  // 5. Extend subscription expiry
-  // ==========================================
-
-  let newEndDate =
-    subscription.end_date;
-
-  if (
-    subscription.end_date &&
-    pausedDaysThisPeriod > 0
-  ) {
-    const endDate = new Date(
-      `${subscription.end_date}T00:00:00+05:30`
-    );
-
-    endDate.setDate(
-      endDate.getDate() +
-        pausedDaysThisPeriod
-    );
-
-    newEndDate = new Intl.DateTimeFormat(
-      "en-CA",
-      {
-        timeZone: "Asia/Kolkata",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }
-    ).format(endDate);
-  }
-
   console.log(
     "Pause From:",
     subscription.pause_from
@@ -1512,17 +1481,16 @@ export async function resumeSubscriptionService(
   );
 
   console.log(
-    "Old End Date:",
+    "End Date remains unchanged:",
     subscription.end_date
   );
 
-  console.log(
-    "New End Date:",
-    newEndDate
-  );
-
   // ==========================================
-  // 6. Resume subscription
+  // 5. Resume subscription
+  // ==========================================
+  // IMPORTANT:
+  // Pausing/resuming must NEVER extend end_date.
+  // Only subscription renewal changes end_date.
   // ==========================================
 
   const {
@@ -1539,9 +1507,6 @@ export async function resumeSubscriptionService(
 
       paused_days:
         totalPausedDays,
-
-      end_date:
-        newEndDate,
 
       updated_at:
         new Date().toISOString(),
@@ -1618,7 +1583,7 @@ export async function autoResumePausedSubscriptionsService() {
       .eq("status", "Paused")
       .not("pause_from", "is", null)
       .not("pause_to", "is", null)
-      .lte("pause_to", today);
+      .lt("pause_to", today);
 
     if (findError) {
       throw findError;
