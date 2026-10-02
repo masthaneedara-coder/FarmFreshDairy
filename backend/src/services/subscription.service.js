@@ -1260,7 +1260,83 @@ export async function pauseSubscriptionService(
   console.log("Pause From:", pauseFrom);
   console.log("Pause To:", pauseTo);
 
-  const result = await supabaseAdmin
+  // ==========================================
+  // Get subscription
+  // ==========================================
+
+  const {
+    data: subscription,
+    error: fetchError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .select(`
+      id,
+      status,
+      is_paused,
+      start_date,
+      end_date
+    `)
+    .eq("id", subscriptionId)
+    .single();
+
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  if (!subscription) {
+    throw new Error("Subscription not found.");
+  }
+
+  // ==========================================
+  // Validate pause dates
+  // ==========================================
+
+  if (!pauseFrom || !pauseTo) {
+    throw new Error(
+      "Pause From and Pause To dates are required."
+    );
+  }
+
+  if (pauseFrom > pauseTo) {
+    throw new Error(
+      "Pause To date cannot be before Pause From date."
+    );
+  }
+
+  // ==========================================
+  // Pause cannot go beyond subscription expiry
+  // ==========================================
+
+  if (
+    subscription.end_date &&
+    pauseTo > subscription.end_date
+  ) {
+    throw new Error(
+      `Pause cannot go beyond subscription expiry date (${subscription.end_date}).`
+    );
+  }
+
+  // ==========================================
+  // Pause cannot start after expiry
+  // ==========================================
+
+  if (
+    subscription.end_date &&
+    pauseFrom > subscription.end_date
+  ) {
+    throw new Error(
+      `Pause cannot start after subscription expiry date (${subscription.end_date}).`
+    );
+  }
+
+  // ==========================================
+  // Update subscription
+  // ==========================================
+
+  const {
+    data: updatedSubscription,
+    error: updateError,
+  } = await supabaseAdmin
     .from("subscriptions")
     .update({
       status: "Paused",
@@ -1273,29 +1349,18 @@ export async function pauseSubscriptionService(
     .select()
     .single();
 
-  if (result.error) {
-    console.error(
-      "Pause Subscription Error:",
-      result.error
-    );
-
-    throw result.error;
-  }
-
-  if (!result.data) {
-    throw new Error(
-      "No subscription was updated."
-    );
+  if (updateError) {
+    throw updateError;
   }
 
   console.log(
     "Subscription successfully paused:",
-    result.data
+    updatedSubscription
   );
 
   console.log("=================================");
 
-  return result.data;
+  return updatedSubscription;
 }
 
 export async function resumeSubscriptionService(
@@ -1508,12 +1573,6 @@ export async function resumeSubscriptionService(
 // Automatically resume subscriptions
 // whose pause period has completed
 // ==========================================
-// ==========================================
-// ==========================================================
-// AUTO RESUME PAUSED SUBSCRIPTIONS
-// Timezone: Asia/Kolkata
-// ==========================================================
-
 export async function autoResumePausedSubscriptionsService() {
   try {
     // ==========================================
@@ -1536,8 +1595,7 @@ export async function autoResumePausedSubscriptionsService() {
     console.log("=================================");
 
     // ==========================================
-    // FIND PAUSED SUBSCRIPTIONS
-    // WHOSE PAUSE PERIOD HAS ENDED
+    // GET PAUSED SUBSCRIPTIONS
     // ==========================================
 
     const {
@@ -1545,26 +1603,31 @@ export async function autoResumePausedSubscriptionsService() {
       error: findError,
     } = await supabaseAdmin
       .from("subscriptions")
-      .select("*")
+      .select(`
+        id,
+        customer_id,
+        status,
+        is_paused,
+        start_date,
+        end_date,
+        pause_from,
+        pause_to,
+        paused_days
+      `)
       .eq("is_paused", true)
       .eq("status", "Paused")
       .not("pause_from", "is", null)
       .not("pause_to", "is", null)
-      .lt("pause_to", today);
+      .lte("pause_to", today);
 
     if (findError) {
       throw findError;
     }
 
-    console.log(
-      "Subscriptions ready to resume:",
-      pausedSubscriptions?.length || 0
-    );
-
     const resumedSubscriptions = [];
 
     // ==========================================
-    // RESUME EACH SUBSCRIPTION
+    // PROCESS EACH PAUSED SUBSCRIPTION
     // ==========================================
 
     for (
@@ -1572,15 +1635,54 @@ export async function autoResumePausedSubscriptionsService() {
       of pausedSubscriptions || []
     ) {
       try {
-        console.log("---------------------------------");
-        console.log(
-          "AUTO RESUMING:",
-          subscription.id
-        );
+        // ========================================
+        // CASE 1
+        // Pause To = Expiry Date
+        //
+        // DO NOT AUTO RESUME
+        // Subscription should expire normally.
+        // ========================================
 
-        // ======================================
-        // PAUSE DATES
-        // ======================================
+        if (
+          subscription.end_date &&
+          subscription.pause_to ===
+            subscription.end_date
+        ) {
+          console.log(
+            "NO AUTO RESUME:",
+            subscription.id,
+            "Pause To:",
+            subscription.pause_to,
+            "Expiry:",
+            subscription.end_date
+          );
+
+          continue;
+        }
+
+        // ========================================
+        // CASE 2
+        // Pause To is BEFORE expiry
+        //
+        // Resume automatically.
+        // ========================================
+
+        if (
+          subscription.end_date &&
+          subscription.pause_to >=
+            subscription.end_date
+        ) {
+          console.log(
+            "NO AUTO RESUME - PAUSE REACHES EXPIRY:",
+            subscription.id
+          );
+
+          continue;
+        }
+
+        // ========================================
+        // Calculate paused days
+        // ========================================
 
         const pauseFrom = new Date(
           `${subscription.pause_from}T00:00:00+05:30`
@@ -1589,13 +1691,6 @@ export async function autoResumePausedSubscriptionsService() {
         const pauseTo = new Date(
           `${subscription.pause_to}T00:00:00+05:30`
         );
-
-        // ======================================
-        // Calculate paused days
-        //
-        // Example:
-        // Oct 2 → Oct 3 = 2 paused days
-        // ======================================
 
         const pausedDaysThisPeriod =
           Math.floor(
@@ -1615,76 +1710,34 @@ export async function autoResumePausedSubscriptionsService() {
           previousPausedDays +
           pausedDaysThisPeriod;
 
-        // ======================================
-        // EXTEND END DATE
-        // ======================================
-
-        let newEndDate =
-          subscription.end_date;
-
-        if (
-          subscription.end_date &&
-          pausedDaysThisPeriod > 0
-        ) {
-          const endDate = new Date(
-            `${subscription.end_date}T00:00:00+05:30`
-          );
-
-          endDate.setDate(
-            endDate.getDate() +
-              pausedDaysThisPeriod
-          );
-
-          newEndDate =
-            new Intl.DateTimeFormat(
-              "en-CA",
-              {
-                timeZone: "Asia/Kolkata",
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-              }
-            ).format(endDate);
-        }
-
+        console.log("---------------------------------");
+        console.log(
+          "AUTO RESUMING:",
+          subscription.id
+        );
         console.log(
           "Pause From:",
           subscription.pause_from
         );
-
         console.log(
           "Pause To:",
           subscription.pause_to
         );
-
+        console.log(
+          "Expiry:",
+          subscription.end_date
+        );
         console.log(
           "Paused Days:",
           pausedDaysThisPeriod
         );
 
-        console.log(
-          "Previous Paused Days:",
-          previousPausedDays
-        );
-
-        console.log(
-          "Total Paused Days:",
-          totalPausedDays
-        );
-
-        console.log(
-          "Old End Date:",
-          subscription.end_date
-        );
-
-        console.log(
-          "New End Date:",
-          newEndDate
-        );
-
-        // ======================================
-        // RESUME SUBSCRIPTION
-        // ======================================
+        // ========================================
+        // AUTO RESUME
+        //
+        // IMPORTANT:
+        // DO NOT change end_date.
+        // ========================================
 
         const {
           data: resumedSubscription,
@@ -1694,16 +1747,9 @@ export async function autoResumePausedSubscriptionsService() {
           .update({
             status: "Active",
             is_paused: false,
-
             pause_from: null,
             pause_to: null,
-
-            paused_days:
-              totalPausedDays,
-
-            end_date:
-              newEndDate,
-
+            paused_days: totalPausedDays,
             updated_at:
               new Date().toISOString(),
           })
@@ -1727,16 +1773,13 @@ export async function autoResumePausedSubscriptionsService() {
         );
 
         console.log(
-          `✅ AUTO RESUMED: ${subscription.id}`
-        );
-
-        console.log(
-          `✅ NEW END DATE: ${newEndDate}`
+          "✅ AUTO RESUMED:",
+          subscription.id
         );
 
       } catch (error) {
         console.error(
-          `❌ Failed to auto resume ${subscription.id}:`,
+          `❌ Failed to resume ${subscription.id}:`,
           error.message
         );
       }
@@ -1759,3 +1802,4 @@ export async function autoResumePausedSubscriptionsService() {
     throw error;
   }
 }
+
