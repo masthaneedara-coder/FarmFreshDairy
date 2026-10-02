@@ -876,27 +876,38 @@ export async function renewUsingLink(
     // 7. Mark link as used
     // --------------------------------------------------------
 
-   const usedLink =
+   // --------------------------------------------------------
+// 7. EXPIRE RENEWAL LINK AFTER SUCCESSFUL RENEWAL
+// --------------------------------------------------------
+
+const usedLink =
   await markSubscriptionRenewalLinkUsedService(
     token
-      );
+  );
 
-    if (!usedLink) {
-      throw new Error(
-        "Subscription was renewed, but the renewal link could not be expired."
-      );
-    }
-    return res.json({
-      success: true,
+// Renewal succeeded, but token could not be expired.
+if (!usedLink) {
+  console.error(
+    "WARNING: Subscription renewed successfully, but renewal link could not be expired."
+  );
+}
 
-      message:
-        "Subscription renewed successfully.",
+// --------------------------------------------------------
+// 8. SUCCESS
+// --------------------------------------------------------
 
-      subscription: data,
+return res.json({
+  success: true,
 
-      billing,
+  message:
+    "Subscription renewed successfully. This renewal link can no longer be used.",
 
-    });
+  subscription: data,
+
+  billing,
+
+  linkExpired: true,
+});
 
   } catch (err) {
     console.error(
