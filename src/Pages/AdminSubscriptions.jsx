@@ -6,6 +6,9 @@ import {
   updateSubscriptionStatus,
   getDeliverySummary
 } from "../services/adminSubscriptionService";
+import {
+  createSubscriptionRenewalLink,
+} from "../config/api";
 
 
 export default function AdminSubscriptions() {
@@ -17,8 +20,11 @@ export default function AdminSubscriptions() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
+  // Accordion: keep one customer expanded at a time.
+  const [expandedSubscriptionId, setExpandedSubscriptionId] = useState(null);
+
   // Performance: only render/load summaries for the visible page.
-  const PAGE_SIZE = 8;
+  const PAGE_SIZE = 12;
   const [currentPage, setCurrentPage] = useState(1);
 
   async function loadSubscriptions() {
@@ -332,109 +338,38 @@ const stats = useMemo(() => {
     const eligible = expiringSoonSubscriptions.filter((sub) =>
       String(sub.phone || sub.mobile || "").replace(/\D/g, "").length >= 10
     );
-
     if (!eligible.length) {
       alert("No customers with valid phone numbers are expiring within the next 5 days.");
       return;
     }
-
-    if (!window.confirm(
-      `Open WhatsApp renewal reminders for ${eligible.length} customer(s)? You must press Send in each WhatsApp chat.`
-    )) return;
-
+    if (!window.confirm(`Open WhatsApp reminders for ${eligible.length} customer(s)? You must press Send in each WhatsApp chat.`)) return;
     eligible.forEach((sub, index) => {
       const rawPhone = String(sub.phone || sub.mobile || "").replace(/\D/g, "");
       const phone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
       const name = sub.customerName || sub.name || "Customer";
       const expiry = formatDate(sub.expireDate || sub.endDate);
       const days = getRemainingDays(sub.expireDate || sub.endDate);
-
-      const message = `🥛 Subscription Renewal Reminder – FarmFreshDairy
-
-Dear ${name},
-
-Greetings from FarmFreshDairy! 🌿
-
-This is a friendly reminder that your milk subscription is scheduled to expire ${days === 0 ? "today" : `in ${days} day(s)`}, on ${expiry}.
-
-To continue receiving your fresh buffalo milk without interruption, kindly renew your subscription before the expiry date.
-
-👉 Renew Your Subscription:
-https://farm-fresh-dairy.vercel.app/auth
-
-Thank you for choosing FarmFreshDairy. We truly appreciate your continued trust and support. ❤️
-
-Warm regards,
-FarmFreshDairy Team
-Freshness Delivered to Your Doorstep 🥛`;
-
-      window.setTimeout(
-        () => window.open(
-          `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
-          "_blank",
-          "noopener,noreferrer"
-        ),
-        index * 350
-      );
+      const message = `Dear ${name},\n\nThis is a friendly reminder that your FarmFreshDairy subscription will expire ${days === 0 ? "today" : `in ${days} day(s)`}, on ${expiry}.\n\nKindly renew your subscription to ensure uninterrupted fresh milk delivery.\n\nThank you for choosing FarmFreshDairy! 🥛\n\nBest regards,\nFarmFreshDairy Team`;
+      window.setTimeout(() => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer"), index * 350);
     });
   };
 
   const openWhatsAppReminder = (sub, expired = false) => {
     const rawPhone = String(sub.phone || sub.mobile || "").replace(/\D/g, "");
-
     if (!rawPhone) {
       alert("Customer phone number is not available.");
       return;
     }
 
+    // WhatsApp requires country code. Add India's 91 when a 10-digit number is stored.
     const phone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
     const customerName = sub.customerName || sub.name || "Customer";
     const expiry = formatDate(sub.expireDate || sub.endDate);
-    const days = getRemainingDays(sub.expireDate || sub.endDate);
-
     const message = expired
-      ? `🥛 Subscription Renewal Reminder – FarmFreshDairy
+      ? `Dear ${customerName},\n\nThis is a friendly reminder that your FarmFreshDairy subscription expired on ${expiry}.\n\nKindly renew your subscription to resume your fresh milk deliveries.\n\nThank you for choosing FarmFreshDairy! 🥛\n\nBest regards,\nFarmFreshDairy Team`
+      : `Dear ${customerName},\n\nThis is a friendly reminder that your FarmFreshDairy subscription will expire in ${getRemainingDays(sub.expireDate || sub.endDate)} days, on ${expiry}.\n\nKindly renew your subscription to ensure uninterrupted fresh milk delivery.\n\nThank you for choosing FarmFreshDairy! 🥛\n\nBest regards,\nFarmFreshDairy Team`;
 
-Dear ${customerName},
-
-Greetings from FarmFreshDairy! 🌿
-
-Your milk subscription expired on ${expiry}.
-
-To continue receiving your fresh buffalo milk, kindly renew your subscription today.
-
-👉 Renew Your Subscription:
-https://farm-fresh-dairy.vercel.app/auth
-
-Thank you for choosing FarmFreshDairy. We truly appreciate your continued trust and support. ❤️
-
-Warm regards,
-FarmFreshDairy Team
-Freshness Delivered to Your Doorstep 🥛`
-      : `🥛 Subscription Renewal Reminder – FarmFreshDairy
-
-Dear ${customerName},
-
-Greetings from FarmFreshDairy! 🌿
-
-This is a friendly reminder that your milk subscription is scheduled to expire ${days === 0 ? "today" : `in ${days} day(s)`}, on ${expiry}.
-
-To continue receiving your fresh buffalo milk without interruption, kindly renew your subscription before the expiry date.
-
-👉 Renew Your Subscription:
-https://farm-fresh-dairy.vercel.app/auth
-
-Thank you for choosing FarmFreshDairy. We truly appreciate your continued trust and support. ❤️
-
-Warm regards,
-FarmFreshDairy Team
-Freshness Delivered to Your Doorstep 🥛`;
-
-    window.open(
-      `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
-      "_blank",
-      "noopener,noreferrer"
-    );
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   };
 
   const isExpired = (expireDate) => {
@@ -448,9 +383,250 @@ Freshness Delivered to Your Doorstep 🥛`;
 
     return today > expiry;
   };
+  const handleSendRenewalLink = async (sub) => {
+  try {
+    const rawPhone = String(
+      sub.phone || ""
+    ).replace(/\D/g, "");
+
+    if (!rawPhone) {
+      alert(
+        "Customer phone number is not available."
+      );
+      return;
+    }
+
+    const result =
+      await createSubscriptionRenewalLink(
+        sub.subscriptionId || sub.id
+      );
+
+    if (!result?.renewalUrl) {
+      throw new Error(
+        "Renewal link was not created."
+      );
+    }
+
+    const phone =
+      rawPhone.length === 10
+        ? `91${rawPhone}`
+        : rawPhone;
+
+    const customerName =
+      sub.customerName ||
+      sub.name ||
+      "Customer";
+
+    const amount = Number(
+      sub.monthlyAmount ||
+      sub.totalAmount ||
+      sub.total_amount ||
+      0
+    );
+
+    const message =
+      `Dear ${customerName},\n\n` +
+      `Your FarmFreshDairy subscription is ready for renewal. 🥛\n\n` +
+      `Renewal Amount: ₹${amount.toLocaleString("en-IN")}\n\n` +
+      `👉 Renew your subscription here:\n` +
+      `${result.renewalUrl}\n\n` +
+      `Please open the link and click "Renew Subscription".\n\n` +
+      `Thank you for choosing FarmFreshDairy! 🥛\n\n` +
+      `FarmFreshDairy Team`;
+
+    window.open(
+      `https://wa.me/${phone}?text=${encodeURIComponent(
+        message
+      )}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+
+  } catch (err) {
+    console.error(
+      "Renewal link error:",
+      err
+    );
+
+    alert(
+      err?.message ||
+        "Unable to create renewal link."
+    );
+  }
+};
 
   return (
     <AdminLayout title="Subscriptions">
+      <style>{`
+        @keyframes subscriptionCardIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .subscription-admin-card {
+          animation: subscriptionCardIn .45s ease both;
+        }
+
+        @media (max-width: 640px) {
+          .subscription-admin-card {
+            border-radius: 18px;
+          }
+
+          .subscription-admin-card button {
+            min-height: 40px;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .subscription-admin-card {
+            border-radius: 16px;
+          }
+        }
+
+        @keyframes detailPop {
+          from { opacity: 0; transform: translateY(-8px) scale(.985); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @keyframes softFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-2px); }
+        }
+
+        .subscription-detail-shell {
+          background:
+            radial-gradient(circle at 100% 0%, rgba(16,185,129,.07), transparent 30%),
+            linear-gradient(180deg, #f8fffb 0%, #ffffff 38%, #f8fafc 100%);
+          border-top: 1px solid rgba(148,163,184,.12);
+        }
+
+        .subscription-detail-card {
+          border-radius: 16px;
+          border: 1px solid rgba(226,232,240,.9);
+          background: rgba(255,255,255,.92);
+          box-shadow: 0 5px 18px rgba(15,23,42,.045);
+          transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+        }
+
+        .subscription-detail-card:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 9px 24px rgba(15,23,42,.07);
+          border-color: rgba(16,185,129,.2);
+        }
+
+        .subscription-section-heading {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 9px;
+        }
+
+        .subscription-section-kicker {
+          font-size: 9px;
+          line-height: 1;
+          font-weight: 950;
+          letter-spacing: .12em;
+          text-transform: uppercase;
+          color: #94a3b8;
+        }
+
+        .subscription-section-title {
+          margin-top: 4px;
+          font-size: 16px;
+          line-height: 1.1;
+          font-weight: 950;
+          letter-spacing: -.025em;
+        }
+
+        .subscription-mobile-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .subscription-action {
+          min-height: 42px;
+          border-radius: 12px !important;
+          transition: transform .2s ease, box-shadow .2s ease, filter .2s ease !important;
+        }
+
+        .subscription-action:hover {
+          transform: translateY(-2px);
+          filter: saturate(1.05);
+        }
+
+        .subscription-action:active {
+          transform: scale(.98);
+        }
+
+        .subscription-detail-card .text-2xl {
+          line-height: 1.05;
+        }
+
+        @media (max-width: 640px) {
+          .subscription-detail-shell {
+            padding: 10px !important;
+          }
+
+          .subscription-detail-card {
+            border-radius: 14px;
+            box-shadow: 0 4px 14px rgba(15,23,42,.04);
+          }
+
+          .subscription-section-title {
+            font-size: 14px;
+          }
+
+          .subscription-section-kicker {
+            font-size: 8px;
+          }
+
+          .subscription-mobile-grid {
+            gap: 6px;
+          }
+
+          .subscription-action {
+            min-height: 40px;
+            font-size: 11px !important;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .subscription-mobile-grid {
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+          }
+
+          .subscription-action {
+            min-height: 38px;
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+          }
+        }
+
+        .subscription-admin-card .grid-rows-\[1fr\] > div {
+          animation: detailPop .28s ease-out both;
+        }
+
+        @media (max-width: 640px) {
+          .subscription-admin-card .grid {
+            gap: 0.5rem;
+          }
+
+          .subscription-admin-card p {
+            line-height: 1.3;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .subscription-admin-card,
+          .subscription-admin-card .grid-rows-\[1fr\] > div {
+            animation: none;
+          }
+        }
+      `}</style>
+
       <div className="space-y-5 sm:space-y-6">
 
         {/* HERO */}
@@ -507,8 +683,8 @@ Freshness Delivered to Your Doorstep 🥛`;
           <div className="flex-1">
             <p className="font-black text-green-800">FarmFreshDairy Renewal Reminders</p>
             <p className="text-sm text-slate-600 mt-1">
-              Send WhatsApp renewal reminders to active customers whose subscriptions expire within the next 5 days.
-              The message includes the FarmFreshDairy renewal portal link. The FarmFreshDairy logo is displayed in the admin panel; standard WhatsApp click-to-chat opens a text message and does not attach an image automatically.
+              Send WhatsApp reminders to active customers whose subscriptions expire within the next 5 days.
+              The logo is displayed here in the admin panel; the standard WhatsApp click-to-chat link sends text only.
             </p>
           </div>
           <span className="inline-flex w-fit rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700 border border-green-100">Brand logo</span>
@@ -591,7 +767,7 @@ Freshness Delivered to Your Doorstep 🥛`;
             </p>
           </div>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-3 sm:space-y-4">
             {visibleSubscriptions.map((sub, index) => {
               const expireDate = sub.expireDate || sub.endDate;
               const remainingDays = getRemainingDays(expireDate);
@@ -651,14 +827,14 @@ Freshness Delivered to Your Doorstep 🥛`;
               return (
                 <div
                   key={subscriptionId}
-                  className="bg-white rounded-[28px] shadow-md border border-slate-100 overflow-hidden hover:shadow-xl transition"
+                  className="subscription-admin-card bg-white rounded-[22px] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all duration-300"
                 >
                   {/* CARD HEADER */}
-                  <div className="p-4 sm:p-5 bg-gradient-to-r from-green-50 via-white to-emerald-50 border-b border-slate-100">
+                  <div className="p-3 sm:p-4 bg-gradient-to-r from-green-50 via-white to-emerald-50 border-b border-slate-100">
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-xl sm:text-2xl font-black text-green-700 break-words">
+                          <h2 className="text-lg sm:text-xl font-black text-green-700 break-words">
                             {sub.customerName || sub.name || "Customer"}
                           </h2>
 
@@ -672,26 +848,140 @@ Freshness Delivered to Your Doorstep 🥛`;
                           </span>
                         </div>
 
-                        <p className="text-xs sm:text-sm text-slate-500 mt-2 break-all">
+                        <p className="text-[10px] sm:text-xs text-slate-500 mt-1.5 break-all">
                           Subscription ID: {subscriptionId}
                         </p>
+
+                        {(
+                          sub.is_paused === true ||
+                          displayStatus === "Paused"
+                        ) && (
+                          <div className="mt-2 inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-yellow-200 bg-yellow-50 px-2.5 py-1.5 text-[10px] sm:text-xs font-bold text-yellow-800">
+                            <span className="text-base">⏸️</span>
+                            <span>Paused:</span>
+                            <span className="font-black">
+                              {formatDate(
+                                sub.pause_from ||
+                                sub.pauseFrom ||
+                                sub.pauseStart ||
+                                sub.pausedFrom
+                              )}
+                            </span>
+                            <span>→</span>
+                            <span className="font-black">
+                              {formatDate(
+                                sub.pause_to ||
+                                sub.pauseTo ||
+                                sub.pauseEnd ||
+                                sub.pausedTo
+                              )}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="shrink-0 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 text-white px-5 py-4 shadow-lg">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white px-3.5 py-2.5 shadow-md">
+
                         <p className="text-[11px] font-bold text-white/75 uppercase tracking-wide">
                           Monthly Amount
                         </p>
-                        <p className="text-2xl font-black mt-1">
-                          {formatMoney(monthlyAmount)}
-                        </p>
+                          <p className="text-lg sm:text-xl font-black mt-0.5">
+                            {formatMoney(monthlyAmount)}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedSubscriptionId((current) =>
+                              current === subscriptionId
+                                ? null
+                                : subscriptionId
+                            )
+                          }
+                          className="group inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-green-300 hover:bg-green-50 hover:text-green-700 active:scale-95"
+                          aria-expanded={
+                            expandedSubscriptionId === subscriptionId
+                          }
+                          aria-label={
+                            expandedSubscriptionId === subscriptionId
+                              ? "Collapse subscription details"
+                              : "Expand subscription details"
+                          }
+                        >
+                          <span
+                            className={`text-lg transition-transform duration-300 ${
+                              expandedSubscriptionId === subscriptionId
+                                ? "rotate-180"
+                                : "rotate-0"
+                            }`}
+                          >
+                           ⌄
+                          </span>
+                        </button>
                       </div>
                     </div>
                   </div>
 
-                  <div className="p-4 sm:p-5 space-y-4">
+                  <div
+                    className={`flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-4 py-2.5 sm:px-5 ${
+                      expandedSubscriptionId === subscriptionId
+                        ? "border-b"
+                        : ""
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-xs text-slate-500">
+                      <span className="font-bold">
+                        {sub.product || "Milk Subscription"}
+                      </span>
+                      <span>•</span>
+                      <span>{sub.phone || sub.mobile || "No phone"}</span>
+                      {(sub.is_paused === true ||
+                        displayStatus === "Paused") && (
+                        <>
+                          <span>•</span>
+                          <span className="font-black text-yellow-700">
+                            ⏸ Paused
+                          </span>
+                          <span>•</span>
+                          <span className="font-bold text-yellow-700">
+                            {formatDate(
+                              sub.pause_from ||
+                              sub.pauseFrom ||
+                              sub.pauseStart ||
+                              sub.pausedFrom
+                            )}
+                            {" → "}
+                            {formatDate(
+                              sub.pause_to ||
+                              sub.pauseTo ||
+                              sub.pauseEnd ||
+                              sub.pausedTo
+                            )}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    <span className="hidden sm:inline text-[10px] font-black uppercase tracking-wide text-slate-400">
+                      {expandedSubscriptionId === subscriptionId
+                        ? "Hide details"
+                        : "View details"}
+                    </span>
+                  </div>
+
+                  <div
+                    className={`grid transition-all duration-500 ease-out ${
+                      expandedSubscriptionId === subscriptionId
+                        ? "grid-rows-[1fr] opacity-100"
+                        : "grid-rows-[0fr] opacity-0"
+                    }`}
+                  >
+                    <div className="subscription-detail-shell min-h-0 overflow-hidden p-2.5 sm:p-3 space-y-2.5">
 
                     {/* CUSTOMER / PLAN */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="subscription-mobile-grid lg:grid-cols-4">
                       <MiniInfo label="Phone" value={sub.phone || sub.mobile || "-"} />
                       <MiniInfo label="Product" value={sub.product || "-"} />
                       <MiniInfo label="Quantity" value={sub.qty || "-"} />
@@ -699,7 +989,7 @@ Freshness Delivered to Your Doorstep 🥛`;
                     </div>
 
                     {/* ADDRESS */}
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="subscription-detail-card rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
                         Delivery Address
                       </p>
@@ -723,7 +1013,7 @@ Freshness Delivered to Your Doorstep 🥛`;
 
                     {/* VALIDITY */}
                     <div
-                      className={`rounded-2xl border p-4 ${
+                      className={`rounded-xl border p-3 ${
                         expired
                           ? "border-red-200 bg-red-50"
                           : remainingDays !== null && remainingDays <= 7
@@ -795,6 +1085,7 @@ Freshness Delivered to Your Doorstep 🥛`;
                         >
                           💬 Send Expired Message on WhatsApp
                         </button>
+                        
                       ) : remainingDays !== null && remainingDays >= 0 && remainingDays <= 5 && getDisplayStatus(sub) === "Active" ? (
                         <button
                           type="button"
@@ -804,16 +1095,39 @@ Freshness Delivered to Your Doorstep 🥛`;
                           💬 Send 5-Day Renewal Reminder
                         </button>
                       ) : null}
+                      <button
+                          type="button"
+                          onClick={() =>
+                            handleSendRenewalLink(sub)
+                          }
+                          className="
+                            mt-3
+                            w-full
+                            sm:w-auto
+                            rounded-2xl
+                            bg-green-600
+                            px-5
+                            py-3
+                            font-black
+                            text-white
+                            shadow-md
+                            transition
+                            hover:bg-green-700
+                            active:scale-95
+                          "
+                        >
+                          🔗 Send Renewal Link on WhatsApp
+                        </button>
                     </div>
 
                     {/* PAYMENT */}
-                    <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4 sm:p-5">
+                    <div className="subscription-detail-card rounded-2xl border border-blue-100 bg-blue-50 p-3 sm:p-3.5">
                       <div className="flex items-center justify-between gap-3 mb-4">
                         <div>
                           <p className="text-[11px] font-black uppercase tracking-wide text-blue-500">
                             Billing
                           </p>
-                          <h3 className="text-lg sm:text-xl font-black text-blue-700">
+                          <h3 className="text-base sm:text-lg font-black text-blue-700">
                             💳 Payment Information
                           </h3>
                         </div>
@@ -829,7 +1143,7 @@ Freshness Delivered to Your Doorstep 🥛`;
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="subscription-mobile-grid lg:grid-cols-4">
                         <MiniInfo label="Payment Method" value={paymentMethod} />
                         <MiniInfo
                           label="Amount"
@@ -850,8 +1164,9 @@ Freshness Delivered to Your Doorstep 🥛`;
                     </div>
 
                     {/* PAUSE INFORMATION */}
-                    {sub.is_paused === true && (
-                      <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4">
+                    {(sub.is_paused === true ||
+                      displayStatus === "Paused") && (
+                      <div className="subscription-detail-card rounded-xl border border-yellow-200 bg-yellow-50 p-3">
                         <div className="flex items-start gap-3">
                           <span className="text-xl">⏸️</span>
                           <div>
@@ -874,19 +1189,19 @@ Freshness Delivered to Your Doorstep 🥛`;
                     )}
 
                     {/* DELIVERY SUMMARY */}
-                    <div className="rounded-3xl border border-indigo-100 bg-indigo-50 p-4 sm:p-5">
+                    <div className="subscription-detail-card rounded-2xl border border-indigo-100 bg-indigo-50 p-3 sm:p-3.5">
                       <div className="flex items-center justify-between mb-4">
                         <div>
                           <p className="text-[11px] font-black uppercase tracking-wide text-indigo-500">
                             Delivery Tracking
                           </p>
-                          <h3 className="text-lg sm:text-xl font-black text-indigo-700">
+                          <h3 className="text-base sm:text-lg font-black text-indigo-700">
                             🚚 Delivery Summary
                           </h3>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="subscription-mobile-grid sm:grid-cols-4">
                         <SummaryBox label="Delivered" value={summary.delivered} icon="✅" />
                         <SummaryBox label="Out for Delivery" value={summary.outForDelivery} icon="🚚" />
                         <SummaryBox label="Pending" value={summary.pending} icon="⏳" />
@@ -895,13 +1210,13 @@ Freshness Delivered to Your Doorstep 🥛`;
                     </div>
 
                     {/* ADMIN ACTIONS */}
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+                    <div className="subscription-detail-card rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-3.5">
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
                             Admin Controls
                           </p>
-                          <h3 className="text-lg sm:text-xl font-black text-slate-800 mt-1">
+                          <h3 className="text-base sm:text-lg font-black text-slate-800 mt-0.5">
                             Subscription Status
                           </h3>
                         </div>
@@ -943,14 +1258,14 @@ Freshness Delivered to Your Doorstep 🥛`;
                         </button>
                       </div>
                     </div>
-
+                  </div>
                   </div>
                 </div>
               );
             })}
 
           {totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white rounded-3xl shadow-md border border-slate-100 p-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 bg-white rounded-2xl shadow-sm border border-slate-100 p-3">
               <p className="text-sm font-semibold text-slate-500">
                 Showing{" "}
                 <span className="font-black text-slate-700">
@@ -1011,12 +1326,12 @@ Freshness Delivered to Your Doorstep 🥛`;
 
 function MiniInfo({ label, value, breakAll = false }) {
   return (
-    <div className="rounded-2xl bg-white border border-slate-200 p-3 sm:p-4 min-w-0">
-      <p className="text-[10px] sm:text-xs font-black uppercase tracking-wide text-slate-400">
+    <div className="rounded-xl bg-white border border-slate-200 p-2.5 sm:p-3 min-w-0 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
+      <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-400 truncate">
         {label}
       </p>
       <p
-        className={`text-sm sm:text-base font-black text-slate-800 mt-1 ${
+        className={`text-xs sm:text-sm font-black text-slate-800 mt-0.5 leading-tight ${
           breakAll ? "break-all" : "break-words"
         }`}
       >
@@ -1028,12 +1343,12 @@ function MiniInfo({ label, value, breakAll = false }) {
 
 function SummaryBox({ label, value, icon }) {
   return (
-    <div className="rounded-2xl bg-white border border-indigo-100 p-3 sm:p-4 text-center">
-      <div className="text-lg sm:text-xl">{icon}</div>
-      <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-1">
+    <div className="rounded-xl bg-white border border-indigo-100 p-2.5 sm:p-3 text-center shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
+      <div className="text-base sm:text-lg">{icon}</div>
+      <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-0.5 truncate">
         {label}
       </p>
-      <p className="text-xl sm:text-2xl font-black text-slate-800 mt-1">
+      <p className="text-lg sm:text-xl font-black text-slate-800 mt-0.5">
         {value ?? 0}
       </p>
     </div>

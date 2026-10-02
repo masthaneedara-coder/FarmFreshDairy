@@ -3,7 +3,7 @@ import AdminLayout from "../Components/AdminLayout";
 import { getAllCustomers } from "../services/adminCustomerService";
 import { useNavigate } from "react-router-dom";
 
-const CUSTOMERS_PER_PAGE = 10;
+const CUSTOMERS_PER_PAGE = 12;
 
 function getCustomerSubscriptionStatus(customer) {
   if (Number(customer.pausedSubscriptions || 0) > 0) return "Paused";
@@ -120,6 +120,7 @@ export default function AdminCustomers() {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
+  const [expandedCustomerId, setExpandedCustomerId] = useState(null);
 
   const [pagination, setPagination] = useState({
     page: 1,
@@ -293,6 +294,15 @@ export default function AdminCustomers() {
           animation: customersSpin .8s linear infinite;
         }
 
+        .customer-expand-shell { background: radial-gradient(circle at 100% 0%, rgba(16,185,129,.06), transparent 30%), linear-gradient(180deg,#fbfffd 0%,#fff 55%,#f8fafc 100%); border-top:1px solid rgba(226,232,240,.65); }
+        .customer-detail-card { border:1px solid rgba(226,232,240,.9); border-radius:14px; background:rgba(255,255,255,.94); box-shadow:0 4px 16px rgba(15,23,42,.04); transition:transform .25s ease,box-shadow .25s ease,border-color .25s ease; }
+        .customer-detail-card:hover { transform:translateY(-1px); box-shadow:0 8px 22px rgba(15,23,42,.065); border-color:rgba(16,185,129,.18); }
+        .customer-expand-button { transition:transform .2s ease,box-shadow .2s ease,background .2s ease; }
+        .customer-expand-button:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(15,23,42,.08); }
+        .customer-expand-button:active { transform:scale(.96); }
+        @keyframes customerDetailIn { from { opacity:0; transform:translateY(-7px) scale(.99); } to { opacity:1; transform:translateY(0) scale(1); } }
+        .customer-detail-content { animation:customerDetailIn .3s ease-out both; }
+        @media (max-width:640px) { .customer-expand-shell { padding:9px !important; } .customer-detail-card { border-radius:12px; } }
         @media (prefers-reduced-motion: reduce) {
           .customers-page,
           .customers-hero,
@@ -492,173 +502,91 @@ export default function AdminCustomers() {
                   ? "bg-orange-50 border-orange-200 text-orange-700"
                   : "bg-slate-50 border-slate-200 text-slate-600";
 
+              const customerKey = customer.id || `${customer.phone}-${index}`;
+              const isExpanded = expandedCustomerId === customerKey;
+
               return (
                 <article
-                  key={customer.id || `${customer.phone}-${index}`}
-                  className="customer-card group rounded-[28px] border border-slate-100 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-emerald-100 hover:shadow-xl sm:p-5"
-                  style={{ animationDelay: `${index * 70}ms` }}
+                  key={customerKey}
+                  className="customer-card group overflow-hidden rounded-[22px] border border-slate-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-100 hover:shadow-lg"
+                  style={{ animationDelay: `${index * 55}ms` }}
                 >
-                  {/* HEADER */}
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-100 to-green-200 text-lg font-black text-emerald-700 shadow-inner sm:h-16 sm:w-16 sm:text-xl">
+                  <div className="bg-gradient-to-r from-emerald-50 via-white to-green-50 p-3 sm:p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-100 to-green-200 text-sm font-black text-emerald-700 shadow-inner sm:h-12 sm:w-12">
                         {getInitials(customer.name)}
                       </div>
-
-                      <div className="min-w-0">
-                        <h2 className="truncate text-lg font-black text-slate-900 sm:text-xl">
-                          {customer.name || "Customer"}
-                        </h2>
-
-                        <p className="mt-1 text-sm font-medium text-slate-500">
-                          📱 {customer.phone || "-"}
-                        </p>
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-black ${statusClasses}`}
-                          >
-                            <span
-                              className={`customer-status-dot h-2 w-2 rounded-full ${
-                                subscriptionStatus === "Active"
-                                  ? "bg-emerald-500"
-                                  : subscriptionStatus === "Paused"
-                                  ? "bg-orange-500"
-                                  : "bg-slate-400"
-                              }`}
-                            />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <h2 className="max-w-full truncate text-base font-black text-slate-900 sm:text-lg">{customer.name || "Customer"}</h2>
+                          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[9px] font-black sm:text-[10px] ${statusClasses}`}>
+                            <span className={`customer-status-dot h-1.5 w-1.5 rounded-full ${subscriptionStatus === "Active" ? "bg-emerald-500" : subscriptionStatus === "Paused" ? "bg-orange-500" : "bg-slate-400"}`} />
                             {subscriptionStatus}
                           </span>
-
-                          {Number(customer.totalSubscriptions || 0) > 0 && (
-                            <span className="rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-black text-purple-700">
-                              🥛 Subscriber
-                            </span>
-                          )}
-
-                          {Number(customer.totalOrders || 0) > 0 && (
-                            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">
-                              📦 Customer
-                            </span>
-                          )}
+                        </div>
+                        <p className="mt-0.5 truncate text-[10px] font-medium text-slate-500 sm:text-xs">📱 {customer.phone || "-"}</p>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {Number(customer.totalSubscriptions || 0) > 0 && <span className="rounded-full border border-purple-200 bg-purple-50 px-2 py-1 text-[9px] font-black text-purple-700">🥛 {customer.totalSubscriptions} Plan{Number(customer.totalSubscriptions) === 1 ? "" : "s"}</span>}
+                          {Number(customer.totalOrders || 0) > 0 && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[9px] font-black text-blue-700">📦 {customer.totalOrders} Orders</span>}
+                          {subscriptionStatus === "Paused" && customer.latestSubscription && <span className="max-w-full rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-[9px] font-black text-orange-700">⏸ {formatDate(customer.latestSubscription.pause_from)} → {formatDate(customer.latestSubscription.pause_to)}</span>}
                         </div>
                       </div>
+                      <div className="hidden shrink-0 rounded-xl bg-gradient-to-br from-emerald-600 to-green-700 px-3 py-2.5 text-white shadow-md sm:block">
+                        <p className="text-[8px] font-bold uppercase tracking-wider text-white/70">Total Spent</p>
+                        <p className="mt-0.5 text-base font-black">{formatMoney(customer.totalSpent)}</p>
+                      </div>
+                      <button type="button" onClick={() => setExpandedCustomerId((current) => current === customerKey ? null : customerKey)} aria-expanded={isExpanded} aria-label={isExpanded ? "Hide customer details" : "Show customer details"} className="customer-expand-button flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700">
+                        <span className={`text-base transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`}>⌄</span>
+                      </button>
                     </div>
-
-                    <div className="w-full shrink-0 rounded-2xl bg-gradient-to-br from-emerald-600 to-green-700 px-4 py-3 text-white shadow-lg sm:w-auto sm:min-w-[145px]">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-white/70">
-                        Total Spent
-                      </p>
-                      <p className="mt-1 text-xl font-black sm:text-2xl">
-                        {formatMoney(customer.totalSpent)}
-                      </p>
+                    <div className="mt-2 flex items-center justify-between gap-2 border-t border-emerald-100/70 pt-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[9px] font-bold text-slate-500 sm:text-[10px]">
+                        <span>📍 {customer.area || "Area not set"}</span><span>•</span><span>{formatMoney(customer.totalSpent)} spent</span>
+                      </div>
+                      <span className="shrink-0 text-[8px] font-black uppercase tracking-wide text-slate-400">{isExpanded ? "Hide details" : "View details"}</span>
                     </div>
                   </div>
 
-                  {/* SUMMARY */}
-                  <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-                    <InfoBox label="Area" value={customer.area || "-"} icon="📍" />
-                    <InfoBox
-                      label="Orders"
-                      value={customer.totalOrders || 0}
-                      icon="📦"
-                    />
-                    <InfoBox
-                      label="Plans"
-                      value={customer.totalSubscriptions || 0}
-                      icon="🥛"
-                    />
-                    <InfoBox
-                      label="Active"
-                      value={customer.activeSubscriptions || 0}
-                      icon="✅"
-                    />
-                    <InfoBox
-                      label="Paused"
-                      value={customer.pausedSubscriptions || 0}
-                      icon="⏸️"
-                    />
-                  </div>
-
-                  {/* SUBSCRIPTION */}
-                  {customer.latestSubscription && (
-                    <div
-                      className={`mt-4 rounded-2xl border p-4 ${
-                        subscriptionStatus === "Paused"
-                          ? "border-orange-200 bg-orange-50"
-                          : subscriptionStatus === "Active"
-                          ? "border-emerald-200 bg-emerald-50"
-                          : "border-slate-200 bg-slate-50"
-                      }`}
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                            Current Subscription
-                          </p>
-
-                          <p className="mt-1 font-black text-slate-900">
-                            {subscriptionStatus === "Paused"
-                              ? "⏸️ Subscription Paused"
-                              : subscriptionStatus === "Active"
-                              ? "🟢 Subscription Active"
-                              : "Subscription Inactive"}
-                          </p>
+                  <div className={`grid transition-all duration-300 ease-out ${isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="customer-detail-content customer-expand-shell space-y-2.5 p-2.5 sm:p-3">
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                          <InfoBox label="Area" value={customer.area || "-"} icon="📍" />
+                          <InfoBox label="Orders" value={customer.totalOrders || 0} icon="📦" />
+                          <InfoBox label="Plans" value={customer.totalSubscriptions || 0} icon="🥛" />
+                          <InfoBox label="Active" value={customer.activeSubscriptions || 0} icon="✅" />
+                          <InfoBox label="Paused" value={customer.pausedSubscriptions || 0} icon="⏸️" />
                         </div>
 
-                        {subscriptionStatus === "Paused" && (
-                          <p className="text-xs font-bold text-orange-700 sm:text-sm">
-                            {formatDate(customer.latestSubscription.pause_from)}
-                            {" → "}
-                            {formatDate(customer.latestSubscription.pause_to)}
-                          </p>
+                        <div className="customer-detail-card flex items-center justify-between gap-3 bg-gradient-to-r from-emerald-600 to-green-700 p-3 text-white sm:hidden">
+                          <div><p className="text-[9px] font-bold uppercase tracking-wider text-white/70">Total Spent</p><p className="mt-0.5 text-lg font-black">{formatMoney(customer.totalSpent)}</p></div><span className="text-xl">💰</span>
+                        </div>
+
+                        {customer.latestSubscription && (
+                          <div className={`customer-detail-card p-3 ${subscriptionStatus === "Paused" ? "border-orange-200 bg-orange-50" : subscriptionStatus === "Active" ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div><p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Current Subscription</p><p className="mt-1 text-sm font-black text-slate-900 sm:text-base">{subscriptionStatus === "Paused" ? "⏸️ Subscription Paused" : subscriptionStatus === "Active" ? "🟢 Subscription Active" : "Subscription Inactive"}</p></div>
+                              {subscriptionStatus === "Paused" && <div className="rounded-lg border border-orange-200 bg-white/70 px-2.5 py-1.5 text-[10px] font-black text-orange-700">⏸ {formatDate(customer.latestSubscription.pause_from)} → {formatDate(customer.latestSubscription.pause_to)}</div>}
+                            </div>
+                          </div>
                         )}
+
+                        <div className="customer-detail-card bg-slate-50 p-3">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">📍 Address</p>
+                          <p className="mt-1 break-words text-xs font-bold leading-5 text-slate-800 sm:text-sm">{customer.address || "-"}</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="customer-detail-card p-2.5"><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Latest Order</p><p className="mt-1 text-xs font-black text-slate-800 sm:text-sm">{formatDate(customer.latestOrderDate)}</p></div>
+                          <div className="customer-detail-card p-2.5"><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Latest Subscription</p><p className="mt-1 text-xs font-black text-slate-800 sm:text-sm">{formatDate(customer.latestSubscriptionDate)}</p></div>
+                        </div>
+
+                        <button type="button" onClick={() => navigate(`/admin/customers/${customer.id}`)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 py-2.5 text-xs font-black text-white shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg active:scale-[.98] sm:text-sm">
+                          👁 View Full Customer Details
+                        </button>
                       </div>
                     </div>
-                  )}
-
-                  {/* ADDRESS */}
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      📍 Address
-                    </p>
-
-                    <p className="mt-1 break-words text-sm font-semibold leading-6 text-slate-800 sm:text-base">
-                      {customer.address || "-"}
-                    </p>
                   </div>
-
-                  {/* TIMELINE */}
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-slate-100 bg-white p-3">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                        Latest Order
-                      </p>
-                      <p className="mt-1 text-sm font-black text-slate-800">
-                        {formatDate(customer.latestOrderDate)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-100 bg-white p-3">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                        Latest Subscription
-                      </p>
-                      <p className="mt-1 text-sm font-black text-slate-800">
-                        {formatDate(customer.latestSubscriptionDate)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* ACTION */}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate(`/admin/customers/${customer.id}`)
-                    }
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 py-3 font-black text-white shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg active:scale-[.98]"
-                  >
-                    👁 View Customer Details
-                  </button>
                 </article>
               );
             })}

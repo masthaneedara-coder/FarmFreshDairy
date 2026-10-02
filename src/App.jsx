@@ -56,13 +56,17 @@ import DeliveryProtectedRoute from "./Components/DeliveryProtectedRoute";
 /* Notification */
 import Notifications from "./Pages/Notifications";
 import NotificationSettings from "./Pages/NotificationSettings";
+import RenewSubscription from "./Pages/RenewSubscription";
+
 
 export default function App() {
   const location = useLocation();
     useEffect(() => {
     initializeFCM();
   }, []);
-  const hideNavbar =  location.pathname.startsWith("/admin");
+  const hideNavbar =
+  location.pathname.startsWith("/admin") ||
+  location.pathname.startsWith("/renew/");
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-cyan-50 animate-gradient">
     <div className="fixed inset-0 -z-10 overflow-hidden">
@@ -320,6 +324,10 @@ export default function App() {
             </CustomerRoute>
           }
         />
+        <Route
+  path="/renew/:token"
+  element={<RenewSubscription />}
+/>
       </Routes>
     
       

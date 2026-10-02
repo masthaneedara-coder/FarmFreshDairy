@@ -1074,3 +1074,32 @@ export async function deleteSubscriptionDeliveryOverride(
     `${API_URL}/subscription-deliveries/${subscriptionId}/delivery-overrides/${deliveryDate}/${productId}`
   );
 }
+export async function createSubscriptionRenewalLink(
+  subscriptionId
+) {
+  const data = await postJSON(
+    `${API_URL}/subscriptions/${subscriptionId}/renewal-link`,
+    {}
+  );
+
+  return data;
+}
+
+
+export async function getRenewalLinkDetails(
+  token
+) {
+  return await getJSON(
+    `${API_URL}/subscriptions/renew-link/${token}`
+  );
+}
+
+
+export async function renewSubscriptionUsingLink(
+  token
+) {
+  return await postJSON(
+    `${API_URL}/subscriptions/renew-link/${token}`,
+    {}
+  );
+}

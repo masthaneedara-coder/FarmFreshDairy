@@ -293,6 +293,42 @@ export default function CustomerDashboard() {
     });
   };
 
+const getAutoActiveDate = (
+  pauseTo,
+  endDate
+) => {
+  if (!pauseTo) return null;
+
+  // ==========================================
+  // If pause reaches subscription expiry,
+  // there is NO automatic resume.
+  // ==========================================
+
+  if (
+    endDate &&
+    pauseTo === endDate
+  ) {
+    return null;
+  }
+
+  const date = new Date(
+    `${pauseTo}T00:00:00`
+  );
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  // ==========================================
+  // Resume the day after pause_to
+  // ==========================================
+
+  date.setDate(
+    date.getDate() + 1
+  );
+
+  return date;
+};
   const getRemainingDays = (expireDate) => {
     if (!expireDate) return null;
 
@@ -773,14 +809,14 @@ export default function CustomerDashboard() {
         .dashboard-hero {
           position: relative;
           overflow: hidden;
-          border-radius: 30px;
-          padding: 23px;
+          border-radius: 24px;
+          padding: 17px 19px 16px;
           color: white;
           background:
-            radial-gradient(circle at 90% 5%, rgba(167,243,208,.25), transparent 25%),
+            radial-gradient(circle at 92% 4%, rgba(167,243,208,.22), transparent 24%),
             linear-gradient(135deg, #063c30 0%, #08795f 55%, #0aa889 100%);
-          box-shadow: 0 25px 65px rgba(0,91,69,.20);
-          animation: dashIn .55s cubic-bezier(.22,1,.36,1);
+          box-shadow: 0 14px 38px rgba(0,91,69,.16);
+          animation: dashIn .45s cubic-bezier(.22,1,.36,1);
         }
 
         .dashboard-hero::after {
@@ -817,9 +853,9 @@ export default function CustomerDashboard() {
 
         .dashboard-hero-row {
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           justify-content: space-between;
-          gap: 18px;
+          gap: 14px;
         }
 
         .dashboard-brand-line {
@@ -829,45 +865,45 @@ export default function CustomerDashboard() {
         }
 
         .dashboard-logo {
-          width: 54px;
-          height: 54px;
-          flex: 0 0 54px;
+          width: 45px;
+          height: 45px;
+          flex: 0 0 45px;
           object-fit: contain;
-          border-radius: 17px;
-          padding: 4px;
+          border-radius: 14px;
+          padding: 3px;
           background: white;
-          box-shadow: 0 10px 25px rgba(0,0,0,.15);
-          animation: dashFloat 4s ease-in-out infinite;
+          box-shadow: 0 7px 16px rgba(0,0,0,.12);
+          animation: dashFloat 5s ease-in-out infinite;
         }
 
         .dashboard-brand-name {
-          font-size: 14px;
+          font-size: 12px;
           font-weight: 950;
           letter-spacing: -.03em;
         }
 
         .dashboard-brand-subtitle {
-          margin-top: 2px;
+          margin-top: 1px;
           color: rgba(255,255,255,.62);
-          font-size: 8px;
+          font-size: 7px;
           font-weight: 800;
-          letter-spacing: .1em;
+          letter-spacing: .09em;
           text-transform: uppercase;
         }
 
         .dashboard-hero-badge {
           display: inline-flex;
           align-items: center;
-          gap: 7px;
-          margin-top: 20px;
-          padding: 7px 11px;
+          gap: 6px;
+          margin-top: 11px;
+          padding: 5px 9px;
           border: 1px solid rgba(255,255,255,.15);
           border-radius: 999px;
           background: rgba(255,255,255,.09);
           color: #d1fae5;
-          font-size: 8px;
+          font-size: 7px;
           font-weight: 950;
-          letter-spacing: .16em;
+          letter-spacing: .13em;
           text-transform: uppercase;
           backdrop-filter: blur(10px);
         }
@@ -882,11 +918,11 @@ export default function CustomerDashboard() {
         }
 
         .dashboard-hero-title {
-          margin: 13px 0 0;
+          margin: 9px 0 0;
           max-width: 720px;
-          font-size: clamp(29px, 5vw, 51px);
-          line-height: 1.02;
-          letter-spacing: -.055em;
+          font-size: clamp(25px, 3.5vw, 40px);
+          line-height: 1.04;
+          letter-spacing: -.05em;
           font-weight: 950;
         }
 
@@ -895,11 +931,11 @@ export default function CustomerDashboard() {
         }
 
         .dashboard-hero-copy {
-          max-width: 660px;
-          margin-top: 10px;
+          max-width: 610px;
+          margin-top: 7px;
           color: rgba(236,253,245,.78);
-          font-size: 12px;
-          line-height: 1.6;
+          font-size: 10px;
+          line-height: 1.45;
           font-weight: 600;
         }
 
@@ -908,37 +944,37 @@ export default function CustomerDashboard() {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          min-width: 112px;
-          padding: 13px;
+          min-width: 82px;
+          padding: 9px;
           border: 1px solid rgba(255,255,255,.13);
-          border-radius: 23px;
+          border-radius: 17px;
           background: rgba(255,255,255,.08);
           backdrop-filter: blur(15px);
         }
 
         .dashboard-hero-logo-card img {
-          width: 55px;
-          height: 55px;
+          width: 42px;
+          height: 42px;
           object-fit: contain;
-          border-radius: 17px;
+          border-radius: 13px;
           background: white;
-          padding: 4px;
+          padding: 3px;
         }
 
         .dashboard-hero-logo-card span {
-          margin-top: 7px;
+          margin-top: 5px;
           color: #d1fae5;
-          font-size: 8px;
+          font-size: 6px;
           font-weight: 900;
           text-transform: uppercase;
-          letter-spacing: .1em;
+          letter-spacing: .08em;
         }
 
         .dashboard-actions {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 8px;
-          margin-top: 21px;
+          gap: 7px;
+          margin-top: 13px;
         }
 
         /* High-contrast hero action buttons */
@@ -949,12 +985,12 @@ export default function CustomerDashboard() {
           align-items: center;
           justify-content: center;
           gap: 7px;
-          min-height: 46px;
+          min-height: 40px;
           border: 1px solid rgba(255,255,255,.22);
-          border-radius: 15px;
+          border-radius: 12px;
           color: white;
           cursor: pointer;
-          font-size: 10px;
+          font-size: 9px;
           font-weight: 950;
           letter-spacing: .01em;
           box-shadow: 0 8px 18px rgba(0,0,0,.14);
@@ -1032,16 +1068,23 @@ export default function CustomerDashboard() {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 10px;
+          align-items: stretch;
         }
 
         .wallet-card {
           position: relative;
           overflow: hidden;
-          min-height: 185px;
-          padding: 17px;
-          border-radius: 24px;
+          min-height: 170px;
+          padding: 15px;
+          border-radius: 21px;
           color: #fff;
-          box-shadow: 0 18px 45px rgba(15,23,42,.10);
+          box-shadow: 0 14px 34px rgba(15,23,42,.09);
+          transition: transform .25s ease, box-shadow .25s ease;
+        }
+
+        .wallet-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 18px 40px rgba(15,23,42,.12);
         }
 
         .prepaid-card {
@@ -1054,10 +1097,10 @@ export default function CustomerDashboard() {
 
         .wallet-card-orb {
           position: absolute;
-          width: 190px;
-          height: 190px;
-          right: -80px;
-          top: -90px;
+          width: 160px;
+          height: 160px;
+          right: -70px;
+          top: -78px;
           border-radius: 50%;
           background: rgba(255,255,255,.11);
           animation: dashGlow 6s ease-in-out infinite;
@@ -2319,8 +2362,12 @@ export default function CustomerDashboard() {
           }
 
           .dashboard-hero {
-            border-radius: 25px;
-            padding: 17px;
+            border-radius: 20px;
+            padding: 13px 13px 12px;
+          }
+
+          .dashboard-hero-row {
+            align-items: flex-start;
           }
 
           .dashboard-hero-logo-card {
@@ -2332,14 +2379,14 @@ export default function CustomerDashboard() {
           }
 
           .dashboard-logo {
-            width: 43px;
-            height: 43px;
-            flex-basis: 43px;
-            border-radius: 14px;
+            width: 37px;
+            height: 37px;
+            flex-basis: 37px;
+            border-radius: 12px;
           }
 
           .dashboard-brand-name {
-            font-size: 12px;
+            font-size: 11px;
           }
 
           .dashboard-brand-subtitle {
@@ -2347,33 +2394,35 @@ export default function CustomerDashboard() {
           }
 
           .dashboard-hero-badge {
-            margin-top: 16px;
-            padding: 6px 9px;
-            font-size: 7px;
+            margin-top: 10px;
+            padding: 5px 8px;
+            font-size: 6px;
           }
 
           .dashboard-hero-title {
-            margin-top: 11px;
-            font-size: 28px;
+            margin-top: 8px;
+            font-size: 24px;
+            line-height: 1.06;
           }
 
           .dashboard-hero-copy {
-            margin-top: 8px;
-            font-size: 9px;
-            line-height: 1.55;
+            margin-top: 6px;
+            font-size: 8px;
+            line-height: 1.45;
           }
 
           .dashboard-actions {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 7px;
-            margin-top: 15px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
+            margin-top: 11px;
           }
 
           .dashboard-action {
-            min-height: 42px;
-            border-radius: 13px;
+            min-height: 38px;
+            border-radius: 11px;
             font-size: 8px;
-            box-shadow: 0 7px 16px rgba(0,0,0,.15);
+            gap: 5px;
+            box-shadow: 0 5px 12px rgba(0,0,0,.12);
           }
 
           .dashboard-action.primary {
@@ -2405,13 +2454,15 @@ export default function CustomerDashboard() {
           }
 
           .dashboard-stats {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 7px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
           }
 
           .dashboard-stat {
-            padding: 11px;
-            border-radius: 17px;
+            padding: 10px;
+            min-height: 68px;
+            border-radius: 16px;
+            box-shadow: 0 7px 20px rgba(15,23,42,.045);
           }
 
           .dashboard-stat-label {
@@ -2429,23 +2480,66 @@ export default function CustomerDashboard() {
             border-radius: 10px;
           }
 
+          /* Wallet + Billing stay in ONE ROW on mobile */
+          .wallet-billing-section {
+            margin-top: 13px;
+          }
+
           .wallet-billing-grid {
-            grid-template-columns: 1fr;
-            gap: 7px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
+            align-items: stretch;
           }
 
           .wallet-card {
-            min-height: 165px;
-            padding: 14px;
-            border-radius: 21px;
+            min-height: 132px;
+            height: 100%;
+            padding: 10px;
+            border-radius: 16px;
+            box-shadow: 0 8px 22px rgba(15,23,42,.08);
+          }
+
+          .wallet-card-orb {
+            width: 105px;
+            height: 105px;
+            right: -48px;
+            top: -52px;
+          }
+
+          .wallet-card-head span {
+            gap: 4px;
+            font-size: 8px;
+          }
+
+          .wallet-card-head b {
+            padding: 4px 5px;
+            font-size: 5px;
+          }
+
+          .wallet-card > small {
+            margin-top: 13px;
+            font-size: 5px;
+            letter-spacing: .07em;
           }
 
           .wallet-card > strong {
-            font-size: 24px;
+            margin-top: 4px;
+            font-size: 18px;
           }
 
           .wallet-card > p {
-            font-size: 7px;
+            min-height: 23px;
+            margin: 5px 0 7px;
+            font-size: 6px;
+            line-height: 1.35;
+          }
+
+          .wallet-card > button {
+            min-height: 27px;
+            padding: 0 7px;
+            gap: 3px;
+            border-radius: 8px;
+            font-size: 6px;
           }
 
           .subscription-card {
@@ -2560,20 +2654,40 @@ export default function CustomerDashboard() {
         }
 
         @media (max-width: 380px) {
+          .wallet-billing-grid {
+            gap: 5px;
+          }
+
+          .wallet-card {
+            min-height: 126px;
+            padding: 9px;
+            border-radius: 15px;
+          }
+
+          .wallet-card > strong {
+            font-size: 17px;
+          }
+
+          .wallet-card > p {
+            font-size: 5.5px;
+          }
+
+
           .customer-dashboard {
             padding-left: 7px;
             padding-right: 7px;
           }
 
           .dashboard-hero-title {
-            font-size: 25px;
+            font-size: 22px;
           }
 
           .dashboard-hero-copy {
-            font-size: 8px;
+            font-size: 7px;
           }
 
           .dashboard-action {
+            min-height: 36px;
             font-size: 7px;
           }
 
@@ -2940,29 +3054,187 @@ export default function CustomerDashboard() {
                         </div>
                       </div>
 
-                      {remainingDays !== null && (
-                        <div
-                          className={`subscription-validity ${
-                            remainingDays <= 7 ? "warning" : ""
-                          }`}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            {remainingDays <= 7 ? (
-                              <Clock3 size={15} color="#c2410c" />
-                            ) : (
-                              <CalendarDays size={15} color="#047857" />
-                            )}
-                            <strong>
-                              {remainingDays}{" "}
-                              {remainingDays === 1 ? "Day" : "Days"} Remaining
-                            </strong>
-                          </div>
+                      {/* =====================================================
+                              PAUSED SUBSCRIPTION
+                              Show automatic resume date instead of days remaining
+                          ===================================================== */}
 
-                          {remainingDays <= 7 && remainingDays > 0 && (
-                            <span>Renew soon</span>
+                          {isPaused &&
+                          sub.pause_to &&
+                          sub.expireDate &&
+                          sub.pause_to === sub.expireDate ? (
+                            <div
+                              style={{
+                                marginTop: 12,
+                                padding: "12px 13px",
+                                border: "1px solid #fecaca",
+                                borderRadius: 15,
+                                background: "#fff1f2",
+                                display: "flex",
+                                alignItems: "flex-start",
+                                gap: 9,
+                              }}
+                            >
+                              <XCircle
+                                size={17}
+                                color="#dc2626"
+                                style={{
+                                  flexShrink: 0,
+                                  marginTop: 1,
+                                }}
+                              />
+
+                              <div>
+                                <div
+                                  style={{
+                                    color: "#b91c1c",
+                                    fontSize: 8,
+                                    fontWeight: 950,
+                                    textTransform: "uppercase",
+                                    letterSpacing: ".08em",
+                                  }}
+                                >
+                                  No Automatic Resume
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 3,
+                                    color: "#7f1d1d",
+                                    fontSize: 10,
+                                    fontWeight: 900,
+                                  }}
+                                >
+                                  Subscription expires on{" "}
+                                  {formatDate(sub.expireDate)}
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 3,
+                                    color: "#64748b",
+                                    fontSize: 7,
+                                    lineHeight: 1.5,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  The subscription will not resume
+                                  automatically. You can activate it anytime
+                                  before the expiry date.
+                                </div>
+                              </div>
+                            </div>
+                          ) : isPaused &&
+                            sub.pause_to &&
+                            getAutoActiveDate(
+                              sub.pause_to,
+                              sub.expireDate
+                            ) ? (
+                            <div
+                              style={{
+                                marginTop: 12,
+                                padding: "11px 12px",
+                                border: "1px solid #bfdbfe",
+                                borderRadius: 15,
+                                background: "#eff6ff",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 9,
+                              }}
+                            >
+                              <CalendarDays
+                                size={16}
+                                color="#2563eb"
+                                style={{ flexShrink: 0 }}
+                              />
+
+                              <div>
+                                <div
+                                  style={{
+                                    color: "#1d4ed8",
+                                    fontSize: 8,
+                                    fontWeight: 950,
+                                    textTransform: "uppercase",
+                                    letterSpacing: ".08em",
+                                  }}
+                                >
+                                  Automatic Resume
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 3,
+                                    color: "#1e3a8a",
+                                    fontSize: 10,
+                                    fontWeight: 900,
+                                  }}
+                                >
+                                  Active from{" "}
+                                  {formatDate(
+                                    getAutoActiveDate(
+                                      sub.pause_to,
+                                      sub.expireDate
+                                    )
+                                  )}
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 2,
+                                    color: "#64748b",
+                                    fontSize: 7,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Milk delivery will resume automatically on
+                                  this date.
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            remainingDays !== null && (
+                              <div
+                                className={`subscription-validity ${
+                                  remainingDays <= 7 ? "warning" : ""
+                                }`}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                  }}
+                                >
+                                  {remainingDays <= 7 ? (
+                                    <Clock3
+                                      size={15}
+                                      color="#c2410c"
+                                    />
+                                  ) : (
+                                    <CalendarDays
+                                      size={15}
+                                      color="#047857"
+                                    />
+                                  )}
+
+                                  <strong>
+                                    {remainingDays}{" "}
+                                    {remainingDays === 1
+                                      ? "Day"
+                                      : "Days"}{" "}
+                                    Remaining
+                                  </strong>
+                                </div>
+
+                                {remainingDays <= 7 &&
+                                  remainingDays > 0 && (
+                                    <span>
+                                      Renew soon
+                                    </span>
+                                  )}
+                              </div>
+                            )
                           )}
-                        </div>
-                      )}
 
                       <button
                         type="button"
