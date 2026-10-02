@@ -23,6 +23,7 @@ export default function AdminMonthlyReport() {
   );
 
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [customers, setCustomers] = useState([]);
 
@@ -42,27 +43,68 @@ export default function AdminMonthlyReport() {
   // ==========================================
 
   useEffect(() => {
-    loadReport();
-  }, [month, year]);
+    let cancelled = false;
 
-  async function loadReport() {
-    try {
-      setLoading(true);
+    async function loadReportFast() {
+      const cacheKey = `farmfresh-monthly-report-${year}-${month}`;
 
-      const res =
-        await getMonthlyDeliveryReport(
-          month,
-          year
-        );
+      // Show cached data immediately when available.
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && !cancelled) {
+            setCustomers(parsed);
+          }
+        }
+      } catch {
+        // Ignore cache errors.
+      }
 
-      setCustomers(res.customers || []);
-    } catch (err) {
-      console.error(err);
-      alert(err.message);
-    } finally {
-      setLoading(false);
+      try {
+        if (!cancelled) {
+          setLoading((current) => current && customers.length === 0);
+          setRefreshing(true);
+        }
+
+        const res = await getMonthlyDeliveryReport(month, year);
+        const nextCustomers = res.customers || [];
+
+        if (!cancelled) {
+          setCustomers(nextCustomers);
+
+          try {
+            sessionStorage.setItem(
+              cacheKey,
+              JSON.stringify(nextCustomers)
+            );
+          } catch {
+            // Ignore storage quota/private-mode errors.
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Monthly report load failed:", err);
+          if (!customers.length) {
+            alert(err.message || "Failed to load monthly report.");
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
     }
-  }
+
+    loadReportFast();
+
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally only reload when the selected period changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month, year]);
 
   // ==========================================
   // FILTER REPORT BY PAYMENT / SUBSCRIPTION STATUS
@@ -222,6 +264,39 @@ export default function AdminMonthlyReport() {
   }
 
   // ==========================================
+  // SHARE PDF
+  // ==========================================
+
+  async function handleShareInvoice(subscriptionId) {
+    try {
+      const reportCustomer = customers.find(
+        (item) => item.subscriptionId === subscriptionId
+      );
+
+      if (Number(reportCustomer?.deliveredDays || 0) <= 0) {
+        alert("No invoice available. No deliveries were completed for this period.");
+        return;
+      }
+
+      const data = await getMonthlyBillDetails(
+        subscriptionId,
+        month,
+        year
+      );
+
+      if (!data.success) {
+        alert(data.message);
+        return;
+      }
+
+      await generateMonthlyBillPDF(data, "share");
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Failed to share invoice.");
+    }
+  }
+
+  // ==========================================
   // PRINT
   // ==========================================
 
@@ -321,7 +396,14 @@ export default function AdminMonthlyReport() {
         "Bill marked as Paid successfully."
       );
 
-      await loadReport();
+      // Update the visible row immediately; no second report request is needed.
+      setCustomers((current) =>
+        current.map((item) =>
+          item.subscriptionId === selectedBill?.subscription?.id
+            ? { ...item, paymentStatus: "Paid" }
+            : item
+        )
+      );
 
       setDrawerOpen(false);
     } catch (err) {
@@ -397,813 +479,272 @@ export default function AdminMonthlyReport() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 p-3 sm:p-5 lg:p-6">
-
-      {/* ========================================
-          ANIMATIONS
-      ======================================== */}
-
+    <div className="monthly-report-page min-h-screen bg-[#f6faf8] text-slate-900">
       <style>{`
-        @keyframes reportFadeUp {
-          from {
-            opacity: 0;
-            transform: translateY(18px);
+        @keyframes mr-fade-up {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes mr-pop {
+          0% { opacity: 0; transform: scale(.96); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes mr-shimmer {
+          0% { background-position: -500px 0; }
+          100% { background-position: 500px 0; }
+        }
+        @keyframes mr-pulse {
+          0%,100% { box-shadow: 0 0 0 0 rgba(22,101,52,.12); }
+          50% { box-shadow: 0 0 0 8px rgba(22,101,52,0); }
+        }
+        .mr-enter { animation: mr-fade-up .36s ease-out both; }
+        .mr-pop { animation: mr-pop .32s ease-out both; }
+        .mr-skeleton {
+          background: linear-gradient(90deg,#edf4f0 25%,#f8fbf9 37%,#edf4f0 63%);
+          background-size: 900px 100%;
+          animation: mr-shimmer 1.2s ease-in-out infinite;
+        }
+        .mr-action { transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease; }
+        .mr-action:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(15,23,42,.08); }
+        .mr-action:active { transform: scale(.97); }
+        .mr-card { content-visibility: auto; contain-intrinsic-size: 220px; }
+        @media (max-width: 639px) {
+          .monthly-report-page { overflow-x: hidden; }
+          .monthly-report-page input,
+          .monthly-report-page select,
+          .monthly-report-page button {
+            -webkit-tap-highlight-color: transparent;
           }
-
-          to {
-            opacity: 1;
-            transform: translateY(0);
+          .monthly-report-page input,
+          .monthly-report-page select {
+            font-size: 16px;
           }
         }
-
-        @keyframes reportHeader {
-          from {
-            opacity: 0;
-            transform: translateY(-12px);
-          }
-
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes reportNumber {
-          from {
-            opacity: 0;
-            transform: scale(.92);
-          }
-
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-
-        .report-fade {
-          animation: reportFadeUp .45s ease-out both;
-        }
-
-        .report-header {
-          animation: reportHeader .45s ease-out both;
-        }
-
-        .report-number {
-          animation: reportNumber .4s ease-out both;
+        @media (prefers-reduced-motion: reduce) {
+          .mr-enter,.mr-pop,.mr-skeleton { animation: none !important; }
+          .mr-action { transition: none !important; }
         }
       `}</style>
 
-      <div className="max-w-[1600px] mx-auto">
-
-        {/* ========================================
-            HEADER
-        ======================================== */}
-
-        <div className="report-header mb-5">
-
-          <div className="
-            flex
-            flex-col
-            lg:flex-row
-            lg:items-center
-            lg:justify-between
-            gap-4
-          ">
-
-            <div>
-
-              <div className="flex items-center gap-3">
-
-                <div className="
-                  w-12 h-12
-                  sm:w-14 sm:h-14
-                  rounded-2xl
-                  bg-green-100
-                  flex items-center justify-center
-                  text-2xl sm:text-3xl
-                ">
-                  📊
-                </div>
-
-                <div>
-
-                  <h1 className="
-                    text-2xl
-                    sm:text-3xl
-                    lg:text-4xl
-                    font-black
-                    text-gray-900
-                  ">
-                    Monthly Delivery Report
-                  </h1>
-
-                  <p className="
-                    text-sm
-                    sm:text-base
-                    text-gray-500
-                    mt-1
-                  ">
-                    Customer Delivery Summary
-                  </p>
-
-                </div>
-
+      <div className="mx-auto w-full max-w-[1600px] px-3 py-4 sm:px-5 sm:py-6 lg:px-7">
+        {/* HEADER */}
+        <header className="mr-enter mb-5 overflow-hidden rounded-[28px] bg-gradient-to-br from-[#063b2b] via-[#087346] to-[#0ca86a] p-4 text-white shadow-[0_18px_50px_rgba(6,59,43,.16)] sm:p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1.5 shadow-lg sm:h-16 sm:w-16">
+                <img src="/logo.png" alt="Farm Fresh Dairy" className="h-full w-full object-contain" />
               </div>
-
+              <div className="min-w-0">
+                <p className="mb-1 text-[10px] font-black uppercase tracking-[.22em] text-emerald-100">
+                  Farm Fresh Dairy · Admin
+                </p>
+                <h1 className="truncate text-2xl font-black tracking-tight sm:text-4xl">
+                  Monthly Delivery Report
+                </h1>
+                <p className="mt-1 text-sm text-emerald-50/85 sm:text-base">
+                  Customer delivery, billing & payment summary
+                </p>
+              </div>
             </div>
 
-            {/* Month / Year */}
-
-            <div className="
-              grid
-              grid-cols-1
-              gap-2
-              sm:flex
-              sm:flex-wrap
-            ">
-
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
               <select
                 value={month}
-                onChange={(e) =>
-                  setMonth(
-                    Number(e.target.value)
-                  )
-                }
-                className="
-                  border
-                  border-gray-200
-                  bg-white
-                  rounded-2xl
-                  px-4
-                  py-3
-                  outline-none
-                  font-semibold
-                  shadow-sm
-                  focus:border-green-500
-                  focus:ring-4
-                  focus:ring-green-100
-                "
+                onChange={(e) => setMonth(Number(e.target.value))}
+                className="mr-action min-h-11 rounded-2xl border border-white/20 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-white/20"
               >
-                {[
-                  "January",
-                  "February",
-                  "March",
-                  "April",
-                  "May",
-                  "June",
-                  "July",
-                  "August",
-                  "September",
-                  "October",
-                  "November",
-                  "December",
-                ].map((m, index) => (
-                  <option
-                    key={index}
-                    value={index + 1}
-                  >
-                    {m}
-                  </option>
+                {["January","February","March","April","May","June","July","August","September","October","November","December"].map((m, i) => (
+                  <option key={m} value={i + 1}>{m}</option>
                 ))}
               </select>
 
               <input
                 type="number"
                 value={year}
-                onChange={(e) =>
-                  setYear(
-                    Number(e.target.value)
-                  )
-                }
-                className="
-                  w-full
-                  sm:w-32
-                  border
-                  border-gray-200
-                  bg-white
-                  rounded-2xl
-                  px-4
-                  py-3
-                  outline-none
-                  font-semibold
-                  shadow-sm
-                  focus:border-green-500
-                  focus:ring-4
-                  focus:ring-green-100
-                "
+                onChange={(e) => setYear(Number(e.target.value))}
+                className="mr-action min-h-11 w-full rounded-2xl border border-white/20 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-white/20 sm:w-28"
+                aria-label="Report year"
               />
+            </div>
+          </div>
 
+          <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+            <div className="relative">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
               <input
                 type="search"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search name or phone..."
+                placeholder="Search customer name or phone..."
                 aria-label="Search customers by name or phone number"
-                className="
-                  w-full sm:w-64
-                  border border-gray-200
-                  bg-white rounded-2xl
-                  px-4 py-3 outline-none
-                  font-semibold shadow-sm
-                  focus:border-green-500
-                  focus:ring-4 focus:ring-green-100
-                "
+                className="min-h-11 w-full rounded-2xl border border-white/20 bg-white pl-10 pr-4 text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400 focus:ring-4 focus:ring-white/20"
               />
-
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                aria-label="Filter report by status"
-                className="
-                  w-full sm:w-auto
-                  border border-gray-200
-                  bg-white rounded-2xl
-                  px-4 py-3 outline-none
-                  font-semibold shadow-sm
-                  focus:border-green-500
-                  focus:ring-4 focus:ring-green-100
-                "
-              >
-                <option value="All">All Statuses</option>
-                <option value="Active">Active</option>
-                <option value="Pending">Pending</option>
-                <option value="Paid">Paid</option>
-                <option value="Cancelled">Cancelled</option>
-                <option value="Stopped">Stopped</option>
-              </select>
-
             </div>
-
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter report by status"
+              className="mr-action min-h-11 rounded-2xl border border-white/20 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-white/20"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Pending">Pending</option>
+              <option value="Paid">Paid</option>
+              <option value="Cancelled">Cancelled</option>
+              <option value="Stopped">Stopped</option>
+            </select>
           </div>
+        </header>
 
-        </div>
+        {/* STATS */}
+        <section className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <ReportStat icon="👥" label="Customers" value={totalCustomers} delay="0ms" iconBg="bg-emerald-50" valueColor="text-emerald-700" />
+          <ReportStat icon="🚚" label="Delivered" value={totalDelivered} delay="50ms" iconBg="bg-blue-50" valueColor="text-blue-700" />
+          <ReportStat icon="✕" label="Missed" value={totalMissed} delay="100ms" iconBg="bg-rose-50" valueColor="text-rose-600" />
+          <ReportStat icon="₹" label="Revenue" value={`₹${totalRevenue.toLocaleString("en-IN")}`} delay="150ms" iconBg="bg-emerald-50" valueColor="text-emerald-700" />
+        </section>
 
-        {/* ========================================
-            STATS
-        ======================================== */}
-
-        <div className="
-          grid
-          grid-cols-2
-          lg:grid-cols-4
-          gap-3
-          sm:gap-4
-          mb-5
-        ">
-
-          <ReportStat
-            icon="👥"
-            label="Customers"
-            value={totalCustomers}
-            delay="0ms"
-            iconBg="bg-green-50"
-            valueColor="text-green-700"
-          />
-
-          <ReportStat
-            icon="🚚"
-            label="Delivered"
-            value={totalDelivered}
-            delay="60ms"
-            iconBg="bg-blue-50"
-            valueColor="text-blue-700"
-          />
-
-          <ReportStat
-            icon="❌"
-            label="Missed"
-            value={totalMissed}
-            delay="120ms"
-            iconBg="bg-red-50"
-            valueColor="text-red-600"
-          />
-
-          <ReportStat
-            icon="💰"
-            label="Revenue"
-            value={`₹${totalRevenue.toLocaleString(
-              "en-IN"
-            )}`}
-            delay="180ms"
-            iconBg="bg-emerald-50"
-            valueColor="text-emerald-700"
-          />
-
-        </div>
-
-        {/* ========================================
-            REPORT PERIOD
-        ======================================== */}
-
-        <div className="
-          report-fade
-          bg-white
-          rounded-3xl
-          border border-gray-100
-          shadow-sm
-          px-4 py-3
-          mb-5
-          flex
-          items-center
-          justify-between
-          gap-3
-        ">
-
-          <div>
-
-            <p className="
-              text-xs
-              uppercase
-              tracking-wide
-              text-gray-400
-              font-bold
-            ">
-              Report Period
-            </p>
-
-            <p className="
-              text-base
-              sm:text-lg
-              font-black
-              text-gray-900
-              mt-0.5
-            ">
-              {monthName} {year}
-            </p>
-
+        {/* PERIOD BAR */}
+        <div className="mr-enter mb-5 flex items-center justify-between gap-3 rounded-3xl border border-emerald-100 bg-white px-4 py-3.5 shadow-sm sm:px-5">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[.18em] text-emerald-600">Report Period</p>
+            <p className="mt-1 truncate text-lg font-black">{monthName} {year}</p>
           </div>
-
-          <div className="
-            px-3 py-1.5
-            rounded-full
-            bg-green-100
-            text-green-700
-            text-xs
-            sm:text-sm
-            font-black
-          ">
+          <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">
             {reportCustomers.length} Records
-          </div>
-
+          </span>
         </div>
 
-        {/* ========================================
-            LOADING
-        ======================================== */}
-
-        {loading && (
-          <div className="
-            bg-white
-            rounded-3xl
-            border border-gray-100
-            shadow-sm
-            p-6
-          ">
-
-            <div className="
-              flex
-              flex-col
-              items-center
-              justify-center
-              py-12
-            ">
-
-              <div className="
-                animate-spin
-                rounded-full
-                h-12
-                w-12
-                border-4
-                border-green-200
-                border-t-green-600
-              " />
-
-              <p className="
-                mt-4
-                text-gray-500
-                font-semibold
-              ">
-                Loading Monthly Report...
-              </p>
-
-            </div>
-
+        {/* LOADING */}
+        {loading && customers.length === 0 && (
+          <div className="space-y-3">
+            {[1,2,3,4].map((n) => (
+              <div key={n} className="mr-skeleton h-24 rounded-3xl border border-white/70 sm:h-28" />
+            ))}
           </div>
         )}
 
-        {/* ========================================
-            EMPTY
-        ======================================== */}
-
-        {!loading && customers.length === 0 && (
-          <EmptyReport />
-        )}
+        {/* EMPTY */}
+        {!loading && customers.length === 0 && <EmptyReport />}
 
         {!loading && customers.length > 0 && reportCustomers.length === 0 && (
-          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8 text-center">
-            <div className="text-4xl mb-3">🔍</div>
-            <h3 className="text-xl font-black text-gray-900">No Records Found</h3>
-            <p className="text-gray-500 mt-2">No customers match your search and selected status for {monthName} {year}.</p>
+          <div className="mr-pop rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm sm:p-12">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-3xl">⌕</div>
+            <h3 className="mt-4 text-xl font-black">No Records Found</h3>
+            <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+              No customers match your search and selected status for {monthName} {year}.
+            </p>
             <button
               type="button"
               onClick={() => { setSearchTerm(""); setStatusFilter("All"); }}
-              className="mt-4 rounded-xl bg-green-600 px-5 py-3 font-bold text-white hover:bg-green-700"
+              className="mr-action mt-5 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black text-white"
             >
               Clear Filters
             </button>
           </div>
         )}
 
-        {/* ========================================
-            MOBILE CARDS
-        ======================================== */}
-
-        {!loading &&
-          reportCustomers.length > 0 && (
-
-          <div className="
-            md:hidden
-            space-y-4
-          ">
-
-            {reportCustomers.map(
-              (c, index) => (
-
-                <MobileReportCard
-                  key={c.subscriptionId}
-                  customer={c}
-                  index={index}
-                  onView={
-                    handleViewBill
-                  }
-                  onDownload={
-                    handleDownloadInvoice
-                  }
-                  onPrint={
-                    handlePrintInvoice
-                  }
-                  onWhatsapp={
-                    handleWhatsappInvoice
-                  }
-                  onPaid={
-                    handleMarkSubscriptionPaid
-                  }
-                />
-
-              )
-            )}
-
+        {/* MOBILE */}
+        {!loading && reportCustomers.length > 0 && (
+          <div className="space-y-3 md:hidden">
+            {reportCustomers.map((c, index) => (
+              <MobileReportCard
+                key={c.subscriptionId}
+                customer={c}
+                index={index}
+                onView={handleViewBill}
+                onDownload={handleDownloadInvoice}
+                onShare={handleShareInvoice}
+                onPrint={handlePrintInvoice}
+                onWhatsapp={handleWhatsappInvoice}
+                onPaid={handleMarkSubscriptionPaid}
+              />
+            ))}
           </div>
         )}
 
-        {/* ========================================
-            DESKTOP TABLE
-        ======================================== */}
-
-        {!loading &&
-          reportCustomers.length > 0 && (
-
-          <div className="
-            hidden
-            md:block
-            bg-white
-            rounded-3xl
-            border border-gray-100
-            shadow-sm
-            overflow-hidden
-          ">
-
-            <div className="overflow-x-auto">
-
-              <table className="w-full">
-
-                <thead className="
-                  bg-gradient-to-r
-                  from-green-600
-                  to-green-700
-                  text-white
-                ">
-
-                  <tr>
-
-                    <th className="px-4 py-4 text-left">
-                      Customer
-                    </th>
-
-                    <th className="px-4 py-4 text-left">
-                      Product
-                    </th>
-
-                    <th className="px-4 py-4 text-center">
-                      Qty
-                    </th>
-
-                    <th className="px-4 py-4 text-center">
-                      Delivered
-                    </th>
-
-                    <th className="px-4 py-4 text-center">
-                      Missed
-                    </th>
-
-                    <th className="px-4 py-4 text-center">
-                      Daily Rate
-                    </th>
-
-                    <th className="px-4 py-4 text-center">
-                      Bill Amount
-                    </th>
-
-                    <th className="px-4 py-4 text-center">
-                      Payment
-                    </th>
-
-                    <th className="px-4 py-4 text-center">
-                      Subscription
-                    </th>
-
-                    <th className="px-4 py-4 text-center">
-                      Actions
-                    </th>
-
-                  </tr>
-
-                </thead>
-
-                <tbody>
-
-                  {reportCustomers.map(
-                    (c, index) => (
-
-                      <tr
-                        key={
-                          c.subscriptionId
-                        }
-                        className="
-                          report-fade
-                          border-b
-                          border-gray-100
-                          transition-all
-                          duration-200
-                          hover:bg-green-50/60
-                        "
-                        style={{
-                          animationDelay:
-                            `${index * 40}ms`,
-                        }}
-                      >
-
-                        <td className="px-4 py-4">
-
-                          <div className="font-black text-gray-900">
-                            {c.customerName}
-                          </div>
-
-                          <div className="text-sm text-gray-500 mt-1">
-                            {c.phone}
-                          </div>
-
-                        </td>
-
-                        <td className="px-4 py-4">
-
-                          <div className="flex items-center gap-2">
-
-                            <span className="text-xl">
-                              🥛
-                            </span>
-
-                            <span className="font-semibold">
-                              {c.product}
-                            </span>
-
-                          </div>
-
-                        </td>
-
-                        <td className="px-4 py-4 text-center font-bold">
-                          {c.quantity}
-                        </td>
-
-                        <td className="px-4 py-4 text-center">
-
-                          <span className="
-                            inline-flex
-                            items-center
-                            justify-center
-                            min-w-9
-                            px-2
-                            py-1
-                            rounded-full
-                            bg-green-100
-                            text-green-700
-                            font-black
-                          ">
-                            {c.deliveredDays}
-                          </span>
-
-                        </td>
-
-                        <td className="px-4 py-4 text-center">
-
-                          <span className="
-                            inline-flex
-                            items-center
-                            justify-center
-                            min-w-9
-                            px-2
-                            py-1
-                            rounded-full
-                            bg-red-100
-                            text-red-600
-                            font-black
-                          ">
-                            {c.missedDays}
-                          </span>
-
-                        </td>
-
-                        <td className="px-4 py-4 text-center whitespace-nowrap">
-                          ₹
-                          {Number(
-                            c.dailyRate
-                          ).toFixed(2)}
-                        </td>
-
-                        <td className="
-                          px-4
-                          py-4
-                          text-center
-                          font-black
-                          text-green-700
-                          whitespace-nowrap
-                        ">
-                          ₹
-                          {Number(
-                            c.billAmount
-                          ).toFixed(2)}
-                        </td>
-
-                        <td className="px-4 py-4 text-center">
-
-                          <PaymentBadge
-                            status={
-                              c.paymentStatus
-                            }
-                            noInvoice={
-                              Number(c.deliveredDays || 0) <= 0
-                            }
-                          />
-
-                        </td>
-
-                        <td className="px-4 py-4 text-center">
-
-                          <SubscriptionBadge
-                            status={c.status}
-                          />
-
-                        </td>
-
-                        <td className="px-4 py-4">
-
-                          <div className="
-                            flex
-                            flex-wrap
-                            justify-center
-                            gap-2
-                          ">
-
-                            <ActionButton
-                              label="View"
-                              icon="👁"
-                              onClick={() =>
-                                handleViewBill(
-                                  c.subscriptionId
-                                )
-                              }
-                              className="
-                                bg-gray-100
-                                text-gray-700
-                                hover:bg-gray-200
-                              "
-                              disabled={
-                                Number(c.deliveredDays || 0) <= 0
-                              }
-                            />
-
-                            <ActionButton
-                              label="PDF"
-                              icon="📄"
-                              onClick={() =>
-                                handleDownloadInvoice(
-                                  c.subscriptionId
-                                )
-                              }
-                              className="
-                                bg-red-600
-                                text-white
-                                hover:bg-red-700
-                              "
-                              disabled={
-                                Number(c.deliveredDays || 0) <= 0
-                              }
-                            />
-
-                            <ActionButton
-                              label="Print"
-                              icon="🖨"
-                              onClick={() =>
-                                handlePrintInvoice(
-                                  c.subscriptionId
-                                )
-                              }
-                              className="
-                                bg-indigo-600
-                                text-white
-                                hover:bg-indigo-700
-                              "
-                              disabled={
-                                Number(c.deliveredDays || 0) <= 0
-                              }
-                            />
-
-                            <ActionButton
-                              label="WhatsApp"
-                              icon="📲"
-                              onClick={() =>
-                                handleWhatsappInvoice(
-                                  c.subscriptionId
-                                )
-                              }
-                              className="
-                                bg-green-600
-                                text-white
-                                hover:bg-green-700
-                              "
-                              disabled={
-                                Number(c.deliveredDays || 0) <= 0
-                              }
-                            />
-
-                            {c.paymentStatus !==
-                              "Paid" && (
-                              <ActionButton
-                                label="Paid"
-                                icon="✓"
-                                onClick={() =>
-                                  handleMarkSubscriptionPaid(
-                                    c.subscriptionId
-                                  )
-                                }
-                                className="
-                                  bg-emerald-700
-                                  text-white
-                                  hover:bg-emerald-800
-                                "
-                                disabled={
-                                  Number(c.deliveredDays || 0) <= 0
-                                }
-                              />
-                            )}
-
-                          </div>
-
-                        </td>
-
-                      </tr>
-
-                    )
-                  )}
-
-                </tbody>
-
-              </table>
-
+        {/* DESKTOP */}
+        {!loading && reportCustomers.length > 0 && (
+          <div className="mr-enter hidden overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm md:block">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[.16em] text-emerald-600">Delivery ledger</p>
+                <h2 className="mt-1 text-lg font-black">Customer monthly billing</h2>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
+                {reportCustomers.length} customers
+              </span>
             </div>
 
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1120px]">
+                <thead className="bg-[#087346] text-white">
+                  <tr>
+                    {["Customer","Product","Qty","Delivered","Missed","Daily Rate","Bill Amount","Payment","Subscription","Actions"].map((head, i) => (
+                      <th key={head} className={`px-4 py-4 text-xs font-black ${i >= 2 ? "text-center" : "text-left"}`}>
+                        {head}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportCustomers.map((c, index) => {
+                    const hasBill = Number(c.deliveredDays || 0) > 0;
+                    return (
+                      <tr
+                        key={c.subscriptionId}
+                        className="mr-enter border-b border-slate-100 transition hover:bg-emerald-50/40"
+                        style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}
+                      >
+                        <td className="px-4 py-4">
+                          <div className="font-black">{c.customerName}</div>
+                          <div className="mt-1 text-xs text-slate-500">{c.phone}</div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2 font-semibold">
+                            <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-emerald-50">
+                              <img src="/logo.png" alt="" className="h-full w-full object-contain p-1.5" />
+                            </span>
+                            {c.product}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-center font-black">{c.quantity}</td>
+                        <td className="px-4 py-4 text-center"><CountBadge value={c.deliveredDays} tone="green" /></td>
+                        <td className="px-4 py-4 text-center"><CountBadge value={c.missedDays} tone="red" /></td>
+                        <td className="px-4 py-4 text-center font-semibold whitespace-nowrap">₹{Number(c.dailyRate).toFixed(2)}</td>
+                        <td className="px-4 py-4 text-center font-black text-emerald-700 whitespace-nowrap">₹{Number(c.billAmount).toFixed(2)}</td>
+                        <td className="px-4 py-4 text-center"><PaymentBadge status={c.paymentStatus} noInvoice={!hasBill} /></td>
+                        <td className="px-4 py-4 text-center"><SubscriptionBadge status={c.status} /></td>
+                        <td className="px-4 py-4">
+                          <div className="flex min-w-[310px] flex-wrap justify-center gap-2">
+                            <ActionButton label="View" icon="👁" onClick={() => handleViewBill(c.subscriptionId)} disabled={!hasBill} className="bg-slate-100 text-slate-700 hover:bg-slate-200" />
+                            <ActionButton label="PDF" icon="▣" onClick={() => handleDownloadInvoice(c.subscriptionId)} disabled={!hasBill} className="bg-rose-600 text-white hover:bg-rose-700" />
+                            <ActionButton label="Share PDF" icon="↗" onClick={() => handleShareInvoice(c.subscriptionId)} disabled={!hasBill} className="bg-violet-600 text-white hover:bg-violet-700" />
+                            <ActionButton label="Print" icon="▤" onClick={() => handlePrintInvoice(c.subscriptionId)} disabled={!hasBill} className="bg-indigo-600 text-white hover:bg-indigo-700" />
+                            <ActionButton label="WhatsApp" icon="↗" onClick={() => handleWhatsappInvoice(c.subscriptionId)} disabled={!hasBill} className="bg-emerald-600 text-white hover:bg-emerald-700" />
+                            {c.paymentStatus !== "Paid" && (
+                              <ActionButton label="Paid" icon="✓" onClick={() => handleMarkSubscriptionPaid(c.subscriptionId)} disabled={!hasBill} className="bg-emerald-800 text-white hover:bg-emerald-900" />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
-
       </div>
-
-      {/* ========================================
-          DRAWER
-      ======================================== */}
 
       <MonthlyBillDrawer
         open={drawerOpen}
         details={selectedBill}
         month={month}
         year={year}
-        onMarkPaid={
-          handleMarkPaid
-        }
-        onClose={() =>
-          setDrawerOpen(false)
-        }
+        onMarkPaid={handleMarkPaid}
+        onClose={() => setDrawerOpen(false)}
       />
-
     </div>
   );
 }
@@ -1217,469 +758,149 @@ function MobileReportCard({
   index,
   onView,
   onDownload,
+  onShare,
   onPrint,
   onWhatsapp,
   onPaid,
 }) {
   const c = customer;
-
-  // No monthly invoice should be shown when there are no completed deliveries.
-  const hasBillableDelivery =
-    Number(c.deliveredDays || 0) > 0;
+  const [expanded, setExpanded] = useState(false);
+  const hasBillableDelivery = Number(c.deliveredDays || 0) > 0;
+  const isPaid = String(c.paymentStatus || "").toLowerCase() === "paid";
 
   return (
-    <div
-      className="
-        report-fade
-        bg-white
-        rounded-3xl
-        border border-gray-100
-        shadow-sm
-        overflow-hidden
-        transition-all
-        duration-300
-        active:scale-[0.99]
-      "
-      style={{
-        animationDelay:
-          `${index * 60}ms`,
-      }}
+    <article
+      className="mr-card mr-enter overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,.06)]"
+      style={{ animationDelay: `${Math.min(index * 35, 240)}ms` }}
     >
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+        className="mr-action flex min-h-[78px] w-full items-center justify-between gap-3 p-3.5 text-left sm:p-4"
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-emerald-50 p-1.5 ring-1 ring-emerald-100">
+            <img src="/logo.png" alt="Farm Fresh Dairy" className="h-full w-full object-contain" />
+          </div>
 
-      {/* Card Header */}
-
-      <div className="
-        p-4
-        border-b
-        border-gray-100
-      ">
-
-        <div className="
-          flex
-          items-start
-          justify-between
-          gap-3
-        ">
-
-          <div className="
-            flex
-            items-center
-            gap-3
-            min-w-0
-          ">
-
-            <div className="
-              w-12 h-12
-              rounded-2xl
-              bg-green-100
-              flex
-              items-center
-              justify-center
-              text-xl
-              flex-shrink-0
-            ">
-              👤
-            </div>
-
-            <div className="min-w-0">
-
-              <h2 className="
-                font-black
-                text-gray-900
-                truncate
-              ">
-                {c.customerName}
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="truncate text-[15px] font-black text-slate-900">
+                {c.customerName || "Customer"}
               </h2>
-
-              <p className="
-                text-sm
-                text-gray-500
-                mt-0.5
-              ">
-                📞 {c.phone}
-              </p>
-
+              {isPaid && (
+                <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700">
+                  PAID
+                </span>
+              )}
             </div>
-
-          </div>
-
-          <SubscriptionBadge
-            status={c.status}
-          />
-
-        </div>
-
-      </div>
-
-      {/* Product */}
-
-      <div className="p-4">
-
-        <div className="
-          bg-green-50
-          border border-green-100
-          rounded-2xl
-          p-4
-        ">
-
-          <div className="
-            flex
-            items-center
-            gap-3
-          ">
-
-            <div className="
-              w-11 h-11
-              rounded-xl
-              bg-white
-              flex
-              items-center
-              justify-center
-              text-2xl
-              shadow-sm
-            ">
-              🥛
-            </div>
-
-            <div className="min-w-0">
-
-              <p className="
-                text-xs
-                uppercase
-                tracking-wide
-                text-green-600
-                font-black
-              ">
-                Product
-              </p>
-
-              <p className="
-                font-black
-                text-gray-900
-                mt-1
-                truncate
-              ">
-                {c.product}
-              </p>
-
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* Metrics */}
-
-        <div className="
-          grid
-          grid-cols-2
-          gap-3
-          mt-3
-        ">
-
-          <Metric
-            label="Quantity"
-            value={c.quantity}
-            icon="📦"
-          />
-
-          <Metric
-            label="Delivered"
-            value={`${c.deliveredDays} days`}
-            icon="🚚"
-            positive
-          />
-
-          <Metric
-            label="Missed"
-            value={`${c.missedDays} days`}
-            icon="❌"
-            negative
-          />
-
-          <Metric
-            label="Daily Rate"
-            value={`₹${Number(
-              c.dailyRate
-            ).toFixed(2)}`}
-            icon="💵"
-          />
-
-        </div>
-
-        {/* Bill */}
-
-        <div className="
-          mt-3
-          rounded-2xl
-          bg-emerald-50
-          border border-emerald-100
-          p-4
-        ">
-
-          <div className="
-            flex
-            items-center
-            justify-between
-            gap-3
-          ">
-
-            <div>
-
-              <p className="
-                text-xs
-                uppercase
-                tracking-wide
-                text-gray-500
-                font-bold
-              ">
-                Bill Amount
-              </p>
-
-              <p className="
-                text-2xl
-                font-black
-                text-green-700
-                mt-1
-              ">
-                ₹
-                {Number(
-                  c.billAmount
-                ).toFixed(2)}
-              </p>
-
-            </div>
-
-            <PaymentBadge
-              status={
-                c.paymentStatus
-              }
-              noInvoice={!hasBillableDelivery}
-            />
-
-          </div>
-
-        </div>
-
-        {!hasBillableDelivery && (
-          <div className="
-            mt-3
-            rounded-2xl
-            border border-gray-200
-            bg-gray-50
-            px-4 py-3
-            text-center
-          ">
-            <p className="text-sm font-black text-gray-600">
-              No Invoice for this period
+            <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">
+              {c.phone || "No phone"}
             </p>
-            <p className="text-xs text-gray-500 mt-1">
-              No deliveries were completed.
+            <p className="mt-1 truncate text-[11px] font-bold text-emerald-700">
+              {c.product || "Milk"} · {c.quantity || 1} qty · ₹{Number(c.billAmount || 0).toFixed(0)}
             </p>
           </div>
-        )}
-
-      </div>
-
-      {/* Actions */}
-
-      <div className="
-        p-4
-        bg-gray-50
-        border-t border-gray-100
-      ">
-
-        <div className="
-          grid
-          grid-cols-2
-          gap-2
-        ">
-
-          <ActionButton
-            label="View Bill"
-            icon="👁"
-            onClick={() =>
-              onView(
-                c.subscriptionId
-              )
-            }
-            className="
-              bg-white
-              border
-              border-gray-200
-              text-gray-700
-              hover:bg-gray-100
-            "
-            disabled={!hasBillableDelivery}
-          />
-
-          <ActionButton
-            label="PDF"
-            icon="📄"
-            onClick={() =>
-              onDownload(
-                c.subscriptionId
-              )
-            }
-            className="
-              bg-red-600
-              text-white
-              hover:bg-red-700
-            "
-            disabled={!hasBillableDelivery}
-          />
-
-          <ActionButton
-            label="Print"
-            icon="🖨"
-            onClick={() =>
-              onPrint(
-                c.subscriptionId
-              )
-            }
-            className="
-              bg-indigo-600
-              text-white
-              hover:bg-indigo-700
-            "
-            disabled={!hasBillableDelivery}
-          />
-
-          <ActionButton
-            label="WhatsApp"
-            icon="📲"
-            onClick={() =>
-              onWhatsapp(
-                c.subscriptionId
-              )
-            }
-            className="
-              bg-green-600
-              text-white
-              hover:bg-green-700
-            "
-            disabled={!hasBillableDelivery}
-          />
-
         </div>
 
-        {c.paymentStatus !==
-          "Paid" && (
-          <button
-            type="button"
-            onClick={() =>
-              onPaid(
-                c.subscriptionId
-              )
-            }
-            disabled={!hasBillableDelivery}
-            className="
-              w-full
-              mt-2
-              py-3
-              rounded-xl
-              bg-emerald-700
-              hover:bg-emerald-800
-              active:scale-95
-              text-white
-              font-black
-              transition-all
-              disabled:opacity-45
-              disabled:cursor-not-allowed
-              disabled:active:scale-100
-            "
-          >
-            ✓ Mark as Paid
-          </button>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <SubscriptionBadge status={c.status} />
+          <span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-transform duration-300 ${expanded ? "rotate-180" : ""}`}>
+            ↓
+          </span>
+        </div>
+      </button>
 
+      <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className="min-h-0 overflow-hidden">
+          <div className="border-t border-slate-100 bg-slate-50/40 p-3.5 sm:p-5">
+
+            <div className="flex items-center gap-3 rounded-2xl bg-white p-3.5 ring-1 ring-slate-100">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-emerald-50 p-1.5">
+                <img src="/logo.png" alt="Farm Fresh Dairy" className="h-full w-full object-contain" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-[.15em] text-emerald-600">Product</p>
+                <p className="mt-0.5 truncate text-sm font-black text-slate-900">
+                  {c.product || "Milk"} {c.size ? `· ${c.size}` : ""}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Metric label="Quantity" value={c.quantity || 0} icon="📦" />
+              <Metric label="Delivered" value={`${c.deliveredDays || 0} days`} icon="🚚" positive />
+              <Metric label="Missed" value={`${c.missedDays || 0} days`} icon="✕" negative />
+              <Metric label="Daily Rate" value={`₹${Number(c.dailyRate || 0).toFixed(2)}`} icon="₹" />
+            </div>
+
+            <div className="mt-3 rounded-2xl bg-gradient-to-r from-emerald-50 to-white p-4 ring-1 ring-emerald-100">
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-[.15em] text-slate-500">Bill Amount</p>
+                  <p className="mt-0.5 truncate text-2xl font-black text-emerald-700">
+                    ₹{Number(c.billAmount || 0).toFixed(2)}
+                  </p>
+                </div>
+                <PaymentBadge status={c.paymentStatus} noInvoice={!hasBillableDelivery} />
+              </div>
+            </div>
+
+            {!hasBillableDelivery && (
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center">
+                <p className="text-sm font-black text-slate-600">No Invoice for this period</p>
+                <p className="mt-1 text-[11px] text-slate-500">No deliveries were completed.</p>
+              </div>
+            )}
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <ActionButton label="View Bill" icon="👁" onClick={() => onView(c.subscriptionId)} disabled={!hasBillableDelivery} className="bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50" />
+              <ActionButton label="PDF" icon="▣" onClick={() => onDownload(c.subscriptionId)} disabled={!hasBillableDelivery} className="bg-rose-600 text-white hover:bg-rose-700" />
+              <ActionButton label="Share PDF" icon="↗" onClick={() => onShare(c.subscriptionId)} disabled={!hasBillableDelivery} className="bg-violet-600 text-white hover:bg-violet-700" />
+              <ActionButton label="Print" icon="▤" onClick={() => onPrint(c.subscriptionId)} disabled={!hasBillableDelivery} className="bg-indigo-600 text-white hover:bg-indigo-700" />
+              <ActionButton label="WhatsApp" icon="↗" onClick={() => onWhatsapp(c.subscriptionId)} disabled={!hasBillableDelivery} className="col-span-2 bg-emerald-600 text-white hover:bg-emerald-700" />
+            </div>
+
+            {!isPaid ? (
+              <button
+                type="button"
+                onClick={() => onPaid(c.subscriptionId)}
+                disabled={!hasBillableDelivery}
+                className="mr-action mt-2 min-h-12 w-full rounded-2xl bg-emerald-800 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ✓ Mark as Paid
+              </button>
+            ) : (
+              <div className="mt-2 flex min-h-11 items-center justify-center rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700">
+                ✓ Payment Completed
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-
-    </div>
+    </article>
   );
 }
 
-// ==================================================
 // STAT
 // ==================================================
 
-function ReportStat({
-  icon,
-  label,
-  value,
-  delay,
-  iconBg,
-  valueColor,
-}) {
+function ReportStat({ icon, label, value, delay, iconBg, valueColor }) {
   return (
     <div
-      className="
-        report-fade
-        bg-white
-        rounded-3xl
-        border border-gray-100
-        shadow-sm
-        p-4
-        sm:p-5
-        transition-all
-        duration-300
-        hover:-translate-y-1
-        hover:shadow-lg
-      "
-      style={{
-        animationDelay: delay,
-      }}
+      className="mr-enter rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg sm:p-5"
+      style={{ animationDelay: delay }}
     >
-
-      <div className="
-        flex
-        items-center
-        justify-between
-        gap-2
-      ">
-
+      <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-
-          <p className="
-            text-xs
-            sm:text-sm
-            text-gray-500
-            font-semibold
-          ">
-            {label}
-          </p>
-
-          <p className={`
-            report-number
-            text-2xl
-            sm:text-3xl
-            font-black
-            mt-1
-            truncate
-            ${valueColor}
-          `}>
-            {value}
-          </p>
-
+          <p className="text-xs font-semibold text-slate-500 sm:text-sm">{label}</p>
+          <p className={`mt-1 truncate text-2xl font-black sm:text-3xl ${valueColor}`}>{value}</p>
         </div>
-
-        <div className={`
-          w-11 h-11
-          sm:w-14 sm:h-14
-          rounded-2xl
-          flex
-          items-center
-          justify-center
-          text-2xl
-          sm:text-3xl
-          flex-shrink-0
-          ${iconBg}
-        `}>
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-2xl sm:h-14 sm:w-14 ${iconBg}`}>
           {icon}
         </div>
-
       </div>
-
     </div>
   );
 }
@@ -1688,56 +909,23 @@ function ReportStat({
 // METRIC
 // ==================================================
 
-function Metric({
-  label,
-  value,
-  icon,
-  positive,
-  negative,
-}) {
+function Metric({ label, value, icon, positive, negative }) {
   return (
-    <div className="
-      bg-gray-50
-      border border-gray-100
-      rounded-2xl
-      p-3
-    ">
-
-      <div className="
-        flex
-        items-center
-        gap-2
-      ">
-
-        <span className="text-lg">
-          {icon}
-        </span>
-
-        <p className="
-          text-xs
-          text-gray-500
-          font-semibold
-        ">
-          {label}
-        </p>
-
+    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+      <div className="flex items-center gap-2">
+        <span className="text-base">{icon}</span>
+        <p className="text-[11px] font-bold text-slate-500">{label}</p>
       </div>
-
-      <p className={`
-        mt-1
-        font-black
-        ${
-          positive
-            ? "text-green-600"
-            : negative
-            ? "text-red-600"
-            : "text-gray-900"
-        }
-      `}>
-        {value}
-      </p>
-
+      <p className={`mt-1 font-black ${positive ? "text-emerald-600" : negative ? "text-rose-600" : "text-slate-900"}`}>{value}</p>
     </div>
+  );
+}
+
+function CountBadge({ value, tone }) {
+  return (
+    <span className={`inline-flex min-w-9 items-center justify-center rounded-full px-2.5 py-1 text-xs font-black ${tone === "green" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-600"}`}>
+      {value}
+    </span>
   );
 }
 
@@ -1745,54 +933,20 @@ function Metric({
 // PAYMENT BADGE
 // ==================================================
 
-function PaymentBadge({
-  status,
-  noInvoice = false,
-}) {
-  const paid =
-    status === "Paid";
-
+function PaymentBadge({ status, noInvoice = false }) {
   if (noInvoice) {
     return (
-      <span className="
-        inline-flex
-        items-center
-        gap-1.5
-        px-3
-        py-1.5
-        rounded-full
-        text-xs
-        font-black
-        bg-gray-100
-        text-gray-500
-      ">
-        <span>—</span>
-        No Invoice
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-500">
+        — No Invoice
       </span>
     );
   }
 
-  return (
-    <span className={`
-      inline-flex
-      items-center
-      gap-1.5
-      px-3
-      py-1.5
-      rounded-full
-      text-xs
-      font-black
-      ${
-        paid
-          ? "bg-green-100 text-green-700"
-          : "bg-amber-100 text-amber-700"
-      }
-    `}>
-      <span>
-        {paid ? "✓" : "●"}
-      </span>
+  const paid = String(status || "").toLowerCase() === "paid";
 
-      {status || "Pending"}
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black ${paid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+      {paid ? "✓" : "●"} {status || "Pending"}
     </span>
   );
 }
@@ -1801,34 +955,12 @@ function PaymentBadge({
 // SUBSCRIPTION BADGE
 // ==================================================
 
-function SubscriptionBadge({
-  status,
-}) {
-  const active =
-    status === "Active";
+function SubscriptionBadge({ status }) {
+  const active = String(status || "").toLowerCase() === "active";
 
   return (
-    <span className={`
-      inline-flex
-      items-center
-      gap-1.5
-      px-2.5
-      py-1.5
-      rounded-full
-      text-xs
-      font-black
-      whitespace-nowrap
-      ${
-        active
-          ? "bg-green-100 text-green-700"
-          : "bg-red-100 text-red-700"
-      }
-    `}>
-      <span>
-        {active ? "●" : "●"}
-      </span>
-
-      {status || "-"}
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-[11px] font-black ${active ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+      ● {status || "-"}
     </span>
   );
 }
@@ -1837,32 +969,15 @@ function SubscriptionBadge({
 // ACTION BUTTON
 // ==================================================
 
-function ActionButton({
-  label,
-  icon,
-  onClick,
-  className,
-  disabled = false,
-}) {
+function ActionButton({ label, icon, onClick, className, disabled = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`
-        px-3
-        py-2.5
-        rounded-xl
-        text-sm
-        font-bold
-        transition-all
-        duration-200
-        active:scale-95
-        ${disabled ? "opacity-45 cursor-not-allowed active:scale-100" : ""}
-        ${className}
-      `}
+      className={`mr-action min-h-11 rounded-xl px-3 py-2.5 text-xs font-black disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none ${className}`}
     >
-      {icon} {label}
+      <span className="mr-1">{icon}</span>{label}
     </button>
   );
 }
@@ -1873,50 +988,12 @@ function ActionButton({
 
 function EmptyReport() {
   return (
-    <div className="
-      report-fade
-      bg-white
-      rounded-3xl
-      border border-gray-100
-      shadow-sm
-      p-10
-      sm:p-16
-      text-center
-    ">
-
-      <div className="
-        text-6xl
-        sm:text-7xl
-      ">
-        📊
+    <div className="mr-pop rounded-[28px] border border-slate-200 bg-white p-10 text-center shadow-sm sm:p-16">
+      <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl bg-emerald-50 p-3">
+        <img src="/logo.png" alt="Farm Fresh Dairy" className="h-full w-full object-contain" />
       </div>
-
-      <h2 className="
-        text-xl
-        sm:text-2xl
-        font-black
-        text-gray-800
-        mt-4
-      ">
-        No Report Found
-      </h2>
-
-      <p className="
-        text-gray-500
-        mt-2
-      ">
-        No delivery records found for
-      </p>
-
-      <p className="
-        text-lg
-        font-black
-        text-green-700
-        mt-1
-      ">
-        No data for the selected month
-      </p>
-
+      <h2 className="mt-5 text-xl font-black sm:text-2xl">No Report Found</h2>
+      <p className="mt-2 text-sm text-slate-500">No delivery records found for the selected month.</p>
     </div>
   );
 }

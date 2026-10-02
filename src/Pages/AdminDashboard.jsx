@@ -13,7 +13,10 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
-const [notificationCount, setNotificationCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [stockOpen, setStockOpen] = useState(true);
+  const [inventoryOpen, setInventoryOpen] = useState(true);
 
   useEffect(() => {
     const loadAdminData = async () => {
@@ -160,25 +163,111 @@ const [notificationCount, setNotificationCount] = useState(0);
     <>
       <style>{`
         @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(14px); }
+          from { opacity: 0; transform: translateY(18px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes softFloat {
+          0%, 100% { transform: translate3d(0, 0, 0); }
+          50% { transform: translate3d(0, -7px, 0); }
+        }
+
+        @keyframes notificationPulse {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, .25); }
+          50% { transform: scale(1.08); box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+        }
+
+        @keyframes shimmer {
+          0% { background-position: -700px 0; }
+          100% { background-position: 700px 0; }
+        }
+
+        .dashboard-enter {
+          animation: fadeUp .6s cubic-bezier(.22, 1, .36, 1) both;
+        }
+
+        .dashboard-float {
+          animation: softFloat 5s ease-in-out infinite;
+        }
+
+        .notification-badge {
+          animation: notificationPulse 2s ease-in-out infinite;
+        }
+
+        .notification-panel {
+          transition: max-height .45s cubic-bezier(.22, 1, .36, 1),
+                      opacity .3s ease,
+                      transform .35s ease;
+        }
+
+        .notification-panel.closed {
+          max-height: 0;
+          opacity: 0;
+          transform: translateY(-8px);
+          pointer-events: none;
+        }
+
+        .notification-panel.open {
+          max-height: 900px;
+          opacity: 1;
+          transform: translateY(0);
+        }
+
+        .dashboard-card {
+          transition: transform .3s cubic-bezier(.22, 1, .36, 1),
+                      box-shadow .3s ease,
+                      border-color .3s ease;
+        }
+
+        .dashboard-card:hover {
+          transform: translateY(-4px);
+        }
+
+        .tap-scale:active {
+          transform: scale(.97);
+        }
+
+        .skeleton {
+          background: linear-gradient(
+            90deg,
+            rgba(241,245,249,.9) 25%,
+            rgba(255,255,255,1) 50%,
+            rgba(241,245,249,.9) 75%
+          );
+          background-size: 700px 100%;
+          animation: shimmer 1.5s infinite linear;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          *,
+          *::before,
+          *::after {
+            animation-duration: .01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: .01ms !important;
+            scroll-behavior: auto !important;
+          }
         }
       `}</style>
 
       <div className="min-h-screen bg-[#f6f8fb] text-slate-900">
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
-          <div className="absolute -right-32 -top-32 h-80 w-80 rounded-full bg-emerald-200/30 blur-3xl" />
-          <div className="absolute -left-40 top-1/3 h-96 w-96 rounded-full bg-blue-200/20 blur-3xl" />
+          <div className="dashboard-float absolute -right-32 -top-32 h-80 w-80 rounded-full bg-emerald-200/30 blur-3xl" />
+          <div className="dashboard-float absolute -left-40 top-1/3 h-96 w-96 rounded-full bg-blue-200/20 blur-3xl" />
         </div>
 
         <main className="relative mx-auto max-w-[1500px] px-3 pb-28 pt-3 sm:px-5 sm:pb-8 sm:pt-5 lg:px-8">
 
           {/* MODERN HEADER */}
-          <header className="sticky top-2 z-40 mb-5 rounded-3xl border border-white/80 bg-white/90 px-4 py-3 shadow-lg backdrop-blur-xl sm:px-5">
+          <header style={{ animationDelay: "40ms" }} className="dashboard-enter sticky top-2 z-40 mb-5 rounded-3xl border border-white/80 bg-white/90 px-4 py-3 shadow-lg backdrop-blur-xl sm:px-5">
             <div className="flex items-center justify-between gap-3">
               <button onClick={() => navigate("/admin")} className="flex items-center gap-3 text-left">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-2xl shadow-lg shadow-emerald-200 transition hover:scale-105">
-                  🥛
+                <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-200 transition duration-300 hover:scale-105">
+                  <img
+                    src="/logo.png"
+                    alt="Farm Fresh Dairy"
+                    className="h-full w-full object-contain p-1"
+                  />
                 </div>
                 <div>
                   <p className="font-black text-slate-900">Farm Fresh Dairy</p>
@@ -188,12 +277,18 @@ const [notificationCount, setNotificationCount] = useState(0);
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => navigate("/admin/notifications")}
-                  className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-xl shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  onClick={() => setNotificationsOpen((open) => !open)}
+                  aria-expanded={notificationsOpen}
+                  aria-label={notificationsOpen ? "Collapse notifications" : "Open notifications"}
+                  className={`tap-scale relative flex h-11 w-11 items-center justify-center rounded-2xl border bg-white text-xl shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-md ${
+                    notificationsOpen
+                      ? "border-emerald-200 ring-4 ring-emerald-50"
+                      : "border-slate-200"
+                  }`}
                 >
-                  🔔
+                  <span className={`transition-transform duration-300 ${notificationsOpen ? "rotate-12" : ""}`}>🔔</span>
                   {notificationCount > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
+                    <span className="notification-badge absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
                       {notificationCount > 99 ? "99+" : notificationCount}
                     </span>
                   )}
@@ -215,7 +310,7 @@ const [notificationCount, setNotificationCount] = useState(0);
           </header>
 
           {/* HERO */}
-          <section className="relative mb-6 overflow-hidden rounded-[32px] bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-5 text-white shadow-2xl sm:p-8 lg:p-10">
+          <section style={{ animationDelay: "90ms" }} className="dashboard-enter relative mb-6 overflow-hidden rounded-[32px bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-5 text-white shadow-2xl sm:p-8 lg:p-10">
             <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-400/20 blur-3xl" />
             <div className="absolute bottom-[-100px] left-1/3 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" />
 
@@ -252,7 +347,7 @@ const [notificationCount, setNotificationCount] = useState(0);
           </section>
 
           {/* KPI */}
-          <section className="mb-6">
+          <section style={{ animationDelay: "140ms" }} className="dashboard-enter mb-6">
             <div className="mb-3">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Business overview</p>
               <h2 className="mt-1 text-xl font-black sm:text-2xl">Today at a glance</h2>
@@ -267,27 +362,71 @@ const [notificationCount, setNotificationCount] = useState(0);
             </div>
           </section>
 
-          {/* NOTIFICATIONS */}
-          <section className="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-xl">🔔</div>
-                <div>
-                  <h2 className="font-black">Notifications</h2>
-                  <p className="text-xs font-medium text-slate-400">
-                    {notificationCount ? `${notificationCount} unread notification${notificationCount === 1 ? "" : "s"}` : "Everything is up to date"}
+          {/* EXPANDABLE NOTIFICATIONS */}
+          <section
+            style={{ animationDelay: "190ms" }}
+            className="dashboard-enter mb-6 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl shadow-slate-200/50"
+          >
+            <button
+              type="button"
+              onClick={() => setNotificationsOpen((open) => !open)}
+              aria-expanded={notificationsOpen}
+              className="tap-scale flex w-full items-center justify-between gap-3 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5 sm:py-5"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-xl shadow-sm transition duration-300 ${
+                  notificationsOpen ? "rotate-6 scale-105" : ""
+                }`}>
+                  🔔
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="truncate font-black text-slate-900">Notifications</h2>
+                    {notificationCount > 0 && (
+                      <span className="notification-badge rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-black text-white">
+                        {notificationCount > 99 ? "99+" : notificationCount}
+                      </span>
+                    )}
+                  </div>
+                  <p className="truncate text-xs font-medium text-slate-400">
+                    {notificationCount
+                      ? `${notificationCount} unread notification${notificationCount === 1 ? "" : "s"}`
+                      : "Everything is up to date"}
                   </p>
                 </div>
               </div>
-              <button onClick={() => navigate("/admin/notifications")} className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black">
-                View all
-              </button>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="hidden rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-600 sm:inline-flex">
+                  {notificationsOpen ? "Collapse" : "Expand"}
+                </span>
+                <span
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-transform duration-300 ${
+                    notificationsOpen ? "rotate-180" : ""
+                  }`}
+                >
+                  ↓
+                </span>
+              </div>
+            </button>
+
+            <div className={`notification-panel ${notificationsOpen ? "open" : "closed"}`}>
+              <div className="border-t border-slate-100 bg-slate-50/40 px-2 py-2 sm:px-3 sm:py-3">
+                <AdminNotifications />
+                <div className="px-2 pb-2 pt-3 sm:px-3">
+                  <button
+                    onClick={() => navigate("/admin/notifications")}
+                    className="tap-scale w-full rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black text-white shadow-lg shadow-slate-200 transition hover:-translate-y-0.5 hover:bg-slate-800"
+                  >
+                    View all notifications →
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="px-2 py-2 sm:px-3"><AdminNotifications /></div>
           </section>
 
           {/* QUICK ACTIONS */}
-          <section className="mb-6">
+          <section style={{ animationDelay: "240ms" }} className="dashboard-enter mb-6">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Operations</p>
             <h2 className="mt-1 mb-4 text-xl font-black sm:text-2xl">Quick actions</h2>
 
@@ -303,153 +442,339 @@ const [notificationCount, setNotificationCount] = useState(0);
             </div>
           </section>
 
-          {/* INVENTORY */}
-          <section className="grid gap-5 xl:grid-cols-[0.85fr_1.5fr]">
-
-            {/* LOW STOCK */}
-            <div className="overflow-hidden rounded-3xl border border-amber-100 bg-white shadow-lg">
-              <div className="border-b border-slate-100 p-5 sm:p-6">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-xl">⚠️</div>
-                    <h2 className="text-xl font-black">Stock attention</h2>
-                    <p className="mt-1 text-sm text-slate-400">Products that need your attention</p>
+          {/* INVENTORY & STOCK */}
+          <section
+            style={{ animationDelay: "290ms" }}
+            className="dashboard-enter grid gap-5 xl:grid-cols-[0.85fr_1.5fr]"
+          >
+            {/* STOCK ATTENTION */}
+            <div className="dashboard-card overflow-hidden rounded-3xl border border-amber-100 bg-white shadow-lg">
+              <button
+                type="button"
+                onClick={() => setStockOpen((open) => !open)}
+                aria-expanded={stockOpen}
+                className="tap-scale flex w-full items-center justify-between gap-3 border-b border-slate-100 p-5 text-left transition hover:bg-amber-50/30 sm:p-6"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-xl transition duration-300 ${
+                      stockOpen ? "rotate-6 scale-105" : ""
+                    }`}
+                  >
+                    ⚠️
                   </div>
+
+                  <div className="min-w-0">
+                    <h2 className="truncate text-xl font-black">Stock attention</h2>
+                    <p className="mt-1 truncate text-sm text-slate-400">
+                      Products that need your attention
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
                   <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">
                     {lowStockProducts.length} items
                   </span>
-                </div>
-              </div>
 
-              <div className="p-4 sm:p-5">
-                {loading ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3].map((n) => <div key={n} className="h-16 animate-pulse rounded-2xl bg-slate-100" />)}
-                  </div>
-                ) : recentLowStock.length === 0 ? (
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-7 text-center">
-                    <div className="text-4xl">✅</div>
-                    <h3 className="mt-2 font-black text-emerald-700">Inventory looks healthy</h3>
-                    <p className="mt-1 text-sm text-slate-500">No low-stock products right now.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {recentLowStock.map((product, index) => (
-                      <div key={product.id || index} className="flex items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-3.5 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-xl shadow-sm">🥛</div>
-                          <div className="min-w-0">
-                            <p className="truncate font-black text-slate-800">{product.name || "Unnamed Product"}</p>
-                            <p className="mt-0.5 text-xs text-slate-400">₹{Number(product.price || 0)}</p>
+                  <span
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-transform duration-300 ${
+                      stockOpen ? "rotate-180" : ""
+                    }`}
+                  >
+                    ↓
+                  </span>
+                </div>
+              </button>
+
+              <div className={`notification-panel ${stockOpen ? "open" : "closed"}`}>
+                <div className="p-4 sm:p-5">
+                  {loading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((n) => (
+                        <div
+                          key={n}
+                          className="skeleton h-16 rounded-2xl bg-slate-100"
+                        />
+                      ))}
+                    </div>
+                  ) : recentLowStock.length === 0 ? (
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-7 text-center">
+                      <div className="text-4xl">✅</div>
+                      <h3 className="mt-2 font-black text-emerald-700">
+                        Inventory looks healthy
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        No low-stock products right now.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {recentLowStock.map((product, index) => (
+                        <div
+                          key={product.id || index}
+                          className="dashboard-card flex items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-3.5 transition hover:bg-white hover:shadow-md"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm">
+                              <img
+                                src="/logo.png"
+                                alt=""
+                                className="h-full w-full object-contain p-1.5"
+                              />
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="truncate font-black text-slate-800">
+                                {product.name || "Unnamed Product"}
+                              </p>
+                              <p className="mt-0.5 text-xs text-slate-400">
+                                ₹{Number(product.price || 0)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                              Left
+                            </p>
+                            <p className="text-2xl font-black text-amber-600">
+                              {Number(product.stock || 0)}
+                            </p>
                           </div>
                         </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Left</p>
-                          <p className="text-2xl font-black text-amber-600">{Number(product.stock || 0)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
 
-                <button onClick={() => navigate("/admin/products")} className="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-slate-800">
-                  Open Inventory →
-                </button>
+                  <button
+                    onClick={() => navigate("/admin/products")}
+                    className="tap-scale mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-slate-800"
+                  >
+                    Open Inventory →
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* PRODUCT TABLE */}
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
-              <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Inventory</p>
-                  <h2 className="mt-1 text-xl font-black">Products & stock</h2>
-                  <p className="mt-1 text-sm text-slate-400">Current inventory overview</p>
+            {/* PRODUCTS & STOCK */}
+            <div className="dashboard-card overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
+              <button
+                type="button"
+                onClick={() => setInventoryOpen((open) => !open)}
+                aria-expanded={inventoryOpen}
+                className="tap-scale flex w-full items-center justify-between gap-3 border-b border-slate-100 p-5 text-left transition hover:bg-blue-50/30 sm:p-6"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm transition duration-300 ${
+                      inventoryOpen ? "rotate-6 scale-105" : ""
+                    }`}
+                  >
+                    <img
+                      src="/logo.png"
+                      alt="Farm Fresh Dairy"
+                      className="h-full w-full object-contain p-1.5"
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">
+                      Inventory
+                    </p>
+                    <h2 className="mt-1 truncate text-xl font-black">
+                      Products & stock
+                    </h2>
+                    <p className="mt-1 truncate text-sm text-slate-400">
+                      Current inventory overview
+                    </p>
+                  </div>
                 </div>
-                <button onClick={() => navigate("/admin/products")} className="self-start rounded-xl bg-blue-50 px-4 py-2.5 text-xs font-black text-blue-700">
-                  Manage products →
-                </button>
-              </div>
 
-              <div className="p-3 sm:p-5">
-                {loading ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3, 4, 5].map((n) => <div key={n} className="h-14 animate-pulse rounded-xl bg-slate-100" />)}
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="hidden rounded-xl bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 sm:inline-flex">
+                    {products.length} products
+                  </span>
+
+                  <span
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-transform duration-300 ${
+                      inventoryOpen ? "rotate-180" : ""
+                    }`}
+                  >
+                    ↓
+                  </span>
+                </div>
+              </button>
+
+              <div
+                className={`notification-panel ${
+                  inventoryOpen ? "open" : "closed"
+                }`}
+              >
+                <div className="border-t border-slate-100 bg-slate-50/30 p-3 sm:p-5">
+                  <div className="mb-3 flex justify-end">
+                    <button
+                      onClick={() => navigate("/admin/products")}
+                      className="tap-scale rounded-xl bg-blue-50 px-4 py-2.5 text-xs font-black text-blue-700 transition hover:-translate-y-0.5 hover:bg-blue-100"
+                    >
+                      Manage products →
+                    </button>
                   </div>
-                ) : products.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <div className="text-4xl">📭</div>
-                    <h3 className="mt-2 font-black text-slate-700">No products found</h3>
-                  </div>
-                ) : (
-                  <>
-                    {/* Mobile */}
-                    <div className="space-y-2.5 md:hidden">
-                      {products.map((product, index) => {
-                        const stock = Number(product.stock || 0);
-                        const status = getStockStatus(stock);
-                        return (
-                          <div key={product.id || index} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="truncate font-black text-slate-800">{product.name || "-"}</p>
-                                <p className="mt-1 text-xs text-slate-400">{product.category || "Uncategorized"}</p>
+
+                  {loading ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <div
+                          key={n}
+                          className="skeleton h-14 rounded-xl bg-slate-100"
+                        />
+                      ))}
+                    </div>
+                  ) : products.length === 0 ? (
+                    <div className="py-12 text-center">
+                      <div className="text-4xl">📭</div>
+                      <h3 className="mt-2 font-black text-slate-700">
+                        No products found
+                      </h3>
+                    </div>
+                  ) : (
+                    <>
+                      {/* MOBILE */}
+                      <div className="space-y-2.5 md:hidden">
+                        {products.map((product, index) => {
+                          const stock = Number(product.stock || 0);
+                          const status = getStockStatus(stock);
+
+                          return (
+                            <div
+                              key={product.id || index}
+                              className="dashboard-card rounded-2xl border border-slate-100 bg-white p-3.5 shadow-sm"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate font-black text-slate-800">
+                                    {product.name || "-"}
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-400">
+                                    {product.category || "Uncategorized"}
+                                  </p>
+                                </div>
+
+                                <span
+                                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black ${status.className}`}
+                                >
+                                  {status.label}
+                                </span>
                               </div>
-                              <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black ${status.className}`}>
-                                {status.label}
-                              </span>
-                            </div>
-                            <div className="mt-3 flex justify-between">
-                              <div><p className="text-[10px] font-bold uppercase text-slate-400">Price</p><p className="font-black">₹{Number(product.price || 0)}</p></div>
-                              <div className="text-right"><p className="text-[10px] font-bold uppercase text-slate-400">Stock</p><p className={`text-xl font-black ${stock === 0 ? "text-red-600" : stock < 5 ? "text-amber-600" : "text-emerald-600"}`}>{stock}</p></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
 
-                    {/* Desktop */}
-                    <div className="hidden overflow-x-auto md:block">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-100 text-left">
-                            <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">Product</th>
-                            <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">Category</th>
-                            <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">Price</th>
-                            <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">Stock</th>
-                            <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {products.map((product, index) => {
-                            const stock = Number(product.stock || 0);
-                            const status = getStockStatus(stock);
-                            return (
-                              <tr key={product.id || index} className="border-b border-slate-50 transition hover:bg-slate-50">
-                                <td className="px-3 py-3.5">
-                                  <p className="font-bold text-slate-800">{product.name || "-"}</p>
-                                  <p className="mt-0.5 text-[10px] text-slate-400">ID: {product.id || "-"}</p>
-                                </td>
-                                <td className="px-3 py-3.5 text-slate-500">{product.category || "-"}</td>
-                                <td className="px-3 py-3.5 font-bold">₹{Number(product.price || 0)}</td>
-                                <td className="px-3 py-3.5 font-black">{stock}</td>
-                                <td className="px-3 py-3.5">
-                                  <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${status.className}`}>{status.label}</span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
+                              <div className="mt-3 flex justify-between">
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase text-slate-400">
+                                    Price
+                                  </p>
+                                  <p className="font-black">
+                                    ₹{Number(product.price || 0)}
+                                  </p>
+                                </div>
+
+                                <div className="text-right">
+                                  <p className="text-[10px] font-bold uppercase text-slate-400">
+                                    Stock
+                                  </p>
+                                  <p
+                                    className={`text-xl font-black ${
+                                      stock === 0
+                                        ? "text-red-600"
+                                        : stock < 5
+                                        ? "text-amber-600"
+                                        : "text-emerald-600"
+                                    }`}
+                                  >
+                                    {stock}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* DESKTOP */}
+                      <div className="hidden overflow-x-auto md:block">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-100 text-left">
+                              <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
+                                Product
+                              </th>
+                              <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
+                                Category
+                              </th>
+                              <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
+                                Price
+                              </th>
+                              <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
+                                Stock
+                              </th>
+                              <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
+                                Status
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            {products.map((product, index) => {
+                              const stock = Number(product.stock || 0);
+                              const status = getStockStatus(stock);
+
+                              return (
+                                <tr
+                                  key={product.id || index}
+                                  className="border-b border-slate-50 transition hover:bg-slate-50"
+                                >
+                                  <td className="px-3 py-3.5">
+                                    <p className="font-bold text-slate-800">
+                                      {product.name || "-"}
+                                    </p>
+                                    <p className="mt-0.5 text-[10px] text-slate-400">
+                                      ID: {product.id || "-"}
+                                    </p>
+                                  </td>
+
+                                  <td className="px-3 py-3.5 text-slate-500">
+                                    {product.category || "-"}
+                                  </td>
+
+                                  <td className="px-3 py-3.5 font-bold">
+                                    ₹{Number(product.price || 0)}
+                                  </td>
+
+                                  <td className="px-3 py-3.5 font-black">
+                                    {stock}
+                                  </td>
+
+                                  <td className="px-3 py-3.5">
+                                    <span
+                                      className={`rounded-full border px-2.5 py-1 text-xs font-black ${status.className}`}
+                                    >
+                                      {status.label}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </section>
 
           {/* FOOTER */}
-          <section className="mt-6 overflow-hidden rounded-3xl bg-slate-950 p-5 text-white shadow-xl sm:p-6">
+          <section style={{ animationDelay: "340ms" }} className="dashboard-enter mt-6 overflow-hidden rounded-3xl bg-slate-950 p-5 text-white shadow-xl sm:p-6">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <span className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-300">
@@ -522,7 +847,7 @@ function Action({ icon, title, desc, color, path }) {
   return (
     <button
       onClick={() => navigate(path)}
-      className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-4 text-left shadow-lg transition duration-300 hover:-translate-y-1.5 hover:shadow-xl active:scale-[0.98] sm:p-5"
+      className="dashboard-card tap-scale group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-4 text-left shadow-lg transition duration-300 hover:-translate-y-1.5 hover:shadow-xl active:scale-[0.98] sm:p-5"
     >
       <div className={`absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br ${colors[color]} opacity-[0.08] blur-xl transition group-hover:scale-150`} />
       <div className={`relative mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${colors[color]} text-xl text-white shadow-lg transition group-hover:scale-110 group-hover:rotate-3`}>{icon}</div>
@@ -538,5 +863,6 @@ function DarkAction({ label, icon, onClick }) {
 }
 
 function MobileNav({ icon, label, active, onClick }) {
-  return <button onClick={onClick} className={`flex flex-col items-center justify-center rounded-2xl px-2 py-2 transition ${active ? "bg-slate-900 text-white shadow-lg" : "text-slate-500 hover:bg-slate-100"}`}><span className="text-base leading-none">{icon}</span><span className="mt-1 text-[9px] font-black">{label}</span></button>;
+  
+  return <button onClick={onClick} className={`tap-scale flex min-h-[52px] flex-col items-center justify-center rounded-2xl px-2 py-2 transition duration-300 ${active ? "bg-slate-900 text-white shadow-lg shadow-slate-300" : "text-slate-500 hover:bg-slate-100"}`}><span className="text-base leading-none">{icon}</span><span className="mt-1 text-[9px] font-black">{label}</span></button>;
 }
