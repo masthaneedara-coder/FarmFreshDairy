@@ -18,31 +18,28 @@ function hashToken(token) {
    CREATE RENEWAL LINK
 ========================================================== */
 
-export async function createSubscriptionRenewalLinkService(
-  subscriptionId
-) {
-  // ----------------------------------------------------------
-  // 1. Get subscription
-  // ----------------------------------------------------------
+export async function createSubscriptionRenewalLinkService(subscriptionId) {
 
-  const {
-    data: subscription,
-    error: subscriptionError,
-  } = await supabaseAdmin
-    .from("subscriptions")
-    .select(`
-      *,
-      subscription_items(
-        quantity,
-        size,
-        products(
-          id,
-          name
+  // ========================================================
+  // 1. GET SUBSCRIPTION
+  // ========================================================
+
+  const { data: subscription, error: subscriptionError } =
+    await supabaseAdmin
+      .from("subscriptions")
+      .select(`
+        *,
+        subscription_items(
+          quantity,
+          size,
+          products(
+            id,
+            name
+          )
         )
-      )
-    `)
-    .eq("id", subscriptionId)
-    .single();
+      `)
+      .eq("id", subscriptionId)
+      .single();
 
   if (subscriptionError) {
     throw subscriptionError;
@@ -52,13 +49,14 @@ export async function createSubscriptionRenewalLinkService(
     throw new Error("Subscription not found.");
   }
 
-  // ----------------------------------------------------------
-  // 2. Do not create links for stopped subscriptions
-  // ----------------------------------------------------------
+  // ========================================================
+  // 2. PREVENT STOPPED/CANCELLED SUBSCRIPTIONS
+  // ========================================================
 
-  const status = String(
-    subscription.status || ""
-  ).trim().toLowerCase();
+  const status =
+    String(subscription.status || "")
+      .trim()
+      .toLowerCase();
 
   if (
     status === "stopped" ||
@@ -70,17 +68,36 @@ export async function createSubscriptionRenewalLinkService(
     );
   }
 
-  // ----------------------------------------------------------
-  // 3. Generate secure random token
-  // ----------------------------------------------------------
+  // ========================================================
+  // 3. INVALIDATE OLD RENEWAL LINKS
+  // ========================================================
 
-  const token = crypto.randomBytes(32).toString("hex");
+  const { error: invalidateError } =
+    await supabaseAdmin
+      .from("subscription_renewal_links")
+      .update({
+        used_at: new Date().toISOString(),
+      })
+      .eq("subscription_id", subscriptionId)
+      .is("used_at", null);
 
-  const tokenHash = hashToken(token);
+  if (invalidateError) {
+    throw invalidateError;
+  }
 
-  // ----------------------------------------------------------
-  // 4. Token expires after 7 days
-  // ----------------------------------------------------------
+  // ========================================================
+  // 4. GENERATE NEW SECURE TOKEN
+  // ========================================================
+
+  const token =
+    crypto.randomBytes(32).toString("hex");
+
+  const tokenHash =
+    hashToken(token);
+
+  // ========================================================
+  // 5. TOKEN EXPIRY
+  // ========================================================
 
   const expiresAt = new Date();
 
@@ -88,30 +105,28 @@ export async function createSubscriptionRenewalLinkService(
     expiresAt.getDate() + TOKEN_EXPIRY_DAYS
   );
 
-  // ----------------------------------------------------------
-  // 5. Store HASH only
-  // ----------------------------------------------------------
+  // ========================================================
+  // 6. SAVE NEW LINK
+  // ========================================================
 
-  const {
-    data: renewalLink,
-    error: linkError,
-  } = await supabaseAdmin
-    .from("subscription_renewal_links")
-    .insert({
-      subscription_id: subscriptionId,
-      token_hash: tokenHash,
-      expires_at: expiresAt.toISOString(),
-    })
-    .select()
-    .single();
+  const { data: renewalLink, error: linkError } =
+    await supabaseAdmin
+      .from("subscription_renewal_links")
+      .insert({
+        subscription_id: subscriptionId,
+        token_hash: tokenHash,
+        expires_at: expiresAt.toISOString(),
+      })
+      .select()
+      .single();
 
   if (linkError) {
     throw linkError;
   }
 
-  // ----------------------------------------------------------
-  // 6. Customer-facing URL
-  // ----------------------------------------------------------
+  // ========================================================
+  // 7. CREATE URL
+  // ========================================================
 
   const renewalUrl =
     `${FRONTEND_URL}/renew/${token}`;
@@ -123,7 +138,6 @@ export async function createSubscriptionRenewalLinkService(
     expiresAt: renewalLink.expires_at,
   };
 }
-
 
 /* ==========================================================
    GET RENEWAL LINK DETAILS

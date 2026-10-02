@@ -876,10 +876,16 @@ export async function renewUsingLink(
     // 7. Mark link as used
     // --------------------------------------------------------
 
-    await markSubscriptionRenewalLinkUsedService(
-      token
-    );
+   const usedLink =
+  await markSubscriptionRenewalLinkUsedService(
+    token
+      );
 
+    if (!usedLink) {
+      throw new Error(
+        "Subscription was renewed, but the renewal link could not be expired."
+      );
+    }
     return res.json({
       success: true,
 
