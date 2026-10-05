@@ -34,6 +34,7 @@ import monthlyBillingRoutes from "./routes/monthlyBilling.routes.js";
 import extraMilkRoutes from "./routes/extraMilk.routes.js";
 import customerDeviceRoutes from "./routes/customerDevice.routes.js";
 import couponRoutes from "./routes/coupon.routes.js";
+import whatsappRoutes from "./routes/whatsapp.routes.js";
 
 
 
@@ -132,6 +133,7 @@ app.use("/api/monthly-bills", monthlyBillingRoutes);
 app.use("/api/extra-milk", extraMilkRoutes);
 app.use("/api/customer-devices", customerDeviceRoutes);
 app.use("/api/coupons", couponRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
 
 // WhatsApp
 
