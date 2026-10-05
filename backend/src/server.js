@@ -1,8 +1,12 @@
+import dotenv from "dotenv";
+
+dotenv.config();
+
 import app from "./app.js";
-import { startSubscriptionResumeJob }
-  from "./jobs/subscriptionResume.job.js";
+import { startSubscriptionResumeJob } from "./jobs/subscriptionResume.job.js";
 
 const PORT = process.env.PORT || 5000;
+
 startSubscriptionResumeJob();
 
 app.listen(PORT, () => {
