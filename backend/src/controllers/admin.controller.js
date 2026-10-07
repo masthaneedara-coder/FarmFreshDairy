@@ -1,4 +1,8 @@
 import { loginAdminService } from "../services/admin.service.js";
+import {
+  getAutoAssignSettingService,
+  setAutoAssignSettingService,
+} from "../services/deliveryAssignment.service.js";
 
 export const loginAdmin = async (req, res) => {
   try {
@@ -47,3 +51,74 @@ export const loginAdmin = async (req, res) => {
     });
   }
 };
+export async function getAutoAssignSettingController(
+  req,
+  res
+) {
+  try {
+
+    const enabled =
+      await getAutoAssignSettingService();
+
+    return res.json({
+      success: true,
+      enabled,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get Auto Assign Setting Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to get auto assign setting.",
+    });
+
+  }
+}
+
+export async function setAutoAssignSettingController(
+  req,
+  res
+) {
+  try {
+
+    const { enabled } = req.body;
+
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "enabled must be true or false.",
+      });
+    }
+
+    const result =
+      await setAutoAssignSettingService(
+        enabled
+      );
+
+    return res.json({
+      success: true,
+      ...result,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Set Auto Assign Setting Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to update auto assign setting.",
+    });
+
+  }
+}
