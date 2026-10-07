@@ -96,3 +96,49 @@ export async function bulkAssignSubscriptionDeliveries(
     }
   );
 }
+// ==========================================
+// AUTO ASSIGN SETTING
+// ==========================================
+
+export async function getAutoAssignSetting() {
+  const response = await fetch(
+    `${API_URL}/admin/auto-assign`
+  );
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message ||
+        "Failed to load auto assign setting."
+    );
+  }
+
+  return data;
+}
+
+export async function setAutoAssignSetting(enabled) {
+  const response = await fetch(
+    `${API_URL}/admin/auto-assign`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        enabled,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(
+      data.message ||
+        "Failed to update auto assign setting."
+    );
+  }
+
+  return data;
+}

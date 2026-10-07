@@ -5,6 +5,8 @@ import {
   generateSubscriptionDeliveries,
   updateSubscriptionDeliveryStatus,
   bulkAssignSubscriptionDeliveries,
+  getAutoAssignSetting,
+  setAutoAssignSetting,
 } from "../services/subscriptionDeliveryService";
 
 import { getDeliveryBoys } from "../services/deliveryBoyService";
@@ -36,6 +38,8 @@ export default function AdminSubscriptionDeliveries() {
 
   // Mobile delivery card expand/collapse state
   const [expandedId, setExpandedId] = useState(null);
+  const [autoAssignEnabled, setAutoAssignEnabled] = useState(true);
+const [autoAssignLoading, setAutoAssignLoading] = useState(false);
 
   // ==========================================
   // LOAD
@@ -44,7 +48,54 @@ export default function AdminSubscriptionDeliveries() {
   useEffect(() => {
     loadDeliveries();
     loadDeliveryBoys();
+    loadAutoAssignSetting();
   }, []);
+  async function loadAutoAssignSetting() {
+  try {
+    const response = await getAutoAssignSetting();
+
+    setAutoAssignEnabled(
+      response?.enabled ?? true
+    );
+  } catch (err) {
+    console.error(
+      "Unable to load auto assign setting:",
+      err
+    );
+  }
+}
+async function handleAutoAssignToggle() {
+  try {
+    setAutoAssignLoading(true);
+
+    const newValue = !autoAssignEnabled;
+
+    const response =
+      await setAutoAssignSetting(newValue);
+
+    if (!response?.success) {
+      throw new Error(
+        response?.message ||
+          "Failed to update auto assignment."
+      );
+    }
+
+    setAutoAssignEnabled(newValue);
+
+  } catch (err) {
+    console.error(
+      "Auto Assign Toggle Error:",
+      err
+    );
+
+    alert(
+      err.message ||
+        "Failed to update auto assignment."
+    );
+  } finally {
+    setAutoAssignLoading(false);
+  }
+}
 
   async function loadDeliveries() {
     try {
@@ -630,18 +681,55 @@ async function handleRestoreToday(delivery) {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={loading}
-              className="min-h-11 shrink-0 rounded-2xl bg-white px-3 text-xs font-black text-emerald-800 shadow-lg transition active:scale-95 disabled:opacity-50 sm:px-5 sm:text-sm"
-            >
-              {loading ? "⏳" : "⚡"}{" "}
-              <span className="hidden sm:inline">
-                {loading ? "Generating..." : "Generate Today"}
-              </span>
-              <span className="sm:hidden">Generate</span>
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+
+  <button
+    onClick={handleAutoAssignToggle}
+    disabled={autoAssignLoading}
+    className={`
+      px-5 py-3.5
+      rounded-2xl
+      font-black
+      transition-all
+      active:scale-95
+      border
+      ${
+        autoAssignEnabled
+          ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+          : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+      }
+    `}
+  >
+    {autoAssignLoading
+      ? "⏳ Updating..."
+      : autoAssignEnabled
+      ? "🟢 Auto Assign: ON"
+      : "⚪ Auto Assign: OFF"}
+  </button>
+
+  <button
+    onClick={handleGenerate}
+    disabled={loading}
+    className="
+      px-5 sm:px-6 py-3.5
+      rounded-2xl
+      bg-green-600
+      hover:bg-green-700
+      active:scale-95
+      text-white
+      font-black
+      shadow-lg shadow-green-600/20
+      transition-all duration-200
+      disabled:bg-gray-400
+      disabled:shadow-none
+    "
+  >
+    {loading
+      ? "⏳ Generating..."
+      : "⚡ Generate Today's Deliveries"}
+  </button>
+
+</div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
