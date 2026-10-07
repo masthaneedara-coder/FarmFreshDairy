@@ -331,6 +331,43 @@ export async function updateDeliveryStatusService(
     if (updateError) {
       throw updateError;
     }
+    // ==========================================================
+// AUTO PAUSE WHEN PREPAID WALLET REACHES ZERO
+// ==========================================================
+
+if (
+  status === "Delivered" &&
+  isPrepaid &&
+  walletResult &&
+  walletResult.newBalance <= 0
+) {
+  console.log(
+    "PREPAID WALLET REACHED ZERO → PAUSING SUBSCRIPTION:",
+    delivery.subscription_id
+  );
+
+  const { error: pauseError } = await supabaseAdmin
+    .from("subscriptions")
+    .update({
+      status: "Paused",
+      is_paused: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", delivery.subscription_id);
+
+  if (pauseError) {
+    console.error(
+      "AUTO PAUSE AFTER WALLET ZERO ERROR:",
+      pauseError
+    );
+
+    throw pauseError;
+  }
+
+  console.log(
+    "SUBSCRIPTION PAUSED BECAUSE WALLET BALANCE IS ZERO"
+  );
+}
 
     // --------------------------------------------------------
     // 10. RETURN RESULT
@@ -708,6 +745,100 @@ console.log(
       skipped++;
       continue;
     }
+    // ========================================================
+// PREPAID WALLET CHECK
+// ========================================================
+
+const paymentMethod = String(
+  subscription.payment_method || ""
+)
+  .trim()
+  .toLowerCase();
+
+const isPrepaid =
+  paymentMethod === "online" ||
+  paymentMethod === "prepaid";
+
+if (normalEligible && isPrepaid) {
+
+  // Get customer's latest wallet balance
+  const { data: walletTransaction, error: walletError } =
+    await supabaseAdmin
+      .from("wallet_transactions")
+      .select("balance_after")
+      .eq("customer_id", subscription.customer_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  if (walletError) {
+    console.error("Wallet Balance Query Error:", walletError);
+    throw walletError;
+  }
+
+  const walletBalance = Number(
+    walletTransaction?.balance_after || 0
+  );
+
+  // Calculate today's normal delivery amount
+  let todayDeliveryAmount = 0;
+
+  for (const item of subscription.subscription_items || []) {
+    let quantity = Number(item.quantity || 0);
+    let size = item.size;
+
+    const productOverride = (deliveryOverrides || []).find(
+      (override) =>
+        override.product_id === item.product_id
+    );
+
+    if (productOverride) {
+      size = productOverride.size;
+      quantity = Number(productOverride.quantity);
+    }
+
+    if (quantity <= 0) continue;
+
+    const unitPrice = await getProductSizePrice(
+      item.product_id,
+      size
+    );
+
+    todayDeliveryAmount += quantity * unitPrice;
+  }
+
+  console.log("PREPAID WALLET CHECK:", {
+    subscriptionId: subscription.id,
+    walletBalance,
+    todayDeliveryAmount,
+  });
+
+  // Wallet empty or insufficient
+  if (
+    todayDeliveryAmount <= 0 ||
+    walletBalance < todayDeliveryAmount
+  ) {
+    console.log(
+      "PREPAID WALLET INSUFFICIENT → PAUSING SUBSCRIPTION"
+    );
+
+    const { error: pauseError } = await supabaseAdmin
+      .from("subscriptions")
+      .update({
+        status: "Paused",
+        is_paused: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", subscription.id);
+
+    if (pauseError) {
+      throw pauseError;
+    }
+
+    skipped++;
+    continue;
+  }
+}
 
     // ========================================================
     // 4. CHECK WHETHER TODAY'S DELIVERY ALREADY EXISTS
