@@ -31,6 +31,7 @@ import {
   getSubscriptionDeliverySummary,
   fetchCustomerSubscriptions,
   renewSubscription,
+  saveSubscriptionDeliveryOverrides,
 } from "../config/api";
 import PauseSubscriptionModal from "../Components/subscription/PauseSubscriptionModal";
 import { useAuthSession } from "../context/AuthSessionContext";
@@ -93,6 +94,8 @@ export default function CustomerDashboard() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [deliverySummaries, setDeliverySummaries] = useState({});
   const [statusUpdatingId, setStatusUpdatingId] = useState("");
+  const [resumeOption, setResumeOption] = useState(null);
+const [showResumeDeliveryModal, setShowResumeDeliveryModal] = useState(false);
   const [renewingId, setRenewingId] = useState("");
   const [expandedSubscriptionId, setExpandedSubscriptionId] = useState(null);
   const [showOlderOrders, setShowOlderOrders] = useState(false);
@@ -355,21 +358,189 @@ const getAutoActiveDate = (
     return today > expiry;
   };
 
-  const handleResume = async (subscriptionId) => {
-    try {
-      setStatusUpdatingId(subscriptionId);
+ const handleResume = async (subscription) => {
+  try {
+    setStatusUpdatingId(subscription.id);
 
-      await resumeSubscriptionApi(subscriptionId);
+    // ------------------------------------------
+    // 1. Resume subscription first
+    // ------------------------------------------
+    const resumeResponse = await resumeSubscriptionApi(
+      subscription.id
+    );
+
+    if (!resumeResponse?.success) {
+      throw new Error(
+        resumeResponse?.message ||
+          "Unable to resume subscription."
+      );
+    }
+
+    // ------------------------------------------
+    // 2. Determine next day after pause
+    // ------------------------------------------
+    const pauseTo =
+      subscription.pause_to ||
+      subscription.pauseTo;
+
+    if (!pauseTo) {
       await loadDashboard();
 
       alert("Subscription resumed successfully.");
-    } catch (err) {
-      console.error(err);
-      alert("Unable to resume subscription.");
-    } finally {
-      setStatusUpdatingId("");
+
+      return;
     }
-  };
+
+    const nextDeliveryDate = new Date(
+      `${pauseTo}T00:00:00`
+    );
+
+    nextDeliveryDate.setDate(
+      nextDeliveryDate.getDate() + 1
+    );
+
+    const nextDate =
+      nextDeliveryDate.toISOString().split("T")[0];
+
+    // ------------------------------------------
+    // 3. Check whether next day is normal
+    // delivery day
+    // ------------------------------------------
+    const frequency = String(
+      subscription.frequency || ""
+    ).toLowerCase();
+
+    let isNormalDeliveryDay = true;
+
+    if (
+      frequency === "alternate" ||
+      frequency === "alternate day" ||
+      frequency === "alternate days"
+    ) {
+      const startDate = new Date(
+        `${subscription.start_date}T00:00:00`
+      );
+
+      const nextDateObj = new Date(
+        `${nextDate}T00:00:00`
+      );
+
+      const differenceInDays = Math.floor(
+        (
+          nextDateObj.getTime() -
+          startDate.getTime()
+        ) /
+          (1000 * 60 * 60 * 24)
+      );
+
+      isNormalDeliveryDay =
+        differenceInDays >= 0 &&
+        differenceInDays % 2 === 0;
+    }
+
+    // ------------------------------------------
+    // 4. If next day is NOT normal delivery day,
+    // ask customer whether they want one-time milk
+    // ------------------------------------------
+    if (!isNormalDeliveryDay) {
+      setResumeOption({
+        subscription,
+        deliveryDate: nextDate,
+      });
+
+      setShowResumeDeliveryModal(true);
+
+      return;
+    }
+
+    // ------------------------------------------
+    // 5. Normal delivery day
+    // ------------------------------------------
+    await loadDashboard();
+
+    alert("Subscription resumed successfully.");
+
+  } catch (err) {
+    console.error("Resume subscription error:", err);
+
+    alert(
+      err?.message ||
+        "Unable to resume subscription."
+    );
+  } finally {
+    setStatusUpdatingId("");
+  }
+};
+const handleOneTimeResumeDelivery = async () => {
+  if (!resumeOption) return;
+
+  try {
+    setStatusUpdatingId(resumeOption.subscription.id);
+
+    const subscription = resumeOption.subscription;
+
+    const item =
+      subscription.subscription_items?.[0];
+
+    if (!item) {
+      throw new Error(
+        "Subscription item not found."
+      );
+    }
+
+    const deliveryDate =
+      resumeOption.deliveryDate;
+
+    // ------------------------------------------
+    // Save ONE-TIME delivery override
+    // ------------------------------------------
+    await saveSubscriptionDeliveryOverrides(
+      subscription.id,
+      [
+        {
+          delivery_date: deliveryDate,
+          product_id: item.product_id,
+          size: item.size,
+          quantity: Number(item.quantity || 1),
+        },
+      ]
+    );
+
+    setShowResumeDeliveryModal(false);
+    setResumeOption(null);
+
+    await loadDashboard();
+
+    alert(
+      `Milk delivery scheduled for ${formatDate(
+        deliveryDate
+      )}.`
+    );
+
+  } catch (err) {
+    console.error(
+      "One-time resume delivery error:",
+      err
+    );
+
+    alert(
+      err?.message ||
+        "Unable to schedule the delivery."
+    );
+  } finally {
+    setStatusUpdatingId("");
+  }
+};
+const handleContinueRegularSchedule = async () => {
+  setShowResumeDeliveryModal(false);
+  setResumeOption(null);
+
+  await loadDashboard();
+
+  alert(
+    "Subscription resumed. Your regular delivery schedule will continue."
+  );
+};
 
   const handleRenew = async (subscription) => {
     if (!subscription?.id) {
@@ -761,6 +932,81 @@ const getAutoActiveDate = (
         </div>
       )}
       <style>{`
+      .resume-delivery-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.resume-delivery-modal {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 28px;
+  position: relative;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.resume-delivery-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  border: none;
+  background: transparent;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.resume-delivery-icon {
+  font-size: 42px;
+  margin-bottom: 10px;
+}
+
+.resume-delivery-modal h3 {
+  margin: 0 0 12px;
+  font-size: 22px;
+}
+
+.resume-delivery-modal p {
+  color: #555;
+  line-height: 1.5;
+  margin: 8px 0;
+}
+
+.resume-delivery-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.resume-delivery-primary,
+.resume-delivery-secondary {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 13px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.resume-delivery-primary {
+  background: #1f7a4d;
+  color: white;
+}
+
+.resume-delivery-secondary {
+  background: #f1f1f1;
+  color: #333;
+}
         @keyframes dashFloat {
           0%, 100% { transform: translate3d(0, 0, 0); }
           50% { transform: translate3d(0, -9px, 0); }
@@ -3347,7 +3593,7 @@ const getAutoActiveDate = (
 
                         {(isPaused || isStopped) && (
                           <button
-                            onClick={() => handleResume(sub.id)}
+                            onClick={() => handleResume(sub)}
                             disabled={statusUpdatingId === sub.id}
                             className="subscription-btn resume"
                           >
@@ -3714,7 +3960,73 @@ const getAutoActiveDate = (
         }}
         onConfirm={handlePauseConfirm}
       />
+      {showResumeDeliveryModal && resumeOption && (
+  <div className="resume-delivery-overlay">
+    <div className="resume-delivery-modal">
+
+      <button
+        type="button"
+        className="resume-delivery-close"
+        onClick={() => {
+          setShowResumeDeliveryModal(false);
+          setResumeOption(null);
+        }}
+      >
+        ×
+      </button>
+
+      <div className="resume-delivery-icon">
+        🥛
+      </div>
+
+      <h3>
+        Subscription Activated
+      </h3>
+
+      <p>
+        Your regular delivery schedule does not
+        include{" "}
+        <strong>
+          {formatDate(
+            resumeOption.deliveryDate
+          )}
+        </strong>.
+      </p>
+
+      <p>
+        Would you like to receive milk on this
+        day as a one-time delivery?
+      </p>
+
+      <div className="resume-delivery-actions">
+
+        <button
+          type="button"
+          className="resume-delivery-primary"
+          onClick={handleOneTimeResumeDelivery}
+          disabled={
+            statusUpdatingId ===
+            resumeOption.subscription.id
+          }
+        >
+          🥛 Deliver That Day
+        </button>
+
+        <button
+          type="button"
+          className="resume-delivery-secondary"
+          onClick={handleContinueRegularSchedule}
+        >
+          Continue Regular Schedule
+        </button>
+
+      </div>
+
     </div>
+  </div>
+)}
+    </div>
+    
   );
 }
 
