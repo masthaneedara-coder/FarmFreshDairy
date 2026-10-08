@@ -105,6 +105,64 @@ app.get("/", (req, res) => {
     message: "Farm Fresh Dairy Backend Running 🚀",
   });
 });
+app.get("/api/cron/delivery", async (req, res) => {
+  try {
+    console.log("==================================");
+    console.log("VERCEL DAILY DELIVERY CRON");
+    console.log("Time:", new Date().toISOString());
+    console.log("==================================");
+
+    const { generateTodayDeliveriesService } =
+      await import("./services/subscriptionDelivery.service.js");
+
+    const { autoAssignTodayDeliveriesService } =
+      await import("./services/deliveryAssignment.service.js");
+
+    const deliveryResult =
+      await generateTodayDeliveriesService();
+
+    const assignmentResult =
+      await autoAssignTodayDeliveriesService();
+
+    console.log(
+      `Generated: ${deliveryResult.created?.length || 0}`
+    );
+
+    console.log(
+      `Existing: ${deliveryResult.updated?.length || 0}`
+    );
+
+    console.log(
+      `Skipped: ${deliveryResult.skipped || 0}`
+    );
+
+    console.log(
+      `Auto Assigned: ${assignmentResult.assigned?.length || 0}`
+    );
+
+    console.log(
+      `Remaining Pending: ${assignmentResult.pending?.length || 0}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Daily delivery job completed",
+      generated: deliveryResult.created?.length || 0,
+      existing: deliveryResult.updated?.length || 0,
+      skipped: deliveryResult.skipped || 0,
+      assigned: assignmentResult.assigned?.length || 0,
+      pending: assignmentResult.pending?.length || 0,
+    });
+  } catch (error) {
+    console.error("VERCEL DAILY DELIVERY CRON ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Daily delivery job failed",
+      error: error.message,
+    });
+  }
+});
 app.use("/api/test", testRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
