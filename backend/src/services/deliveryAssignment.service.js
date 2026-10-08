@@ -1,21 +1,15 @@
 import { supabaseAdmin } from "../config/supabase.js";
 
-/**
- * ==========================================================
- * INDIA TODAY
- * ==========================================================
- */
 function getIndiaToday() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
   }).format(new Date());
 }
 
-/**
- * ==========================================================
- * GET AUTO ASSIGN SETTING
- * ==========================================================
- */
+// ==========================================================
+// AUTO ASSIGN SETTING
+// ==========================================================
+
 export async function getAutoAssignSettingService() {
   const { data, error } = await supabaseAdmin
     .from("app_settings")
@@ -27,19 +21,9 @@ export async function getAutoAssignSettingService() {
     throw error;
   }
 
-  // Default ON if setting doesn't exist
-  if (!data) {
-    return true;
-  }
-
-  return String(data.value).toLowerCase() === "true";
+  return data?.value === "true";
 }
 
-/**
- * ==========================================================
- * SET AUTO ASSIGN SETTING
- * ==========================================================
- */
 export async function setAutoAssignSettingService(enabled) {
   const { data, error } = await supabaseAdmin
     .from("app_settings")
@@ -60,47 +44,36 @@ export async function setAutoAssignSettingService(enabled) {
     throw error;
   }
 
-  return {
-    enabled: String(data.value).toLowerCase() === "true",
-  };
+  return data?.value === "true";
 }
 
-/**
- * ==========================================================
- * AUTO ASSIGN TODAY'S DELIVERIES
- *
- * WORKLOAD BASED
- * ==========================================================
- */
+// ==========================================================
+// WORKLOAD-BASED AUTO ASSIGNMENT
+// ==========================================================
+
 export async function autoAssignTodayDeliveriesService() {
-  const today = getIndiaToday();
-
-  console.log("=================================");
-  console.log("AUTO ASSIGN DELIVERY BOYS");
-  console.log("Today:", today);
-  console.log("=================================");
-
-  // --------------------------------------------------------
-  // 1. CHECK AUTO ASSIGN SETTING
-  // --------------------------------------------------------
-
-  const enabled =
-    await getAutoAssignSettingService();
+  const enabled = await getAutoAssignSettingService();
 
   if (!enabled) {
-    console.log(
-      "AUTO ASSIGN IS OFF - NO DELIVERIES ASSIGNED"
-    );
+    console.log("AUTO ASSIGN: Disabled");
 
     return {
       enabled: false,
-      assigned: [],
-      pending: [],
+      assigned: 0,
+      pending: 0,
+      workload: [],
     };
   }
 
+  const today = getIndiaToday();
+
+  console.log("==================================");
+  console.log("AUTO DELIVERY BOY ASSIGNMENT");
+  console.log("India Today:", today);
+  console.log("==================================");
+
   // --------------------------------------------------------
-  // 2. GET PENDING SUBSCRIPTION DELIVERIES
+  // 1. GET TODAY'S UNASSIGNED PENDING DELIVERIES
   // --------------------------------------------------------
 
   const {
@@ -114,7 +87,7 @@ export async function autoAssignTodayDeliveriesService() {
       delivery_date,
       status,
       delivery_boy_id,
-      customer_id
+      created_at
     `)
     .eq("delivery_date", today)
     .eq("status", "Pending")
@@ -127,67 +100,57 @@ export async function autoAssignTodayDeliveriesService() {
     throw deliveryError;
   }
 
-  if (!deliveries?.length) {
-    console.log(
-      "No pending deliveries available for auto assignment."
-    );
+  if (!deliveries || deliveries.length === 0) {
+    console.log("AUTO ASSIGN: No pending deliveries.");
 
     return {
       enabled: true,
-      assigned: [],
-      pending: [],
+      assigned: 0,
+      pending: 0,
+      workload: [],
     };
   }
 
   // --------------------------------------------------------
-  // 3. GET ACTIVE + AVAILABLE DELIVERY BOYS
+  // 2. GET AVAILABLE DELIVERY BOYS
   // --------------------------------------------------------
 
   const {
     data: deliveryBoys,
-    error: boyError,
+    error: deliveryBoyError,
   } = await supabaseAdmin
     .from("delivery_boys")
     .select(`
       id,
       full_name,
       phone,
-      is_active,
-      is_available
+      is_available,
+      is_active
     `)
     .eq("is_active", true)
-    .eq("is_available", true)
-    .order("full_name", {
-      ascending: true,
-    });
+    .eq("is_available", true);
 
-  if (boyError) {
-    throw boyError;
+  if (deliveryBoyError) {
+    throw deliveryBoyError;
   }
 
-  if (!deliveryBoys?.length) {
-    console.log(
-      "NO ACTIVE + AVAILABLE DELIVERY BOYS."
-    );
+  if (!deliveryBoys || deliveryBoys.length === 0) {
+    console.log("AUTO ASSIGN: No available delivery boys.");
 
     return {
       enabled: true,
-      assigned: [],
-      pending: deliveries,
+      assigned: 0,
+      pending: deliveries.length,
+      workload: [],
     };
   }
 
   // --------------------------------------------------------
-  // 4. GET TODAY'S EXISTING WORKLOAD
-  //
-  // Count:
-  // Pending
-  // Assigned
-  // Out for Delivery
+  // 3. GET CURRENT WORKLOAD FOR TODAY
   // --------------------------------------------------------
 
   const {
-    data: existingDeliveries,
+    data: existingAssignments,
     error: workloadError,
   } = await supabaseAdmin
     .from("subscription_deliveries")
@@ -209,7 +172,7 @@ export async function autoAssignTodayDeliveriesService() {
   }
 
   // --------------------------------------------------------
-  // 5. CREATE WORKLOAD MAP
+  // 4. BUILD WORKLOAD MAP
   // --------------------------------------------------------
 
   const workload = {};
@@ -218,47 +181,38 @@ export async function autoAssignTodayDeliveriesService() {
     workload[boy.id] = 0;
   }
 
-  for (const delivery of existingDeliveries || []) {
-    if (
-      workload[delivery.delivery_boy_id] !== undefined
-    ) {
+  for (const delivery of existingAssignments || []) {
+    if (workload[delivery.delivery_boy_id] !== undefined) {
       workload[delivery.delivery_boy_id]++;
     }
   }
 
-  console.log(
-    "INITIAL WORKLOAD:",
-    workload
-  );
-
   // --------------------------------------------------------
-  // 6. ASSIGN ONE BY ONE
+  // 5. ASSIGN EACH DELIVERY TO LOWEST WORKLOAD
   // --------------------------------------------------------
 
-  const assigned = [];
-  const pending = [];
+  let assigned = 0;
 
   for (const delivery of deliveries) {
-    // Find delivery boy with lowest workload
-    const selectedBoy =
-      deliveryBoys.reduce((lowest, boy) => {
-        if (
-          workload[boy.id] <
-          workload[lowest.id]
-        ) {
-          return boy;
+    const availableBoys = deliveryBoys
+      .filter((boy) => workload[boy.id] !== undefined)
+      .sort((a, b) => {
+        if (workload[a.id] !== workload[b.id]) {
+          return workload[a.id] - workload[b.id];
         }
 
-        return lowest;
-      }, deliveryBoys[0]);
+        return a.full_name.localeCompare(b.full_name);
+      });
+
+    const selectedBoy = availableBoys[0];
 
     if (!selectedBoy) {
-      pending.push(delivery);
       continue;
     }
 
     // ------------------------------------------------------
-    // UPDATE DELIVERY
+    // Conditional update prevents duplicate assignment
+    // if the cron is triggered twice at the same time.
     // ------------------------------------------------------
 
     const {
@@ -269,75 +223,52 @@ export async function autoAssignTodayDeliveriesService() {
       .update({
         delivery_boy_id: selectedBoy.id,
         status: "Assigned",
-        assigned_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", delivery.id)
       .eq("status", "Pending")
       .is("delivery_boy_id", null)
-      .select(`
-        id,
-        delivery_number,
-        delivery_date,
-        status,
-        delivery_boy_id
-      `)
+      .select("id, delivery_boy_id, status")
       .maybeSingle();
 
     if (updateError) {
-      console.error(
-        "Auto Assignment Error:",
-        updateError
-      );
-
-      pending.push(delivery);
-      continue;
+      throw updateError;
     }
 
-    // Another process may have already assigned it
+    // Another process may already have assigned it.
     if (!updatedDelivery) {
-      console.log(
-        `Delivery ${delivery.delivery_number} was already assigned.`
-      );
-
       continue;
     }
 
-    // Increase workload immediately
     workload[selectedBoy.id]++;
-
-    assigned.push({
-      delivery: updatedDelivery,
-      deliveryBoy: {
-        id: selectedBoy.id,
-        name: selectedBoy.full_name,
-      },
-      workload: workload[selectedBoy.id],
-    });
+    assigned++;
 
     console.log(
-      `✅ ${delivery.delivery_number} → ${selectedBoy.full_name} | Workload: ${workload[selectedBoy.id]}`
+      `ASSIGNED: ${delivery.delivery_number} → ${selectedBoy.full_name}`
     );
   }
 
-  console.log("=================================");
+  // --------------------------------------------------------
+  // 6. FINAL WORKLOAD
+  // --------------------------------------------------------
+
+  const workloadResult = deliveryBoys.map((boy) => ({
+    id: boy.id,
+    full_name: boy.full_name,
+    workload: workload[boy.id] || 0,
+  }));
+
+  const pending =
+    deliveries.length - assigned;
+
   console.log(
-    "AUTO ASSIGN COMPLETE"
+    `AUTO ASSIGN COMPLETE: ${assigned} assigned, ${pending} pending`
   );
-  console.log(
-    "Assigned:",
-    assigned.length
-  );
-  console.log(
-    "Pending:",
-    pending.length
-  );
-  console.log("=================================");
 
   return {
     enabled: true,
     assigned,
     pending,
-    workload,
+    workload: workloadResult,
   };
 }
