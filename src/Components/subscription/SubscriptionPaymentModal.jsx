@@ -71,9 +71,9 @@ export default function SubscriptionPaymentModal({
         throw new Error("Customer information is missing.");
       }
 
-      if (!subscriptionId) {
-        throw new Error("Subscription ID is missing.");
-      }
+      // if (!subscriptionId) {
+      //   throw new Error("Subscription ID is missing.");
+      // }
 
       setLoading(true);
 
@@ -92,6 +92,7 @@ export default function SubscriptionPaymentModal({
             "Unable to create Razorpay order."
         );
       }
+  
 
       // 2. Open Razorpay checkout
       const payment = await openRazorpayCheckout({
@@ -108,7 +109,7 @@ export default function SubscriptionPaymentModal({
         razorpay_payment_id: payment.razorpay_payment_id,
         razorpay_signature: payment.razorpay_signature,
         customer_id: customer.id,
-        subscription_id: subscriptionId,
+        //subscription_id: subscriptionId,
       });
 
       console.log("Payment Verification:", verify);
@@ -264,6 +265,6 @@ export default function SubscriptionPaymentModal({
       </div>
     </div>
   );
-  
+
 }
 
