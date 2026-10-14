@@ -1693,7 +1693,7 @@ export async function saveSubscriptionDeliveryOverridesService(
 
     // Build one override row for each scheduled delivery date in the inclusive range.
     // Use the same eligibility function as delivery generation, including frequency and pause dates.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getIndiaToday();
     const expanded = [];
     const cursor = new Date(`${startDate}T12:00:00`);
     const last = new Date(`${endDate}T12:00:00`);
