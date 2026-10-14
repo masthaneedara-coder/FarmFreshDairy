@@ -42,6 +42,7 @@ import deliveryCronRoutes from "./routes/deliveryCron.routes.js";
 dotenv.config();
 
 const app = express();
+app.set("trust proxy", 1);
 app.get("/api/version", (req, res) => {
   res.json({
     success: true,
