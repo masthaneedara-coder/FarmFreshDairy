@@ -35,6 +35,7 @@ import extraMilkRoutes from "./routes/extraMilk.routes.js";
 import customerDeviceRoutes from "./routes/customerDevice.routes.js";
 import couponRoutes from "./routes/coupon.routes.js";
 import whatsappRoutes from "./routes/whatsapp.routes.js";
+import deliveryCronRoutes from "./routes/deliveryCron.routes.js";
 
 
 
@@ -105,64 +106,64 @@ app.get("/", (req, res) => {
     message: "Farm Fresh Dairy Backend Running 🚀",
   });
 });
-app.get("/api/cron/delivery", async (req, res) => {
-  try {
-    console.log("==================================");
-    console.log("VERCEL DAILY DELIVERY CRON");
-    console.log("Time:", new Date().toISOString());
-    console.log("==================================");
+// app.get("/api/cron/delivery", async (req, res) => {
+//   try {
+//     console.log("==================================");
+//     console.log("VERCEL DAILY DELIVERY CRON");
+//     console.log("Time:", new Date().toISOString());
+//     console.log("==================================");
 
-    const { generateTodayDeliveriesService } =
-      await import("./services/subscriptionDelivery.service.js");
+//     const { generateTodayDeliveriesService } =
+//       await import("./services/subscriptionDelivery.service.js");
 
-    const { autoAssignTodayDeliveriesService } =
-      await import("./services/deliveryAssignment.service.js");
+//     const { autoAssignTodayDeliveriesService } =
+//       await import("./services/deliveryAssignment.service.js");
 
-    const deliveryResult =
-      await generateTodayDeliveriesService();
+//     const deliveryResult =
+//       await generateTodayDeliveriesService();
 
-    const assignmentResult =
-      await autoAssignTodayDeliveriesService();
+//     const assignmentResult =
+//       await autoAssignTodayDeliveriesService();
 
-    console.log(
-      `Generated: ${deliveryResult.created?.length || 0}`
-    );
+//     console.log(
+//       `Generated: ${deliveryResult.created?.length || 0}`
+//     );
 
-    console.log(
-      `Existing: ${deliveryResult.updated?.length || 0}`
-    );
+//     console.log(
+//       `Existing: ${deliveryResult.updated?.length || 0}`
+//     );
 
-    console.log(
-      `Skipped: ${deliveryResult.skipped || 0}`
-    );
+//     console.log(
+//       `Skipped: ${deliveryResult.skipped || 0}`
+//     );
 
-    console.log(
-      `Auto Assigned: ${assignmentResult.assigned?.length || 0}`
-    );
+//     console.log(
+//       `Auto Assigned: ${assignmentResult.assigned?.length || 0}`
+//     );
 
-    console.log(
-      `Remaining Pending: ${assignmentResult.pending?.length || 0}`
-    );
+//     console.log(
+//       `Remaining Pending: ${assignmentResult.pending?.length || 0}`
+//     );
 
-    return res.status(200).json({
-      success: true,
-      message: "Daily delivery job completed",
-      generated: deliveryResult.created?.length || 0,
-      existing: deliveryResult.updated?.length || 0,
-      skipped: deliveryResult.skipped || 0,
-      assigned: assignmentResult.assigned?.length || 0,
-      pending: assignmentResult.pending?.length || 0,
-    });
-  } catch (error) {
-    console.error("VERCEL DAILY DELIVERY CRON ERROR:", error);
+//     return res.status(200).json({
+//       success: true,
+//       message: "Daily delivery job completed",
+//       generated: deliveryResult.created?.length || 0,
+//       existing: deliveryResult.updated?.length || 0,
+//       skipped: deliveryResult.skipped || 0,
+//       assigned: assignmentResult.assigned?.length || 0,
+//       pending: assignmentResult.pending?.length || 0,
+//     });
+//   } catch (error) {
+//     console.error("VERCEL DAILY DELIVERY CRON ERROR:", error);
 
-    return res.status(500).json({
-      success: false,
-      message: "Daily delivery job failed",
-      error: error.message,
-    });
-  }
-});
+//     return res.status(500).json({
+//       success: false,
+//       message: "Daily delivery job failed",
+//       error: error.message,
+//     });
+//   }
+// });
 app.use("/api/test", testRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
@@ -192,6 +193,7 @@ app.use("/api/extra-milk", extraMilkRoutes);
 app.use("/api/customer-devices", customerDeviceRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
+app.use("/api/cron/delivery", deliveryCronRoutes);
 
 // WhatsApp
 

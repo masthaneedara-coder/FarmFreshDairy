@@ -6,6 +6,7 @@ import { supabaseAdmin } from "../config/supabase.js";
    Create Razorpay Order
 ========================================================== */
 
+
 export async function createOrderService({
   amount,
   customer_id = null,
@@ -16,9 +17,14 @@ export async function createOrderService({
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       return {
         data: null,
-        error: {
-          message: "Valid amount is required.",
-        },
+        error: { message: "Valid amount is required." },
+      };
+    }
+
+    if (!customer_id) {
+      return {
+        data: null,
+        error: { message: "Customer ID is required." },
       };
     }
 
@@ -27,23 +33,21 @@ export async function createOrderService({
       currency: "INR",
       receipt: `SUB_${Date.now()}`,
       notes: {
-        customer_id: customer_id || "",
+        customer_id,
       },
     });
 
-    return {
-      data: order,
-      error: null,
-    };
+    return { data: order, error: null };
   } catch (error) {
     console.error("Razorpay Create Order Error:", error);
 
     return {
       data: null,
-      error,
+      error: { message: error.message || "Unable to create Razorpay order." },
     };
   }
 }
+
 
 /* ==========================================================
    Save Payment

@@ -1,3 +1,4 @@
+
 import {
   createOrderService,
   verifyPaymentService,
@@ -12,20 +13,35 @@ export async function createOrder(req, res) {
     const {
       amount,
       customer_id,
+      subscription_id,
     } = req.body;
 
-    if (!amount || Number(amount) <= 0) {
+    if (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
       return res.status(400).json({
         success: false,
         message: "Valid amount is required.",
       });
     }
 
-    const { data, error } =
-      await createOrderService({
-        amount,
-        customer_id,
+    if (!customer_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer ID is required.",
       });
+    }
+
+    if (!subscription_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Subscription ID is required.",
+      });
+    }
+
+    const { data, error } = await createOrderService({
+      amount: Number(amount),
+      customer_id,
+      subscription_id,
+    });
 
     if (error) {
       return res.status(400).json({
@@ -34,19 +50,23 @@ export async function createOrder(req, res) {
       });
     }
 
+    if (!data?.id) {
+      return res.status(500).json({
+        success: false,
+        message: "Razorpay order was not created successfully.",
+      });
+    }
+
     return res.status(201).json({
       success: true,
       order: data,
     });
   } catch (err) {
-    console.error(
-      "Create Order Error:",
-      err
-    );
+    console.error("Create Order Error:", err);
 
     return res.status(500).json({
       success: false,
-      message: err.message,
+      message: err.message || "Unable to create payment order.",
     });
   }
 }
@@ -62,15 +82,34 @@ export async function verifyPayment(req, res) {
       razorpay_payment_id,
       razorpay_signature,
       customer_id,
+      subscription_id,
     } = req.body;
 
-    const { data, error } =
-      await verifyPaymentService({
-        razorpay_order_id,
-        razorpay_payment_id,
-        razorpay_signature,
-        customer_id,
+    if (
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Razorpay payment details are required.",
       });
+    }
+
+    if (!customer_id || !subscription_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer ID and Subscription ID are required.",
+      });
+    }
+
+    const { data, error } = await verifyPaymentService({
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      customer_id,
+      subscription_id,
+    });
 
     if (error) {
       return res.status(400).json({
@@ -84,14 +123,11 @@ export async function verifyPayment(req, res) {
       payment: data,
     });
   } catch (err) {
-    console.error(
-      "Verify Payment Error:",
-      err
-    );
+    console.error("Verify Payment Error:", err);
 
     return res.status(500).json({
       success: false,
-      message: err.message,
+      message: err.message || "Payment verification failed.",
     });
   }
 }
