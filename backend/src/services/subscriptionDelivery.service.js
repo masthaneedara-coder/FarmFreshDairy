@@ -1,8 +1,18 @@
 import { supabaseAdmin } from "../config/supabase.js";
 import { debitWalletForDelivery } from "./wallet.service.js";
 
+function getIndiaToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+
 export async function getTodayDeliveriesService() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getIndiaToday();
 
   return await supabaseAdmin
     .from("subscription_deliveries")
@@ -502,7 +512,7 @@ const matchingSize = (sizes || []).find(
 // ==========================================================
 
 export async function autoResumePausedSubscriptionsService() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getIndiaToday();
 
   console.log("=================================");
   console.log("AUTO RESUME CHECK");
@@ -591,7 +601,7 @@ export async function autoResumePausedSubscriptionsService() {
   return resumed;
 }
 export async function generateTodayDeliveriesService() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getIndiaToday();
    await autoResumePausedSubscriptionsService();
 
   // ==========================================================
@@ -1508,7 +1518,7 @@ export async function bulkAssignSubscriptionDeliveriesService(
    ========================================================== */
 
 export async function expireSubscriptionsService() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getIndiaToday();
 
   const {
     data,
