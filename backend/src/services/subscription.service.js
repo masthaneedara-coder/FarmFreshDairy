@@ -1,6 +1,5 @@
 import { supabaseAdmin } from "../config/supabase.js";
 import { generateInvoiceNumber } from "./billing.service.js";
-import { creditWallet } from "./wallet.service.js";
 import {
   validateCouponService,
 } from "./coupon.service.js";
@@ -115,83 +114,11 @@ export async function createSubscriptionService(subscriptionData) {
   const isOnlinePayment =
     normalizedPaymentMethod === "ONLINE";
 
-  let verifiedPayment = null;
-
-  // ==========================================
-  // 4. Verify the existing Razorpay payment
-  // ==========================================
-
-  if (isOnlinePayment) {
-    if (normalizedPaymentStatus !== "PAID") {
-      return {
-        data: null,
-        error: new Error(
-          "Online subscription requires successful payment."
-        ),
-      };
-    }
-
-    if (!payment_reference) {
-      return {
-        data: null,
-        error: new Error(
-          "Verified payment reference is required."
-        ),
-      };
-    }
-
-    const {
-      data: paymentRecord,
-      error: paymentLookupError,
-    } = await supabaseAdmin
-      .from("payments")
-      .select("*")
-      .eq("transaction_id", payment_reference)
-      .eq("customer_id", customer_id)
-      .eq("payment_status", "Paid")
-      .maybeSingle();
-
-    if (paymentLookupError) {
-      return {
-        data: null,
-        error: paymentLookupError,
-      };
-    }
-
-    if (!paymentRecord) {
-      return {
-        data: null,
-        error: new Error("Verified payment not found."),
-      };
-    }
-
-    // Prevent reusing a payment already linked
-    // to another subscription.
-    if (paymentRecord.subscription_id) {
-      return {
-        data: null,
-        error: new Error(
-          "This payment has already been used for a subscription."
-        ),
-      };
-    }
-
-    verifiedPayment = paymentRecord;
-
-    const verifiedAmount = Number(paymentRecord.amount || 0);
-
-    // IMPORTANT:
-    // Compare Razorpay payment with discounted amount.
-    if (Math.abs(verifiedAmount - finalAmount) > 0.01) {
-      return {
-        data: null,
-        error: new Error(
-          `Payment amount mismatch. Expected ₹${finalAmount}, received ₹${verifiedAmount}.`
-        ),
-      };
-    }
-  }
-
+  // Online subscriptions are created as Pending first.
+  // Razorpay order creation requires a subscription ID, so payment
+  // verification must happen after this service returns. Never trust a
+  // client-supplied "Paid" status here. payment.service.js must mark the
+  // subscription and billing record Paid after verifying Razorpay.
   // ==========================================
   // 5. Calculate subscription end date
   // ==========================================
@@ -237,21 +164,12 @@ export async function createSubscriptionService(subscriptionData) {
 
       payment_method: isOnlinePayment ? "ONLINE" : "COD",
 
-      payment_status: isOnlinePayment ? "Paid" : "Pending",
+      payment_status: "Pending",
+      payment_date: null,
+      payment_reference: null,
+      payment_amount: finalAmount,
 
-      payment_date: isOnlinePayment
-        ? payment_date || new Date().toISOString()
-        : null,
-
-      payment_reference: isOnlinePayment
-        ? payment_reference
-        : null,
-
-      payment_amount: isOnlinePayment
-        ? verifiedPayment.amount
-        : finalAmount,
-
-      status: "Active",
+      status: isOnlinePayment ? "Pending Payment" : "Active",
     })
     .select()
     .single();
@@ -382,7 +300,7 @@ export async function createSubscriptionService(subscriptionData) {
 
       total_amount: billingTotal,
 
-      payment_status: isOnlinePayment ? "Paid" : "Pending",
+      payment_status: "Pending",
       payment_method: isOnlinePayment ? "ONLINE" : "COD",
 
       invoice_date: new Date().toISOString(),
@@ -412,92 +330,13 @@ export async function createSubscriptionService(subscriptionData) {
   }
 
   // ==========================================
-  // 12. Link verified payment
+  // 12. Payment finalization happens in payment.service.js
   // ==========================================
-
-  if (isOnlinePayment && verifiedPayment) {
-    const { error: paymentLinkError } = await supabaseAdmin
-      .from("payments")
-      .update({
-        subscription_id: subscription.id,
-      })
-      .eq("id", verifiedPayment.id)
-      .eq("customer_id", customer_id)
-      .eq("transaction_id", payment_reference);
-
-    if (paymentLinkError) {
-      await supabaseAdmin
-        .from("billing")
-        .delete()
-        .eq("id", billingRecord.id);
-
-      await supabaseAdmin
-        .from("subscription_items")
-        .delete()
-        .eq("subscription_id", subscription.id);
-
-      await supabaseAdmin
-        .from("subscriptions")
-        .delete()
-        .eq("id", subscription.id);
-
-      return {
-        data: null,
-        error: paymentLinkError,
-      };
-    }
-  }
-
-  // ==========================================
-  // 13. Credit wallet for online payment
-  // ==========================================
+  // Do not link a payment or credit the wallet during subscription creation.
+  // Both actions happen only after Razorpay signature + captured status are
+  // verified by the payment verification endpoint.
 
   let wallet = null;
-
-  if (isOnlinePayment && verifiedPayment) {
-    try {
-      wallet = await creditWallet({
-        customerId: customer_id,
-
-        // Credit only the amount actually paid.
-        amount: Number(verifiedPayment.amount),
-
-        referenceId: verifiedPayment.id,
-        referenceType: "RazorpayPayment",
-
-        remarks: `Subscription payment - ${subscription.id}`,
-      });
-    } catch (walletError) {
-      console.error("Wallet Credit Error:", walletError);
-
-      await supabaseAdmin
-        .from("payments")
-        .update({ subscription_id: null })
-        .eq("id", verifiedPayment.id);
-
-      await supabaseAdmin
-        .from("billing")
-        .delete()
-        .eq("id", billingRecord.id);
-
-      await supabaseAdmin
-        .from("subscription_items")
-        .delete()
-        .eq("subscription_id", subscription.id);
-
-      await supabaseAdmin
-        .from("subscriptions")
-        .delete()
-        .eq("id", subscription.id);
-
-      return {
-        data: null,
-        error: new Error(
-          `Wallet credit failed: ${walletError.message}`
-        ),
-      };
-    }
-  }
 
   // ==========================================
   // 14. Increment coupon usage
@@ -537,14 +376,7 @@ export async function createSubscriptionService(subscriptionData) {
 
     billing: billingRecord,
 
-    payment: verifiedPayment
-      ? {
-          id: verifiedPayment.id,
-          transaction_id: verifiedPayment.transaction_id,
-          amount: Number(verifiedPayment.amount),
-          status: verifiedPayment.payment_status,
-        }
-      : null,
+    payment: null,
 
     wallet,
 
