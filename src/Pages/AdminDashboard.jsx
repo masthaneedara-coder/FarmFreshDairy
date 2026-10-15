@@ -1,109 +1,120 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../config/supabase";
-
 import { isAdminLoggedIn, logoutAdmin } from "../config/auth";
 import { fetchProducts } from "../config/api";
 import AdminNotifications from "../Components/admin/AdminNotifications";
 import { playNotification } from "../utils/playNotification";
 
+const actions = [
+  { icon: "🥛", title: "Products", desc: "Manage products, prices and stock", path: "/admin/products", theme: "mint" },
+  { icon: "📦", title: "Orders", desc: "Track orders and payments", path: "/admin/orders", theme: "blue" },
+  { icon: "👥", title: "Customers", desc: "Customer details and history", path: "/admin/customers", theme: "violet" },
+  { icon: "🔁", title: "Subscriptions", desc: "Active, paused and expired plans", path: "/admin/subscriptions", theme: "orange" },
+  { icon: "🚚", title: "Deliveries", desc: "Manage today's deliveries", path: "/admin/subscription-deliveries", theme: "cyan" },
+  { icon: "🧾", title: "Monthly report", desc: "Delivery and billing reports", path: "/admin/monthly-report", theme: "pink" },
+  { icon: "🥛", title: "Extra milk", desc: "Review extra milk requests", path: "/admin/extra-milk", theme: "lime" },
+  { icon: "💳", title: "Billing", desc: "Invoices and payments", path: "/admin/billing", theme: "indigo" },
+];
+
+const themeClasses = {
+  mint: "from-emerald-400 to-teal-500",
+  blue: "from-sky-400 to-blue-600",
+  violet: "from-violet-400 to-purple-600",
+  orange: "from-orange-400 to-amber-500",
+  cyan: "from-cyan-400 to-sky-600",
+  pink: "from-pink-400 to-rose-500",
+  lime: "from-lime-400 to-green-600",
+  indigo: "from-indigo-400 to-blue-700",
+};
+
+function money(value) {
+  const n = Number(value || 0);
+  return `₹${(Number.isFinite(n) ? n : 0).toLocaleString("en-IN")}`;
+}
+
+function stockStatus(stock) {
+  const qty = Number(stock || 0);
+  if (qty <= 0) return { label: "Out of stock", cls: "bg-rose-50 text-rose-700 ring-rose-200" };
+  if (qty < 5) return { label: "Low stock", cls: "bg-amber-50 text-amber-700 ring-amber-200" };
+  return { label: "In stock", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" };
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
-
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState([]);
-  const [notificationCount, setNotificationCount] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [stockOpen, setStockOpen] = useState(true);
   const [inventoryOpen, setInventoryOpen] = useState(true);
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  async function loadNotifications() {
+    try {
+      const response = await fetch("https://farmfreshdairy.onrender.com/api/notifications");
+      if (!response.ok) throw new Error(`Notifications request failed: ${response.status}`);
+      const data = await response.json();
+      if (data?.success) {
+        const list = data.notifications || [];
+        setNotificationCount(list.filter((item) => !item.is_read).length);
+      }
+    } catch (error) {
+      console.error("Notifications error:", error);
+    }
+  }
 
   useEffect(() => {
-    const loadAdminData = async () => {
+    let active = true;
+    async function loadAdminData() {
       if (!isAdminLoggedIn()) {
         navigate("/admin-login");
         return;
       }
-
       try {
         setLoading(true);
         const data = await fetchProducts();
-
-        const list = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.products)
-          ? data.products
-          : [];
-
-        setProducts(list);
+        const list = Array.isArray(data) ? data : Array.isArray(data?.products) ? data.products : [];
+        if (active) setProducts(list);
       } catch (error) {
-        console.error(error);
-        setProducts([]);
+        console.error("Products loading error:", error);
+        if (active) setProducts([]);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
-    };
-
+    }
     loadAdminData();
     loadNotifications();
-  }, [navigate]);
-  useEffect(() => {
+
     const channel = supabase
       .channel("notifications-channel")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-        },
-        (payload) => {
-          console.log("Realtime Notification:", payload);
-          playNotification();
-          loadNotifications();
-        }
-      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, () => {
+        playNotification();
+        loadNotifications();
+      })
       .subscribe();
 
     return () => {
+      active = false;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [navigate]);
 
-  const totalProducts = useMemo(() => products.length, [products]);
-
+  const totalProducts = products.length;
   const lowStockProducts = useMemo(
-    () =>
-      products.filter((p) => {
-        const stock = Number(p.stock || 0);
-        return stock > 0 && stock < 5;
-      }),
+    () => products.filter((p) => Number(p.stock || 0) > 0 && Number(p.stock || 0) < 5),
     [products]
   );
-
   const outOfStockProducts = useMemo(
-    () =>
-      products.filter((p) => Number(p.stock || 0) === 0),
+    () => products.filter((p) => Number(p.stock || 0) <= 0),
     [products]
   );
-
   const totalStockUnits = useMemo(
     () => products.reduce((sum, p) => sum + Number(p.stock || 0), 0),
     [products]
   );
-
-  const totalInventoryValue = useMemo(
-    () =>
-      products.reduce(
-        (sum, p) => sum + Number(p.price || 0) * Number(p.stock || 0),
-        0
-      ),
+  const inventoryValue = useMemo(
+    () => products.reduce((sum, p) => sum + Number(p.price || 0) * Number(p.stock || 0), 0),
     [products]
-  );
-
-  const recentLowStock = useMemo(
-    () => lowStockProducts.slice(0, 5),
-    [lowStockProducts]
   );
 
   const handleLogout = () => {
@@ -111,758 +122,213 @@ export default function AdminDashboard() {
     navigate("/");
   };
 
-  const formatMoney = (value) => {
-    const num = Number(value || 0);
-    if (Number.isNaN(num)) return "₹0";
-    return `₹${num.toLocaleString("en-IN")}`;
-  };
-
-  const getStockStatus = (stock) => {
-    const qty = Number(stock || 0);
-
-    if (qty === 0) {
-      return {
-        label: "Out of stock",
-        className: "bg-red-50 text-red-600 border-red-100",
-      };
-    }
-
-    if (qty < 5) {
-      return {
-        label: "Low stock",
-        className: "bg-amber-50 text-amber-700 border-amber-100",
-      };
-    }
-
-    return {
-      label: "In stock",
-      className: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    };
-  };
-
-  async function loadNotifications() {
-    try {
-      const res = await fetch(
-        "https://farmfreshdairy.onrender.com/api/notifications"
-      );
-
-      const data = await res.json();
-
-      if (data.success) {
-        setNotifications(data.notifications || []);
-        setNotificationCount(
-          (data.notifications || []).filter((n) => !n.is_read).length
-        );
-      }
-    } catch (err) {
-      console.error("Notifications error:", err);
-    }
-  }
+  const metrics = [
+    { label: "Total products", value: totalProducts, note: "Products listed", icon: "🥛", color: "from-emerald-400 to-teal-500", glow: "bg-emerald-200" },
+    { label: "Low stock", value: lowStockProducts.length, note: "Refill soon", icon: "⚠️", color: "from-amber-400 to-orange-500", glow: "bg-amber-200" },
+    { label: "Out of stock", value: outOfStockProducts.length, note: "Need restock", icon: "📦", color: "from-rose-400 to-pink-600", glow: "bg-rose-200" },
+    { label: "Stock units", value: totalStockUnits, note: "Current quantity", icon: "📊", color: "from-sky-400 to-indigo-600", glow: "bg-sky-200" },
+    { label: "Inventory value", value: money(inventoryValue), note: "Estimated stock value", icon: "💰", color: "from-violet-400 to-purple-600", glow: "bg-violet-200" },
+  ];
 
   return (
-    <>
+    <div className="min-h-screen overflow-x-hidden bg-[#f6f8fc] text-slate-900">
       <style>{`
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(18px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes softFloat {
-          0%, 100% { transform: translate3d(0, 0, 0); }
-          50% { transform: translate3d(0, -7px, 0); }
-        }
-
-        @keyframes notificationPulse {
-          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, .25); }
-          50% { transform: scale(1.08); box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
-        }
-
-        @keyframes shimmer {
-          0% { background-position: -700px 0; }
-          100% { background-position: 700px 0; }
-        }
-
-        .dashboard-enter {
-          animation: fadeUp .6s cubic-bezier(.22, 1, .36, 1) both;
-        }
-
-        .dashboard-float {
-          animation: softFloat 5s ease-in-out infinite;
-        }
-
-        .notification-badge {
-          animation: notificationPulse 2s ease-in-out infinite;
-        }
-
-        .notification-panel {
-          transition: max-height .45s cubic-bezier(.22, 1, .36, 1),
-                      opacity .3s ease,
-                      transform .35s ease;
-        }
-
-        .notification-panel.closed {
-          max-height: 0;
-          opacity: 0;
-          transform: translateY(-8px);
-          pointer-events: none;
-        }
-
-        .notification-panel.open {
-          max-height: 900px;
-          opacity: 1;
-          transform: translateY(0);
-        }
-
-        .dashboard-card {
-          transition: transform .3s cubic-bezier(.22, 1, .36, 1),
-                      box-shadow .3s ease,
-                      border-color .3s ease;
-        }
-
-        .dashboard-card:hover {
-          transform: translateY(-4px);
-        }
-
-        .tap-scale:active {
-          transform: scale(.97);
-        }
-
-        .skeleton {
-          background: linear-gradient(
-            90deg,
-            rgba(241,245,249,.9) 25%,
-            rgba(255,255,255,1) 50%,
-            rgba(241,245,249,.9) 75%
-          );
-          background-size: 700px 100%;
-          animation: shimmer 1.5s infinite linear;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          *,
-          *::before,
-          *::after {
-            animation-duration: .01ms !important;
-            animation-iteration-count: 1 !important;
-            transition-duration: .01ms !important;
-            scroll-behavior: auto !important;
-          }
-        }
+        @keyframes riseIn { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes drift { 0%,100% { transform: translate3d(0,0,0) scale(1); } 50% { transform: translate3d(10px,-14px,0) scale(1.04); } }
+        @keyframes shine { 0% { transform: translateX(-130%) skewX(-18deg); } 100% { transform: translateX(230%) skewX(-18deg); } }
+        @keyframes ringPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(244,63,94,.2); } 50% { box-shadow: 0 0 0 7px rgba(244,63,94,0); } }
+        .fd-rise { animation: riseIn .65s cubic-bezier(.2,.8,.2,1) both; }
+        .fd-drift { animation: drift 8s ease-in-out infinite; }
+        .fd-shine { position: relative; overflow: hidden; }
+        .fd-shine:after { content: ''; position: absolute; inset: 0 auto 0 0; width: 28%; background: linear-gradient(90deg,transparent,rgba(255,255,255,.15),transparent); animation: shine 5s ease-in-out infinite; pointer-events:none; }
+        .fd-pulse { animation: ringPulse 2s ease-in-out infinite; }
+        .fd-card { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+        .fd-card:hover { transform: translateY(-4px); box-shadow: 0 18px 38px rgba(30,41,59,.10); }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
       `}</style>
 
-      <div className="min-h-screen bg-[#f6f8fb] text-slate-900">
-        <div className="pointer-events-none fixed inset-0 overflow-hidden">
-          <div className="dashboard-float absolute -right-32 -top-32 h-80 w-80 rounded-full bg-emerald-200/30 blur-3xl" />
-          <div className="dashboard-float absolute -left-40 top-1/3 h-96 w-96 rounded-full bg-blue-200/20 blur-3xl" />
-        </div>
+      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+        <div className="fd-drift absolute -right-24 -top-24 h-72 w-72 rounded-full bg-fuchsia-200/45 blur-3xl" />
+        <div className="fd-drift absolute -left-24 top-[35%] h-80 w-80 rounded-full bg-cyan-200/40 blur-3xl" />
+        <div className="fd-drift absolute bottom-0 right-[20%] h-64 w-64 rounded-full bg-emerald-200/35 blur-3xl" />
+      </div>
 
-        <main className="relative mx-auto max-w-[1500px] px-3 pb-28 pt-3 sm:px-5 sm:pb-8 sm:pt-5 lg:px-8">
-
-          {/* MODERN HEADER */}
-          <header style={{ animationDelay: "40ms" }} className="dashboard-enter sticky top-2 z-40 mb-5 rounded-3xl border border-white/80 bg-white/90 px-4 py-3 shadow-lg backdrop-blur-xl sm:px-5">
-            <div className="flex items-center justify-between gap-3">
-              <button onClick={() => navigate("/admin")} className="flex items-center gap-3 text-left">
-                <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg shadow-emerald-200 transition duration-300 hover:scale-105">
-                  <img
-                    src="/logo.png"
-                    alt="Farm Fresh Dairy"
-                    className="h-full w-full object-contain p-1"
-                  />
-                </div>
-                <div>
-                  <p className="font-black text-slate-900">Farm Fresh Dairy</p>
-                  <p className="text-[11px] font-semibold text-slate-400">Admin Control Center</p>
-                </div>
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setNotificationsOpen((open) => !open)}
-                  aria-expanded={notificationsOpen}
-                  aria-label={notificationsOpen ? "Collapse notifications" : "Open notifications"}
-                  className={`tap-scale relative flex h-11 w-11 items-center justify-center rounded-2xl border bg-white text-xl shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-md ${
-                    notificationsOpen
-                      ? "border-emerald-200 ring-4 ring-emerald-50"
-                      : "border-slate-200"
-                  }`}
-                >
-                  <span className={`transition-transform duration-300 ${notificationsOpen ? "rotate-12" : ""}`}>🔔</span>
-                  {notificationCount > 0 && (
-                    <span className="notification-badge absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
-                      {notificationCount > 99 ? "99+" : notificationCount}
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={handleLogout}
-                  className="hidden rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-black text-white transition hover:bg-slate-800 sm:block"
-                >
-                  Logout
-                </button>
-                <button
-                  onClick={handleLogout}
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white sm:hidden"
-                >
-                  ↪
-                </button>
-              </div>
-            </div>
-          </header>
-
-          {/* HERO */}
-          <section style={{ animationDelay: "90ms" }} className="dashboard-enter relative mb-6 overflow-hidden rounded-[32px bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-5 text-white shadow-2xl sm:p-8 lg:p-10">
-            <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-400/20 blur-3xl" />
-            <div className="absolute bottom-[-100px] left-1/3 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" />
-
-            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-3xl">
-                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-bold text-emerald-100 backdrop-blur">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                  Dashboard is live
-                </span>
-                <p className="mt-4 text-sm font-semibold text-white/55">Farm Fresh Dairy Admin</p>
-                <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
-                  Good morning, Admin 👋
-                </h1>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-white/65 sm:text-base">
-                  Monitor inventory and manage your daily dairy operations from one modern control center.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => navigate("/admin/products")}
-                  className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-lg transition hover:-translate-y-1"
-                >
-                  + Manage Products
-                </button>
-                <button
-                  onClick={() => navigate("/products")}
-                  className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white backdrop-blur transition hover:bg-white/15"
-                >
-                  View Store →
-                </button>
-              </div>
-            </div>
-          </section>
-
-          {/* KPI */}
-          <section style={{ animationDelay: "140ms" }} className="dashboard-enter mb-6">
-            <div className="mb-3">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Business overview</p>
-              <h2 className="mt-1 text-xl font-black sm:text-2xl">Today at a glance</h2>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-              <Metric icon="🥛" label="Products" value={totalProducts} helper="Listed products" tone="emerald" />
-              <Metric icon="⚠️" label="Low stock" value={lowStockProducts.length} helper="Need refill" tone="amber" />
-              <Metric icon="📦" label="Out of stock" value={outOfStockProducts.length} helper="Unavailable" tone="red" />
-              <Metric icon="📊" label="Stock units" value={totalStockUnits} helper="Current quantity" tone="blue" />
-              <Metric icon="💰" label="Inventory value" value={formatMoney(totalInventoryValue)} helper="Price × stock" tone="purple" />
-            </div>
-          </section>
-
-          {/* EXPANDABLE NOTIFICATIONS */}
-          <section
-            style={{ animationDelay: "190ms" }}
-            className="dashboard-enter mb-6 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl shadow-slate-200/50"
-          >
-            <button
-              type="button"
-              onClick={() => setNotificationsOpen((open) => !open)}
-              aria-expanded={notificationsOpen}
-              className="tap-scale flex w-full items-center justify-between gap-3 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5 sm:py-5"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-xl shadow-sm transition duration-300 ${
-                  notificationsOpen ? "rotate-6 scale-105" : ""
-                }`}>
-                  🔔
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 className="truncate font-black text-slate-900">Notifications</h2>
-                    {notificationCount > 0 && (
-                      <span className="notification-badge rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-black text-white">
-                        {notificationCount > 99 ? "99+" : notificationCount}
-                      </span>
-                    )}
-                  </div>
-                  <p className="truncate text-xs font-medium text-slate-400">
-                    {notificationCount
-                      ? `${notificationCount} unread notification${notificationCount === 1 ? "" : "s"}`
-                      : "Everything is up to date"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="hidden rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-600 sm:inline-flex">
-                  {notificationsOpen ? "Collapse" : "Expand"}
-                </span>
-                <span
-                  className={`flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-transform duration-300 ${
-                    notificationsOpen ? "rotate-180" : ""
-                  }`}
-                >
-                  ↓
-                </span>
-              </div>
+      <main className="relative mx-auto max-w-[1540px] px-3 pb-28 pt-3 sm:px-5 sm:pb-8 sm:pt-5 lg:px-8">
+        <header className="fd-rise sticky top-2 z-40 mb-5 rounded-[24px] border border-white/80 bg-white/85 px-3 py-3 shadow-lg shadow-slate-200/60 backdrop-blur-xl sm:px-5">
+          <div className="flex items-center justify-between gap-3">
+            <button onClick={() => navigate("/admin")} className="flex min-w-0 items-center gap-3 text-left" aria-label="Farm Fresh Dairy admin home">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-100 to-cyan-100 ring-1 ring-white shadow-md">
+                <img src="/logo.png" alt="Farm Fresh Dairy" className="h-full w-full object-contain p-1" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-black tracking-tight sm:text-base">FarmFreshDairy</span>
+                <span className="block truncate text-[10px] font-bold uppercase tracking-[.14em] text-emerald-600 sm:text-xs">Admin studio</span>
+              </span>
             </button>
-
-            <div className={`notification-panel ${notificationsOpen ? "open" : "closed"}`}>
-              <div className="border-t border-slate-100 bg-slate-50/40 px-2 py-2 sm:px-3 sm:py-3">
-                <AdminNotifications />
-                <div className="px-2 pb-2 pt-3 sm:px-3">
-                  <button
-                    onClick={() => navigate("/admin/notifications")}
-                    className="tap-scale w-full rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black text-white shadow-lg shadow-slate-200 transition hover:-translate-y-0.5 hover:bg-slate-800"
-                  >
-                    View all notifications →
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* QUICK ACTIONS */}
-          <section style={{ animationDelay: "240ms" }} className="dashboard-enter mb-6">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Operations</p>
-            <h2 className="mt-1 mb-4 text-xl font-black sm:text-2xl">Quick actions</h2>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              <Action icon="🥛" title="Products" desc="Manage products, prices and stock" color="emerald" path="/admin/products" />
-              <Action icon="📦" title="Orders" desc="Track orders and payments" color="blue" path="/admin/orders" />
-              <Action icon="👥" title="Customers" desc="Customers, addresses and history" color="purple" path="/admin/customers" />
-              <Action icon="🔁" title="Subscriptions" desc="Active, paused and expired plans" color="orange" path="/admin/subscriptions" />
-              <Action icon="📊" title="Monthly Report" desc="Delivery, billing and reports" color="cyan" path="/admin/monthly-report" />
-              <Action icon="🚚" title="Today's Deliveries" desc="Generate and manage deliveries" color="green" path="/admin/subscription-deliveries" />
-              <Action icon="🥛" title="Extra Milk" desc="Approve extra milk requests" color="lime" path="/admin/extra-milk" />
-              <Action icon="💰" title="Billing" desc="Invoices and payment records" color="pink" path="/admin/billing" />
-            </div>
-          </section>
-
-          {/* INVENTORY & STOCK */}
-          <section
-            style={{ animationDelay: "290ms" }}
-            className="dashboard-enter grid gap-5 xl:grid-cols-[0.85fr_1.5fr]"
-          >
-            {/* STOCK ATTENTION */}
-            <div className="dashboard-card overflow-hidden rounded-3xl border border-amber-100 bg-white shadow-lg">
-              <button
-                type="button"
-                onClick={() => setStockOpen((open) => !open)}
-                aria-expanded={stockOpen}
-                className="tap-scale flex w-full items-center justify-between gap-3 border-b border-slate-100 p-5 text-left transition hover:bg-amber-50/30 sm:p-6"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-xl transition duration-300 ${
-                      stockOpen ? "rotate-6 scale-105" : ""
-                    }`}
-                  >
-                    ⚠️
-                  </div>
-
-                  <div className="min-w-0">
-                    <h2 className="truncate text-xl font-black">Stock attention</h2>
-                    <p className="mt-1 truncate text-sm text-slate-400">
-                      Products that need your attention
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">
-                    {lowStockProducts.length} items
-                  </span>
-
-                  <span
-                    className={`flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-transform duration-300 ${
-                      stockOpen ? "rotate-180" : ""
-                    }`}
-                  >
-                    ↓
-                  </span>
-                </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button onClick={() => setNotificationsOpen((v) => !v)} aria-label="Toggle notifications" aria-expanded={notificationsOpen} className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-xl transition hover:border-emerald-300 hover:bg-emerald-50">
+                🔔
+                {notificationCount > 0 && <span className="fd-pulse absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{notificationCount > 99 ? "99+" : notificationCount}</span>}
               </button>
-
-              <div className={`notification-panel ${stockOpen ? "open" : "closed"}`}>
-                <div className="p-4 sm:p-5">
-                  {loading ? (
-                    <div className="space-y-3">
-                      {[1, 2, 3].map((n) => (
-                        <div
-                          key={n}
-                          className="skeleton h-16 rounded-2xl bg-slate-100"
-                        />
-                      ))}
-                    </div>
-                  ) : recentLowStock.length === 0 ? (
-                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-7 text-center">
-                      <div className="text-4xl">✅</div>
-                      <h3 className="mt-2 font-black text-emerald-700">
-                        Inventory looks healthy
-                      </h3>
-                      <p className="mt-1 text-sm text-slate-500">
-                        No low-stock products right now.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {recentLowStock.map((product, index) => (
-                        <div
-                          key={product.id || index}
-                          className="dashboard-card flex items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-3.5 transition hover:bg-white hover:shadow-md"
-                        >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm">
-                              <img
-                                src="/logo.png"
-                                alt=""
-                                className="h-full w-full object-contain p-1.5"
-                              />
-                            </div>
-
-                            <div className="min-w-0">
-                              <p className="truncate font-black text-slate-800">
-                                {product.name || "Unnamed Product"}
-                              </p>
-                              <p className="mt-0.5 text-xs text-slate-400">
-                                ₹{Number(product.price || 0)}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="shrink-0 text-right">
-                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                              Left
-                            </p>
-                            <p className="text-2xl font-black text-amber-600">
-                              {Number(product.stock || 0)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => navigate("/admin/products")}
-                    className="tap-scale mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-slate-800"
-                  >
-                    Open Inventory →
-                  </button>
-                </div>
-              </div>
+              <button onClick={handleLogout} className="hidden rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black text-white transition hover:bg-rose-600 sm:block">Log out ↗</button>
+              <button onClick={handleLogout} aria-label="Log out" className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-lg text-white sm:hidden">↗</button>
             </div>
-
-            {/* PRODUCTS & STOCK */}
-            <div className="dashboard-card overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
-              <button
-                type="button"
-                onClick={() => setInventoryOpen((open) => !open)}
-                aria-expanded={inventoryOpen}
-                className="tap-scale flex w-full items-center justify-between gap-3 border-b border-slate-100 p-5 text-left transition hover:bg-blue-50/30 sm:p-6"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm transition duration-300 ${
-                      inventoryOpen ? "rotate-6 scale-105" : ""
-                    }`}
-                  >
-                    <img
-                      src="/logo.png"
-                      alt="Farm Fresh Dairy"
-                      className="h-full w-full object-contain p-1.5"
-                    />
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">
-                      Inventory
-                    </p>
-                    <h2 className="mt-1 truncate text-xl font-black">
-                      Products & stock
-                    </h2>
-                    <p className="mt-1 truncate text-sm text-slate-400">
-                      Current inventory overview
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="hidden rounded-xl bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 sm:inline-flex">
-                    {products.length} products
-                  </span>
-
-                  <span
-                    className={`flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-transform duration-300 ${
-                      inventoryOpen ? "rotate-180" : ""
-                    }`}
-                  >
-                    ↓
-                  </span>
-                </div>
-              </button>
-
-              <div
-                className={`notification-panel ${
-                  inventoryOpen ? "open" : "closed"
-                }`}
-              >
-                <div className="border-t border-slate-100 bg-slate-50/30 p-3 sm:p-5">
-                  <div className="mb-3 flex justify-end">
-                    <button
-                      onClick={() => navigate("/admin/products")}
-                      className="tap-scale rounded-xl bg-blue-50 px-4 py-2.5 text-xs font-black text-blue-700 transition hover:-translate-y-0.5 hover:bg-blue-100"
-                    >
-                      Manage products →
-                    </button>
-                  </div>
-
-                  {loading ? (
-                    <div className="space-y-2">
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <div
-                          key={n}
-                          className="skeleton h-14 rounded-xl bg-slate-100"
-                        />
-                      ))}
-                    </div>
-                  ) : products.length === 0 ? (
-                    <div className="py-12 text-center">
-                      <div className="text-4xl">📭</div>
-                      <h3 className="mt-2 font-black text-slate-700">
-                        No products found
-                      </h3>
-                    </div>
-                  ) : (
-                    <>
-                      {/* MOBILE */}
-                      <div className="space-y-2.5 md:hidden">
-                        {products.map((product, index) => {
-                          const stock = Number(product.stock || 0);
-                          const status = getStockStatus(stock);
-
-                          return (
-                            <div
-                              key={product.id || index}
-                              className="dashboard-card rounded-2xl border border-slate-100 bg-white p-3.5 shadow-sm"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="truncate font-black text-slate-800">
-                                    {product.name || "-"}
-                                  </p>
-                                  <p className="mt-1 text-xs text-slate-400">
-                                    {product.category || "Uncategorized"}
-                                  </p>
-                                </div>
-
-                                <span
-                                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black ${status.className}`}
-                                >
-                                  {status.label}
-                                </span>
-                              </div>
-
-                              <div className="mt-3 flex justify-between">
-                                <div>
-                                  <p className="text-[10px] font-bold uppercase text-slate-400">
-                                    Price
-                                  </p>
-                                  <p className="font-black">
-                                    ₹{Number(product.price || 0)}
-                                  </p>
-                                </div>
-
-                                <div className="text-right">
-                                  <p className="text-[10px] font-bold uppercase text-slate-400">
-                                    Stock
-                                  </p>
-                                  <p
-                                    className={`text-xl font-black ${
-                                      stock === 0
-                                        ? "text-red-600"
-                                        : stock < 5
-                                        ? "text-amber-600"
-                                        : "text-emerald-600"
-                                    }`}
-                                  >
-                                    {stock}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* DESKTOP */}
-                      <div className="hidden overflow-x-auto md:block">
-                        <table className="min-w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-slate-100 text-left">
-                              <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
-                                Product
-                              </th>
-                              <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
-                                Category
-                              </th>
-                              <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
-                                Price
-                              </th>
-                              <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
-                                Stock
-                              </th>
-                              <th className="px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-400">
-                                Status
-                              </th>
-                            </tr>
-                          </thead>
-
-                          <tbody>
-                            {products.map((product, index) => {
-                              const stock = Number(product.stock || 0);
-                              const status = getStockStatus(stock);
-
-                              return (
-                                <tr
-                                  key={product.id || index}
-                                  className="border-b border-slate-50 transition hover:bg-slate-50"
-                                >
-                                  <td className="px-3 py-3.5">
-                                    <p className="font-bold text-slate-800">
-                                      {product.name || "-"}
-                                    </p>
-                                    <p className="mt-0.5 text-[10px] text-slate-400">
-                                      ID: {product.id || "-"}
-                                    </p>
-                                  </td>
-
-                                  <td className="px-3 py-3.5 text-slate-500">
-                                    {product.category || "-"}
-                                  </td>
-
-                                  <td className="px-3 py-3.5 font-bold">
-                                    ₹{Number(product.price || 0)}
-                                  </td>
-
-                                  <td className="px-3 py-3.5 font-black">
-                                    {stock}
-                                  </td>
-
-                                  <td className="px-3 py-3.5">
-                                    <span
-                                      className={`rounded-full border px-2.5 py-1 text-xs font-black ${status.className}`}
-                                    >
-                                      {status.label}
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* FOOTER */}
-          <section style={{ animationDelay: "340ms" }} className="dashboard-enter mt-6 overflow-hidden rounded-3xl bg-slate-950 p-5 text-white shadow-xl sm:p-6">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-300">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> System ready
-                </span>
-                <h2 className="mt-3 text-xl font-black sm:text-2xl">Keep your dairy operations moving.</h2>
-                <p className="mt-1 text-sm text-white/50">Jump directly into your most-used admin modules.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <DarkAction label="Orders" icon="📦" onClick={() => navigate("/admin/orders")} />
-                <DarkAction label="Customers" icon="👥" onClick={() => navigate("/admin/customers")} />
-                <DarkAction label="Subscriptions" icon="🔁" onClick={() => navigate("/admin/subscriptions")} />
-              </div>
-            </div>
-          </section>
-        </main>
-
-        {/* MOBILE APP NAV */}
-        <nav className="fixed bottom-3 left-3 right-3 z-50 rounded-3xl border border-white/80 bg-white/90 p-2 shadow-2xl backdrop-blur-xl sm:hidden">
-          <div className="grid grid-cols-4 gap-1">
-            <MobileNav icon="⌂" label="Home" active onClick={() => navigate("/admin")} />
-            <MobileNav icon="📦" label="Orders" onClick={() => navigate("/admin/orders")} />
-            <MobileNav icon="👥" label="Customers" onClick={() => navigate("/admin/customers")} />
-            <MobileNav icon="🔁" label="Subs" onClick={() => navigate("/admin/subscriptions")} />
           </div>
-        </nav>
-      </div>
-    </>
-  );
-}
+        </header>
 
-function Metric({ icon, label, value, helper, tone }) {
-  const styles = {
-    emerald: "from-emerald-50 to-white border-emerald-100",
-    amber: "from-amber-50 to-white border-amber-100",
-    red: "from-red-50 to-white border-red-100",
-    blue: "from-blue-50 to-white border-blue-100",
-    purple: "from-purple-50 to-white border-purple-100",
-  };
+        <section className="fd-rise fd-shine relative mb-6 overflow-hidden rounded-[30px] bg-gradient-to-br from-emerald-600 via-teal-600 to-sky-700 p-5 text-white shadow-xl shadow-teal-900/15 sm:rounded-[36px] sm:p-8 lg:p-10" style={{ animationDelay: "80ms" }}>
+          <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full bg-yellow-300/20 blur-3xl" />
+          <div className="absolute -bottom-28 left-[38%] h-72 w-72 rounded-full bg-blue-300/20 blur-3xl" />
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/15 px-3 py-1.5 text-[11px] font-extrabold backdrop-blur">
+                <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_12px_rgba(190,242,100,.9)]" /> LIVE CONTROL CENTER
+              </span>
+              <p className="mt-4 text-sm font-semibold text-white/75">Welcome back, Admin 👋</p>
+              <h1 className="mt-1 text-3xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">Fresh milk. Smooth operations.</h1>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-white/80 sm:text-base">Your dairy business at a glance. Keep products stocked, deliveries moving and customers happy.</p>
+            </div>
+            <div className="flex flex-col gap-2 min-[430px]:flex-row">
+              <button onClick={() => navigate("/admin/products")} className="rounded-2xl bg-white px-5 py-3.5 text-sm font-black text-emerald-800 shadow-lg transition hover:-translate-y-1 hover:shadow-xl">＋ Manage products</button>
+              <button onClick={() => navigate("/products")} className="rounded-2xl border border-white/30 bg-white/10 px-5 py-3.5 text-sm font-black text-white backdrop-blur transition hover:bg-white/20">View storefront →</button>
+            </div>
+          </div>
+          <div className="relative mt-7 flex flex-wrap gap-2 text-xs font-bold text-white/85">
+            <span className="rounded-xl border border-white/15 bg-white/10 px-3 py-2">🥛 Fresh stock overview</span>
+            <span className="rounded-xl border border-white/15 bg-white/10 px-3 py-2">🔔 Realtime alerts</span>
+            <span className="rounded-xl border border-white/15 bg-white/10 px-3 py-2">📱 Mobile ready</span>
+          </div>
+        </section>
 
-  return (
-    <div className={`group relative overflow-hidden rounded-3xl border bg-gradient-to-br p-4 shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl animate-[fadeUp_.55s_ease-out_both] ${styles[tone] || styles.blue}`}>
-      <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/70 blur-xl transition group-hover:scale-125" />
-      <div className="relative flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-          <p className="mt-1.5 truncate text-2xl font-black tracking-tight sm:text-3xl">{value}</p>
-          <p className="mt-1 truncate text-[11px] font-semibold text-slate-400">{helper}</p>
+        <section className="fd-rise mb-7" style={{ animationDelay: "140ms" }}>
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[.2em] text-emerald-700 sm:text-xs">Business snapshot</p>
+              <h2 className="mt-1 text-xl font-black tracking-tight sm:text-2xl">Today at a glance</h2>
+            </div>
+            <span className="rounded-full border border-white bg-white/80 px-3 py-1.5 text-[10px] font-bold text-slate-500 shadow-sm sm:text-xs">{loading ? "Updating…" : "Inventory synced"}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+            {metrics.map((metric, index) => (
+              <div key={metric.label} className="fd-card relative overflow-hidden rounded-[24px] border border-white bg-white/90 p-4 shadow-md shadow-slate-200/60" style={{ animationDelay: `${index * 70}ms` }}>
+                <div className={`absolute -right-5 -top-5 h-20 w-20 rounded-full ${metric.glow} opacity-60 blur-2xl`} />
+                <div className="relative flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 sm:text-[11px]">{metric.label}</p>
+                    <p className="mt-2 break-words text-2xl font-black tracking-tight sm:text-3xl">{loading ? "—" : metric.value}</p>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-400 sm:text-xs">{metric.note}</p>
+                  </div>
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${metric.color} text-lg text-white shadow-md`}>{metric.icon}</span>
+                </div>
+                <div className={`relative mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100`}><div className={`h-full w-2/3 rounded-full bg-gradient-to-r ${metric.color}`} /></div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="fd-rise mb-7 overflow-hidden rounded-[26px] border border-white bg-white/90 shadow-lg shadow-slate-200/60 backdrop-blur" style={{ animationDelay: "190ms" }}>
+          <button type="button" onClick={() => setNotificationsOpen((v) => !v)} aria-expanded={notificationsOpen} className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-emerald-50/60 sm:p-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 text-xl">🔔</span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-2 font-black">Notifications {notificationCount > 0 && <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] text-white">{notificationCount} new</span>}</span>
+                <span className="mt-1 block truncate text-xs text-slate-500">{notificationCount ? "You have updates to review" : "Stay on top of store activity"}</span>
+              </span>
+            </div>
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 transition-transform ${notificationsOpen ? "rotate-180" : ""}`}>⌄</span>
+          </button>
+          {notificationsOpen && <div className="border-t border-slate-100 bg-gradient-to-br from-slate-50 to-white p-3 sm:p-5"><AdminNotifications /><button onClick={() => navigate("/admin/notifications")} className="mt-3 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-emerald-700">View all notifications →</button></div>}
+        </section>
+
+        <section className="fd-rise mb-7" style={{ animationDelay: "240ms" }}>
+          <div className="mb-4">
+            <p className="text-[10px] font-black uppercase tracking-[.2em] text-violet-700 sm:text-xs">Your workspace</p>
+            <h2 className="mt-1 text-xl font-black tracking-tight sm:text-2xl">Quick actions</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {actions.map((action) => (
+              <button key={action.title} onClick={() => navigate(action.path)} className="fd-card group relative min-h-[158px] overflow-hidden rounded-[24px] border border-white bg-white/95 p-4 text-left shadow-md shadow-slate-200/50 sm:min-h-[180px] sm:p-5">
+                <div className={`absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br ${themeClasses[action.theme]} opacity-[.13] blur-xl transition group-hover:scale-150`} />
+                <span className={`relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${themeClasses[action.theme]} text-xl text-white shadow-lg transition group-hover:rotate-3 group-hover:scale-110`}>{action.icon}</span>
+                <span className="relative mt-4 block text-sm font-black sm:text-base">{action.title}</span>
+                <span className="relative mt-1.5 block text-[11px] leading-5 text-slate-500 sm:text-xs">{action.desc}</span>
+                <span className="relative mt-3 block text-[10px] font-black text-slate-600 group-hover:text-emerald-700">Open module ↗</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="fd-rise grid gap-4 xl:grid-cols-[.85fr_1.5fr]" style={{ animationDelay: "290ms" }}>
+          <div className="overflow-hidden rounded-[26px] border border-amber-100 bg-white shadow-lg shadow-amber-100/50">
+            <button onClick={() => setStockOpen((v) => !v)} aria-expanded={stockOpen} className="flex w-full items-center justify-between gap-3 border-b border-amber-100 bg-gradient-to-r from-amber-50 to-white p-4 text-left sm:p-5">
+              <span className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-xl">⚠️</span><span><span className="block font-black">Stock attention</span><span className="mt-1 block text-xs text-slate-500">Items to refill soon</span></span></span>
+              <span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-black text-amber-800">{lowStockProducts.length}</span>
+            </button>
+            {stockOpen && <div className="space-y-2 p-3 sm:p-4">
+              {loading ? <LoadingRows /> : lowStockProducts.length === 0 ? <EmptyState icon="✨" title="All looking good!" desc="No low-stock products right now." /> : lowStockProducts.slice(0, 6).map((product, i) => (
+                <div key={product.id || i} className="flex items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-3">
+                  <div className="min-w-0"><p className="truncate text-sm font-extrabold">{product.name || "Unnamed product"}</p><p className="mt-1 text-xs text-slate-500">{money(product.price)}</p></div>
+                  <div className="shrink-0 text-right"><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Left</p><p className="text-2xl font-black text-amber-600">{Number(product.stock || 0)}</p></div>
+                </div>
+              ))}
+              <button onClick={() => navigate("/admin/products")} className="w-full rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-sm font-black text-white shadow-md transition hover:brightness-105">Open inventory →</button>
+            </div>}
+          </div>
+
+          <div className="overflow-hidden rounded-[26px] border border-sky-100 bg-white shadow-lg shadow-sky-100/50">
+            <button onClick={() => setInventoryOpen((v) => !v)} aria-expanded={inventoryOpen} className="flex w-full items-center justify-between gap-3 border-b border-sky-100 bg-gradient-to-r from-sky-50 to-white p-4 text-left sm:p-5">
+              <span className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-xl">📦</span><span><span className="block font-black">Products & inventory</span><span className="mt-1 block text-xs text-slate-500">Live stock overview</span></span></span>
+              <span className="flex items-center gap-2"><span className="hidden rounded-full bg-sky-100 px-3 py-1.5 text-xs font-black text-sky-800 sm:inline">{products.length} items</span><span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 transition-transform ${inventoryOpen ? "rotate-180" : ""}`}>⌄</span></span>
+            </button>
+            {inventoryOpen && <div className="p-3 sm:p-5">
+              <div className="mb-3 flex items-center justify-between gap-2"><p className="text-xs font-bold text-slate-500">Current products</p><button onClick={() => navigate("/admin/products")} className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-black text-sky-700 hover:bg-sky-100">Manage products ↗</button></div>
+              {loading ? <LoadingRows /> : products.length === 0 ? <EmptyState icon="📭" title="No products found" desc="Products will appear here when available." /> : <>
+                <div className="space-y-2 md:hidden">
+                  {products.map((product, index) => {
+                    const stock = Number(product.stock || 0);
+                    const status = stockStatus(stock);
+                    return <div key={product.id || index} className="rounded-2xl border border-slate-100 bg-gradient-to-r from-white to-slate-50 p-3.5">
+                      <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-black">{product.name || "Unnamed product"}</p><p className="mt-1 truncate text-xs text-slate-500">{product.category || "Uncategorized"}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black ring-1 ${status.cls}`}>{status.label}</span></div>
+                      <div className="mt-3 flex items-end justify-between"><div><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Price</p><p className="font-black">{money(product.price)}</p></div><div className="text-right"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Stock</p><p className={`text-xl font-black ${stock <= 0 ? "text-rose-600" : stock < 5 ? "text-amber-600" : "text-emerald-600"}`}>{stock}</p></div></div>
+                    </div>;
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto rounded-2xl border border-slate-100 md:block">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-[10px] font-black uppercase tracking-wider text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Stock</th><th className="px-4 py-3">Status</th></tr></thead>
+                    <tbody>{products.map((product, index) => { const stock = Number(product.stock || 0); const status = stockStatus(stock); return <tr key={product.id || index} className="border-t border-slate-100 transition hover:bg-sky-50/50"><td className="px-4 py-3 font-bold">{product.name || "Unnamed product"}</td><td className="px-4 py-3 text-slate-500">{product.category || "—"}</td><td className="px-4 py-3 font-bold">{money(product.price)}</td><td className="px-4 py-3 font-black">{stock}</td><td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ring-1 ${status.cls}`}>{status.label}</span></td></tr>; })}</tbody>
+                  </table>
+                </div>
+              </>}
+            </div>}
+          </div>
+        </section>
+
+        <footer className="fd-rise mt-6 rounded-[26px] bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 p-5 text-white shadow-xl sm:p-6" style={{ animationDelay: "340ms" }}>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><span className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-[10px] font-black text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" /> SYSTEM READY</span><h2 className="mt-3 text-lg font-black sm:text-2xl">A fresher day starts here.</h2><p className="mt-1 text-xs text-white/60 sm:text-sm">Manage your dairy operations from one place.</p></div><button onClick={() => navigate("/admin/orders")} className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-900 transition hover:bg-emerald-100">Go to orders →</button></div>
+        </footer>
+      </main>
+
+      <nav className="fixed bottom-3 left-3 right-3 z-50 rounded-[24px] border border-white/80 bg-white/90 p-2 shadow-2xl shadow-slate-900/15 backdrop-blur-xl sm:hidden">
+        <div className="grid grid-cols-4 gap-1">
+          <MobileNav icon="⌂" label="Home" active onClick={() => navigate("/admin")} />
+          <MobileNav icon="📦" label="Orders" onClick={() => navigate("/admin/orders")} />
+          <MobileNav icon="👥" label="Customers" onClick={() => navigate("/admin/customers")} />
+          <MobileNav icon="🔁" label="Subs" onClick={() => navigate("/admin/subscriptions")} />
         </div>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/80 text-xl shadow-sm transition group-hover:rotate-6 group-hover:scale-110">{icon}</div>
-      </div>
+      </nav>
     </div>
   );
 }
 
-function Action({ icon, title, desc, color, path }) {
-  const colors = {
-    emerald: "from-emerald-500 to-teal-500",
-    blue: "from-blue-500 to-indigo-500",
-    purple: "from-violet-500 to-purple-500",
-    orange: "from-orange-500 to-amber-500",
-    cyan: "from-cyan-500 to-blue-500",
-    green: "from-green-500 to-emerald-500",
-    lime: "from-lime-500 to-green-500",
-    pink: "from-pink-500 to-rose-500",
-  };
-
-  const navigate = useNavigate();
-
-  return (
-    <button
-      onClick={() => navigate(path)}
-      className="dashboard-card tap-scale group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-4 text-left shadow-lg transition duration-300 hover:-translate-y-1.5 hover:shadow-xl active:scale-[0.98] sm:p-5"
-    >
-      <div className={`absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br ${colors[color]} opacity-[0.08] blur-xl transition group-hover:scale-150`} />
-      <div className={`relative mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${colors[color]} text-xl text-white shadow-lg transition group-hover:scale-110 group-hover:rotate-3`}>{icon}</div>
-      <h3 className="relative text-base font-black sm:text-lg">{title}</h3>
-      <p className="relative mt-1.5 line-clamp-2 text-xs font-medium leading-5 text-slate-400 sm:text-sm">{desc}</p>
-      <p className="relative mt-3 text-xs font-black text-slate-500 group-hover:text-slate-900">Open module →</p>
-    </button>
-  );
+function LoadingRows() {
+  return <div className="space-y-2" aria-label="Loading products">{[1, 2, 3].map((n) => <div key={n} className="h-14 animate-pulse rounded-2xl bg-gradient-to-r from-slate-100 via-white to-slate-100" />)}</div>;
 }
 
-function DarkAction({ label, icon, onClick }) {
-  return <button onClick={onClick} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs font-black text-white transition hover:-translate-y-0.5 hover:bg-white/10">{icon} {label}</button>;
+function EmptyState({ icon, title, desc }) {
+  return <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-8 text-center"><div className="text-3xl">{icon}</div><p className="mt-2 text-sm font-black">{title}</p><p className="mt-1 text-xs text-slate-500">{desc}</p></div>;
 }
 
 function MobileNav({ icon, label, active, onClick }) {
-  
-  return <button onClick={onClick} className={`tap-scale flex min-h-[52px] flex-col items-center justify-center rounded-2xl px-2 py-2 transition duration-300 ${active ? "bg-slate-900 text-white shadow-lg shadow-slate-300" : "text-slate-500 hover:bg-slate-100"}`}><span className="text-base leading-none">{icon}</span><span className="mt-1 text-[9px] font-black">{label}</span></button>;
+  return <button onClick={onClick} className={`flex min-h-[54px] flex-col items-center justify-center rounded-2xl px-1 py-2 transition active:scale-95 ${active ? "bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-md" : "text-slate-500 hover:bg-slate-100"}`}><span className="text-base leading-none">{icon}</span><span className="mt-1 text-[9px] font-black">{label}</span></button>;
 }

@@ -45,6 +45,8 @@ import AdminSubscriptionDeliveries from "./Pages/AdminSubscriptionDeliveries";
 import AdminMonthlyReport from "./Pages/AdminMonthlyReport";
 import AdminExtraMilk from "./Pages/AdminExtraMilk";
 import DeliveryHistory from "./Pages/DeliveryHistory";
+import AdminNotifications from "./Pages/AdminNotifications";
+import ProtectedRoute from "./Components/ProtectedRoute";
 
 /* Delivery */
 import DeliveryLogin from "./Pages/DeliveryLogin";
@@ -172,13 +174,13 @@ export default function App() {
           }
         />
         <Route
-          path="/admin/notifications"
-          element={
-            <AdminRoute>
-              <Notifications />
-            </AdminRoute>
-          }
-        />
+  path="/notifications"
+  element={
+    <CustomerRoute>
+      <Notifications />
+    </CustomerRoute>
+  }
+/>
         <Route
           path="/admin/orders"
           element={
@@ -328,7 +330,19 @@ export default function App() {
   path="/renew/:token"
   element={<RenewSubscription />}
 />
+
+<Route
+  path="/admin/notifications"
+  element={
+    <AdminRoute>
+      <AdminNotifications />
+    </AdminRoute>
+  }
+/>
+
+
       </Routes>
+      
     
       
       </div>

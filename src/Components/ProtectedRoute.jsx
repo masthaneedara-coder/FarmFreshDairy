@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuthSession } from "../context/AuthSessionContext";
 
+
 export default function ProtectedRoute({ children }) {
   const location = useLocation();
 
