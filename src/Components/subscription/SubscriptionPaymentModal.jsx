@@ -1,176 +1,195 @@
-
 import { useEffect, useState } from "react";
-
 import {
   createPaymentOrder,
   verifyPayment,
 } from "../../config/api";
-
 import { openRazorpayCheckout } from "../../utils/razorpay";
-
-console.log("SubscriptionPaymentModal Version 3 Loaded");
 
 export default function SubscriptionPaymentModal({
   open,
   amount,
   customer,
   subscriptionId,
+  onPrepareSubscription,
   onClose,
   onContinue,
 }) {
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [loading, setLoading] = useState(false);
 
-  // Calculate COD availability before using it anywhere
   const today = new Date();
   const day = today.getDate();
-
   const lastDayOfMonth = new Date(
     today.getFullYear(),
     today.getMonth() + 1,
     0
   ).getDate();
 
-  const isCODAvailable =
-    day >= lastDayOfMonth - 2 || day <= 3;
+  // COD is available during the last three days of the month and first three days.
+  const isCODAvailable = day >= lastDayOfMonth - 2 || day <= 3;
 
-  // Automatically select Online Payment when COD is unavailable
   useEffect(() => {
     if (!isCODAvailable && paymentMethod === "COD") {
       setPaymentMethod("ONLINE");
     }
   }, [isCODAvailable, paymentMethod]);
 
-  // Keep hooks above this conditional return
+  // Reset transient modal state when it is opened.
+  useEffect(() => {
+    if (open) {
+      setPaymentMethod(isCODAvailable ? "COD" : "ONLINE");
+      setLoading(false);
+    }
+  }, [open, isCODAvailable]);
+
   if (!open) return null;
 
   const handleContinue = async () => {
-    try {
-      if (loading) return;
+    if (loading) return;
 
-      // COD validation
+    try {
       if (paymentMethod === "COD") {
         if (!isCODAvailable) {
           setPaymentMethod("ONLINE");
           alert(
-            "COD is available only from the 29th to the 3rd of each month. Please choose Online Payment."
+            "COD is available only during the last 3 days of the month and the first 3 days. Please choose Online Payment."
           );
           return;
         }
 
-        onContinue({
+        setLoading(true);
+        await onContinue({
           paymentMethod: "COD",
           paymentStatus: "PENDING",
         });
-
         return;
       }
 
-      // Validate customer and subscription
       if (!customer?.id) {
-        throw new Error("Customer information is missing.");
+        throw new Error("Customer information is missing. Please sign in again.");
       }
-
-      // if (!subscriptionId) {
-      //   throw new Error("Subscription ID is missing.");
-      // }
 
       setLoading(true);
 
-      // 1. Create Razorpay order
+      // Create the subscription first, if it has not been created yet.
+      // The parent stores and returns its ID so retries reuse the same subscription.
+      let activeSubscriptionId = subscriptionId;
+
+      if (!activeSubscriptionId) {
+        if (typeof onPrepareSubscription !== "function") {
+          throw new Error(
+            "Subscription setup is incomplete. Please refresh the page and try again."
+          );
+        }
+
+        activeSubscriptionId = await onPrepareSubscription();
+      }
+
+      if (!activeSubscriptionId) {
+        throw new Error(
+          "Unable to obtain the subscription ID. Please try again."
+        );
+      }
+
+      // 1. Create a Razorpay order linked to the actual subscription.
       const orderResponse = await createPaymentOrder({
-        amount,
+        amount: Number(amount),
         customer_id: customer.id,
-        subscription_id: subscriptionId,
+        subscription_id: activeSubscriptionId,
       });
 
       console.log("Razorpay Order:", orderResponse);
 
       if (!orderResponse?.success || !orderResponse?.order?.id) {
         throw new Error(
-          orderResponse?.message ||
-            "Unable to create Razorpay order."
+          orderResponse?.message || "Unable to create Razorpay order."
         );
       }
-  
 
-      // 2. Open Razorpay checkout
+      // 2. Open Razorpay checkout.
       const payment = await openRazorpayCheckout({
         order: orderResponse.order,
         customer,
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
       });
 
-      console.log("Razorpay Payment:", payment);
+      if (
+        !payment?.razorpay_order_id ||
+        !payment?.razorpay_payment_id ||
+        !payment?.razorpay_signature
+      ) {
+        throw new Error(
+          "Razorpay did not return all required payment details."
+        );
+      }
 
-      // 3. Verify payment on the backend
+      // 3. Verify payment on the backend and update the existing subscription.
       const verify = await verifyPayment({
         razorpay_order_id: payment.razorpay_order_id,
         razorpay_payment_id: payment.razorpay_payment_id,
         razorpay_signature: payment.razorpay_signature,
         customer_id: customer.id,
-        //subscription_id: subscriptionId,
+        subscription_id: activeSubscriptionId,
       });
 
       console.log("Payment Verification:", verify);
 
       if (!verify?.success) {
         throw new Error(
-          verify?.message || "Payment verification failed."
+          verify?.message ||
+            "Payment verification failed. Do not make another payment until the status is checked."
         );
       }
 
-      // 4. Continue only after successful verification
-      onContinue({
+      // 4. Notify the parent only after backend verification succeeds.
+      await onContinue({
         paymentMethod: "ONLINE",
         paymentStatus: "PAID",
         paymentId: payment.razorpay_payment_id,
         orderId: payment.razorpay_order_id,
         signature: payment.razorpay_signature,
-        wallet: verify.payment?.wallet || null,
-        payment: verify.payment?.payment || null,
+        subscriptionId: activeSubscriptionId,
+        payment: verify.payment || null,
       });
-    } catch (err) {
-      console.error("Subscription payment error:", err);
-
-      alert(
-        err?.message || "Payment failed. Please try again."
-      );
+    } catch (error) {
+      console.error("Subscription payment error:", error);
+      alert(error?.message || "Payment failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center">
-      <div className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl animate-slide-up">
-
-        {/* Header */}
-        <div className="bg-green-600 text-white p-5 rounded-t-3xl">
-          <h2 className="text-2xl sm:text-3xl font-bold">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="subscription-payment-title"
+    >
+      <div className="w-full animate-slide-up rounded-t-3xl bg-white shadow-2xl sm:max-w-lg sm:rounded-3xl">
+        <div className="rounded-t-3xl bg-green-600 p-5 text-white">
+          <h2
+            id="subscription-payment-title"
+            className="text-2xl font-bold sm:text-3xl"
+          >
             Choose Payment
           </h2>
-
-          <p className="text-green-100 mt-1 text-sm">
+          <p className="mt-1 text-sm text-green-100">
             Monthly Subscription
           </p>
-
-          <h1 className="text-4xl font-black mt-2">
+          <h1 className="mt-2 text-4xl font-black">
             ₹{Number(amount || 0).toLocaleString("en-IN")}
           </h1>
         </div>
 
-        {/* Payment options */}
-        <div className="p-5 space-y-4">
-
-          {/* Cash on Delivery */}
+        <div className="space-y-4 p-5">
           <button
             type="button"
             disabled={!isCODAvailable || loading}
             onClick={() => setPaymentMethod("COD")}
             className={`w-full rounded-2xl border-2 p-4 text-left transition ${
               !isCODAvailable
-                ? "border-gray-200 bg-gray-100 opacity-60 cursor-not-allowed"
+                ? "cursor-not-allowed border-gray-200 bg-gray-100 opacity-60"
                 : paymentMethod === "COD"
                   ? "border-green-600 bg-green-50"
                   : "border-gray-300"
@@ -178,17 +197,12 @@ export default function SubscriptionPaymentModal({
           >
             <div className="flex items-center gap-4">
               <div className="text-4xl">💵</div>
-
               <div className="flex-1">
-                <h3 className="font-bold text-lg">
-                  Cash on Delivery
-                </h3>
-
+                <h3 className="text-lg font-bold">Cash on Delivery</h3>
                 <p className="text-sm text-gray-500">
                   Pay after your milk is delivered.
                 </p>
               </div>
-
               <input
                 type="radio"
                 name="subscriptionPayment"
@@ -201,13 +215,11 @@ export default function SubscriptionPaymentModal({
 
           {!isCODAvailable && (
             <p className="text-sm text-orange-600">
-              Cash on Delivery is available only from the
-              29th to the 3rd of each month. Please choose
-              Online Payment.
+              Cash on Delivery is available only during the last 3 days of
+              the month and the first 3 days. Please choose Online Payment.
             </p>
           )}
 
-          {/* Online Payment */}
           <button
             type="button"
             disabled={loading}
@@ -220,17 +232,12 @@ export default function SubscriptionPaymentModal({
           >
             <div className="flex items-center gap-4">
               <div className="text-4xl">💳</div>
-
               <div className="flex-1">
-                <h3 className="font-bold text-lg">
-                  Online Payment
-                </h3>
-
+                <h3 className="text-lg font-bold">Online Payment</h3>
                 <p className="text-sm text-gray-500">
                   UPI • Cards • Net Banking
                 </p>
               </div>
-
               <input
                 type="radio"
                 name="subscriptionPayment"
@@ -242,29 +249,29 @@ export default function SubscriptionPaymentModal({
           </button>
         </div>
 
-        {/* Footer */}
-        <div className="p-5 border-t flex gap-3">
+        <div className="flex gap-3 border-t p-5">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="flex-1 py-3 rounded-xl border font-semibold disabled:opacity-60"
+            className="flex-1 rounded-xl border py-3 font-semibold disabled:opacity-60"
           >
             Cancel
           </button>
-
           <button
             type="button"
             onClick={handleContinue}
             disabled={loading}
-            className="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold disabled:opacity-60"
+            className="flex-1 rounded-xl bg-green-600 py-3 font-bold text-white hover:bg-green-700 disabled:opacity-60"
           >
-            {loading ? "Processing..." : "Continue →"}
+            {loading
+              ? "Processing..."
+              : paymentMethod === "COD"
+                ? "Confirm Subscription →"
+                : "Pay Securely →"}
           </button>
         </div>
       </div>
     </div>
   );
-
 }
-

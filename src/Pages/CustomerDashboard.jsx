@@ -345,6 +345,20 @@ const getAutoActiveDate = (
 
     return Math.max(0, Math.ceil(difference / (1000 * 60 * 60 * 24)));
   };
+  
+const currentHour = new Date().getHours();
+
+const greeting =
+  currentHour < 5
+    ? "Good night"
+    : currentHour < 12
+    ? "Good morning"
+    : currentHour < 17
+    ? "Good afternoon"
+    : currentHour < 21
+    ? "Good evening"
+    : "Good night";
+
 
   const isSubscriptionExpired = (expireDate) => {
     if (!expireDate) return false;
@@ -2950,28 +2964,590 @@ const handleContinueRegularSchedule = async () => {
             scroll-behavior: auto !important;
           }
         }
+        /* FARMFRESHDAIRY DASHBOARD REDESIGN v2 — layout + visual system */
+        .customer-dashboard {
+          --ffd-ink:#172b25; --ffd-muted:#71817a; --ffd-green:#087f5b;
+          --ffd-mint:#e8f7ef; --ffd-line:#e4eee8;
+          min-height:100dvh !important; padding:24px 24px 110px !important;
+          overflow-x:clip !important; color:var(--ffd-ink) !important;
+          background:#f5f8f6 !important;
+          background-image:radial-gradient(ellipse at 10% 0%,#e0f6e9 0,transparent 32%),radial-gradient(ellipse at 100% 18%,#e7f4ed 0,transparent 27%) !important;
+          font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif !important;
+        }
+        .dashboard-container { width:min(100%,1240px) !important; max-width:1240px !important; margin:0 auto !important; }
+        .dashboard-mobile-top { display:flex !important; align-items:center; justify-content:space-between; gap:14px;
+          padding:10px 4px 22px; }
+        .dashboard-mobile-brand { display:flex; align-items:center; gap:11px; min-width:0; }
+        .dashboard-mobile-brand img { width:46px !important; height:46px !important; border-radius:15px !important; padding:4px; background:white; box-shadow:0 5px 16px #143b2912; }
+        .dashboard-mobile-brand strong { display:block; color:#17372b; font-size:17px; letter-spacing:-.5px; }
+        .dashboard-mobile-brand span { display:block; margin-top:3px; color:#82958b; font-size:9px; letter-spacing:1.1px; font-weight:800; }
+        .dashboard-mobile-user { display:flex; align-items:center; gap:7px; border:1px solid #d9ebe0; border-radius:999px; padding:9px 13px; background:#fff; color:#37634e; font-size:12px; font-weight:750; max-width:45%; }
+        .dashboard-mobile-user span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .dashboard-hero { position:relative !important; isolation:isolate; overflow:hidden !important; margin:0 0 22px !important;
+          border:1px solid #d8eee1 !important; border-radius:28px !important; color:#16382b !important;
+          background:linear-gradient(118deg,#e5f8ed 0%,#f7fcf8 56%,#d6f3e4 100%) !important;
+          box-shadow:0 14px 38px #1d674315 !important; }
+        .dashboard-hero::before { content:""; position:absolute; z-index:-1; width:310px; height:310px; border-radius:50%; right:-80px; top:-145px; background:#b5e9cb80; }
+        .dashboard-hero::after { opacity:.35 !important; }
+        .dashboard-hero-shine { display:none !important; }
+        .dashboard-hero-content { padding:30px 32px 26px !important; }
+        .dashboard-hero-row { align-items:center !important; }
+        .dashboard-brand-line { display:none !important; }
+        .dashboard-hero-badge { border:1px solid #c3e7d0 !important; background:#ffffffb8 !important; color:#26764e !important; letter-spacing:.8px; }
+        .dashboard-hero-badge-dot { background:#10a36a !important; box-shadow:0 0 0 4px #10a36a20; }
+        .dashboard-hero-title { max-width:760px; margin:15px 0 9px !important; color:#153c2c !important; font-size:clamp(28px,3.2vw,44px) !important; line-height:1.12 !important; letter-spacing:-1.6px !important; font-weight:850 !important; }
+        .dashboard-hero-title span { color:#079765 !important; }
+        .dashboard-hero-copy { max-width:570px; color:#617b6d !important; font-size:14px !important; line-height:1.65 !important; }
+        .dashboard-hero-logo-card { display:none !important; }
+        .dashboard-actions { display:flex !important; flex-wrap:wrap; gap:10px !important; margin-top:24px !important; }
+        .dashboard-action { min-height:45px !important; width:auto !important; padding:0 17px !important; border:1px solid #d0e6d8 !important; border-radius:14px !important; color:#285b43 !important; background:#ffffffd9 !important; box-shadow:none !important; font-size:12px !important; font-weight:800 !important; transition:transform .2s ease,box-shadow .2s ease,background .2s ease !important; }
+        .dashboard-action.primary { background:#07845c !important; border-color:#07845c !important; color:#fff !important; box-shadow:0 8px 18px #07845c2b !important; }
+        .dashboard-action:hover { transform:translateY(-2px); box-shadow:0 8px 20px #234e3617 !important; }
+        .dashboard-section { margin:0 0 24px !important; min-width:0; }
+        .dashboard-stats { display:grid !important; grid-template-columns:repeat(4,minmax(0,1fr)) !important; gap:14px !important; }
+        .dashboard-stat { min-width:0; padding:20px !important; border:1px solid #e5eee8 !important; border-radius:20px !important; background:#fff !important; box-shadow:0 7px 24px #163c2910 !important; transition:transform .22s ease,box-shadow .22s ease !important; }
+        .dashboard-stat:hover { transform:translateY(-3px); box-shadow:0 12px 26px #163c2918 !important; }
+        .dashboard-stat-label { color:#829288 !important; font-size:10px !important; letter-spacing:1px !important; }
+        .dashboard-stat-value { color:#173b2b !important; font-size:clamp(20px,2.2vw,29px) !important; font-weight:850 !important; letter-spacing:-.8px !important; }
+        .dashboard-stat-icon { width:42px !important; height:42px !important; border-radius:14px !important; color:#07845c !important; background:#e6f7ed !important; }
+        .wallet-billing-grid { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:16px !important; }
+        .wallet-card { min-width:0; padding:24px !important; border-radius:23px !important; box-shadow:0 12px 28px #123d2810 !important; transition:transform .22s ease !important; }
+        .wallet-card:hover { transform:translateY(-3px); }
+        .prepaid-card { background:linear-gradient(135deg,#087653,#0da875) !important; }
+        .postpaid-card { background:linear-gradient(135deg,#254c72,#347fb2) !important; }
+        .wallet-card-head { margin-bottom:23px !important; }
+        .wallet-card > strong { font-size:clamp(28px,3vw,38px) !important; letter-spacing:-1.2px; }
+        .wallet-card > p { max-width:400px; line-height:1.6 !important; }
+        .wallet-card > button { min-height:42px !important; padding:0 14px !important; border-radius:12px !important; }
+        .dashboard-extra { margin:0 0 24px !important; }
+        .dashboard-section-header { display:flex !important; align-items:flex-end !important; justify-content:space-between !important; gap:16px !important; margin-bottom:15px !important; }
+        .dashboard-eyebrow { color:#07845c !important; font-size:10px !important; font-weight:850 !important; letter-spacing:1.4px !important; text-transform:uppercase; }
+        .dashboard-section-title { margin:5px 0 0 !important; color:#193b2d !important; font-size:clamp(21px,2.4vw,27px) !important; letter-spacing:-.8px !important; font-weight:850 !important; }
+        .dashboard-section-copy { color:#819188 !important; font-size:12px !important; line-height:1.5 !important; }
+        .dashboard-subscription-strip { gap:14px !important; padding:2px 2px 12px !important; }
+        .subscription-card { border:1px solid #e0ebe4 !important; border-radius:21px !important; background:#fff !important; box-shadow:0 7px 22px #173d2910 !important; }
+        .subscription-card:hover { transform:translateY(-3px) !important; box-shadow:0 14px 28px #173d2918 !important; }
+        .quick-grid { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)) !important; gap:14px !important; }
+        .quick-card,.quick-action-card { border:1px solid #e2ece5 !important; border-radius:19px !important; background:#fff !important; box-shadow:0 6px 20px #173d290c !important; transition:transform .2s ease,box-shadow .2s ease !important; }
+        .quick-card:hover,.quick-action-card:hover { transform:translateY(-3px); box-shadow:0 12px 26px #173d2915 !important; }
+        .orders-grid { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)) !important; gap:13px !important; }
+        .empty-card { border:1px dashed #cddfd3 !important; border-radius:22px !important; background:#fff !important; padding:32px 20px !important; }
+        .older-orders-panel { border:1px solid #e0ebe4 !important; border-radius:18px !important; background:#fff !important; overflow:hidden; }
+        .dashboard-bottom-nav { z-index:999 !important; }
+        .dashboard-bottom-item { min-height:54px !important; }
+        button:focus-visible { outline:3px solid #0eaa70 !important; outline-offset:3px !important; }
+        @keyframes ffdCardEnter { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        .dashboard-hero,.dashboard-stats > *, .wallet-card,.dashboard-section { animation:ffdCardEnter .48s ease both; }
+        .dashboard-stats > *:nth-child(2) { animation-delay:.04s; }
+        .dashboard-stats > *:nth-child(3) { animation-delay:.08s; }
+        .dashboard-stats > *:nth-child(4) { animation-delay:.12s; }
+        @media (min-width:1100px) { .dashboard-section.wallet-billing-section { margin-top:2px !important; } }
+        @media (max-width:900px) {
+          .customer-dashboard { padding:16px 16px 100px !important; }
+          .dashboard-content,.dashboard-container { width:100% !important; max-width:100% !important; }
+          .dashboard-hero-content { padding:25px !important; }
+          .dashboard-stats { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+          .orders-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+        }
+        @media (max-width:600px) {
+          .customer-dashboard { padding:10px 12px calc(92px + env(safe-area-inset-bottom)) !important; }
+          .dashboard-mobile-top { padding:8px 2px 16px !important; }
+          .dashboard-mobile-brand img { width:40px !important; height:40px !important; }
+          .dashboard-mobile-brand strong { font-size:14px !important; }
+          .dashboard-mobile-brand span { font-size:7px !important; letter-spacing:.7px !important; }
+          .dashboard-mobile-user { padding:8px 10px !important; font-size:10px !important; max-width:43% !important; }
+          .dashboard-hero { border-radius:22px !important; margin-bottom:14px !important; }
+          .dashboard-hero-content { padding:22px 18px 18px !important; }
+          .dashboard-hero-title { font-size:clamp(25px,7.5vw,34px) !important; line-height:1.12 !important; letter-spacing:-1px !important; }
+          .dashboard-hero-copy { font-size:12px !important; }
+          .dashboard-actions { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:8px !important; margin-top:19px !important; }
+          .dashboard-action { justify-content:center !important; min-height:44px !important; padding:0 9px !important; gap:6px !important; font-size:10px !important; white-space:normal !important; }
+          .dashboard-stats { gap:9px !important; }
+          .dashboard-stat { padding:14px 13px !important; border-radius:17px !important; }
+          .dashboard-stat-label { font-size:8px !important; letter-spacing:.6px !important; }
+          .dashboard-stat-value { font-size:23px !important; }
+          .dashboard-stat-icon { width:34px !important; height:34px !important; border-radius:11px !important; }
+          .wallet-billing-grid { grid-template-columns:minmax(0,1fr) !important; gap:11px !important; }
+          .wallet-card { padding:20px !important; border-radius:20px !important; }
+          .wallet-card-head { margin-bottom:17px !important; }
+          .wallet-card > strong { font-size:31px !important; }
+          .dashboard-section { margin-bottom:21px !important; }
+          .dashboard-section-header { align-items:center !important; margin-bottom:12px !important; }
+          .dashboard-section-title { font-size:22px !important; }
+          .dashboard-section-copy { font-size:11px !important; }
+          .quick-grid { grid-template-columns:minmax(0,1fr) !important; gap:9px !important; }
+          .orders-grid { grid-template-columns:minmax(0,1fr) !important; gap:10px !important; }
+          .dashboard-scroll-buttons { gap:6px !important; }
+          .dashboard-bottom-nav { left:10px !important; right:10px !important; bottom:calc(8px + env(safe-area-inset-bottom)) !important; width:auto !important; border:1px solid #dfece4 !important; border-radius:19px !important; background:#ffffffed !important; backdrop-filter:blur(18px) !important; box-shadow:0 12px 35px #173d2920 !important; padding:5px !important; }
+          .dashboard-bottom-item { min-width:0 !important; flex:1 !important; gap:4px !important; font-size:9px !important; }
+          .dashboard-bottom-item svg { width:18px !important; height:18px !important; }
+        }
+        @media (max-width:360px) {
+          .dashboard-hero-content { padding:18px 14px !important; }
+          .dashboard-action { font-size:9px !important; }
+          .dashboard-stat { padding:12px 10px !important; }
+          .dashboard-stat-value { font-size:20px !important; }
+          .dashboard-bottom-item { font-size:8px !important; }
+        }
+        @media (prefers-reduced-motion:reduce) {
+          .dashboard-hero,.dashboard-stats > *, .wallet-card,.dashboard-section { animation:none !important; }
+          .dashboard-action,.dashboard-stat,.wallet-card,.subscription-card { transition:none !important; }
+        }
+        /* Compact, friendly subscription cards for small mobile screens */
+        .subscription-card {
+          position: relative !important;
+          border-radius: 17px !important;
+          animation: subCardEnter .42s ease both, subCardGlow 5s ease-in-out infinite !important;
+          transform-origin: center top;
+        }
+        .subscription-card-top {
+          padding: 11px !important;
+          background-size: 180% 180% !important;
+          animation: subGradientMove 8s ease infinite;
+        }
+        .subscription-card-top::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background: linear-gradient(110deg, transparent 25%, rgba(255,255,255,.12) 45%, transparent 65%);
+          transform: translateX(-120%);
+          animation: subSheen 7s ease-in-out infinite;
+        }
+        .subscription-logo {
+          width: 28px !important;
+          height: 28px !important;
+          padding: 2px !important;
+          border-radius: 9px !important;
+          animation: subIconFloat 3.2s ease-in-out infinite;
+        }
+        .subscription-brand { gap: 7px !important; }
+        .subscription-kicker { font-size: 6px !important; letter-spacing: .12em !important; }
+        .subscription-size { font-size: 17px !important; line-height: 1.15 !important; }
+        .subscription-status { padding: 5px 8px !important; font-size: 7px !important; }
+        .subscription-top-metrics { gap: 6px !important; margin-top: 10px !important; }
+        .subscription-metric { padding: 7px 8px !important; border-radius: 10px !important; }
+        .subscription-metric-label { font-size: 6px !important; }
+        .subscription-metric-value { font-size: 12px !important; }
+        .subscription-card-body { padding: 11px !important; }
+        .subscription-date-value { font-size: 9px !important; }
+        .subscription-progress { width: 54px !important; height: 4px !important; }
+        .subscription-card button { min-height: 34px; border-radius: 10px !important; font-size: 10px !important; }
+        @keyframes subCardEnter { from { opacity: 0; transform: translateY(9px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes subGradientMove { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+        @keyframes subSheen { 0%,65%,100% { transform: translateX(-120%); } 82% { transform: translateX(120%); } }
+        @keyframes subIconFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+        @keyframes subCardGlow { 0%,100% { box-shadow: 0 6px 18px rgba(23,61,41,.08); } 50% { box-shadow: 0 9px 22px rgba(5,150,105,.13); } }
+        @media (max-width: 600px) {
+          .dashboard-subscription-strip { gap: 8px !important; padding: 2px 1px 8px !important; }
+          .subscription-card { flex: 0 0 100% !important; max-width: 100% !important; border-radius: 16px !important; }
+          .subscription-card-top { padding: 10px !important; }
+          .subscription-logo { width: 25px !important; height: 25px !important; }
+          .subscription-size { font-size: 16px !important; }
+          .subscription-top-metrics { margin-top: 9px !important; }
+          .subscription-card-body { padding: 10px !important; }
+          .subscription-dates { gap: 5px !important; }
+          .subscription-progress { width: 43px !important; }
+          .subscription-date-value { font-size: 8px !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .subscription-card, .subscription-card-top, .subscription-logo, .subscription-card-top::before { animation: none !important; }
+        }
+
+        /* Modern Wallet & Billing redesign — UI only; existing routes/data stay unchanged */
+        .wallet-billing-grid {
+          gap: 14px !important;
+          align-items: stretch !important;
+        }
+        .wallet-card {
+          position: relative !important;
+          isolation: isolate;
+          min-width: 0 !important;
+          min-height: 208px !important;
+          padding: 20px !important;
+          overflow: hidden !important;
+          border: 1px solid #e5eee8 !important;
+          border-radius: 22px !important;
+          color: #173b2b !important;
+          background: #ffffff !important;
+          box-shadow: 0 8px 28px rgba(17, 56, 38, .07) !important;
+          transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease !important;
+        }
+        .wallet-card:hover {
+          transform: translateY(-3px) !important;
+          box-shadow: 0 15px 34px rgba(17, 56, 38, .12) !important;
+        }
+        .wallet-card::before {
+          content: "";
+          position: absolute;
+          z-index: -1;
+          inset: 0 0 auto 0;
+          height: 5px;
+          background: linear-gradient(90deg, #047857, #34d399);
+        }
+        .postpaid-card::before {
+          background: linear-gradient(90deg, #1d4ed8, #38bdf8);
+        }
+        .wallet-card-orb {
+          z-index: -1 !important;
+          width: 150px !important;
+          height: 150px !important;
+          right: -65px !important;
+          top: -75px !important;
+          background: rgba(16, 185, 129, .07) !important;
+          animation: none !important;
+        }
+        .postpaid-card .wallet-card-orb {
+          background: rgba(59, 130, 246, .07) !important;
+        }
+        .wallet-card-head {
+          margin-bottom: 19px !important;
+          align-items: center !important;
+        }
+        .wallet-card-head span {
+          gap: 9px !important;
+          color: #173b2b !important;
+          font-size: 14px !important;
+          font-weight: 850 !important;
+        }
+        .wallet-card-head span svg {
+          width: 36px !important;
+          height: 36px !important;
+          padding: 9px !important;
+          box-sizing: border-box !important;
+          border-radius: 12px !important;
+          color: #047857 !important;
+          background: #dff8eb !important;
+        }
+        .postpaid-card .wallet-card-head span svg {
+          color: #1d4ed8 !important;
+          background: #e4efff !important;
+        }
+        .wallet-card-head b {
+          padding: 6px 9px !important;
+          border: 1px solid #d1fae5 !important;
+          border-radius: 999px !important;
+          background: #ecfdf5 !important;
+          color: #047857 !important;
+          font-size: 8px !important;
+          letter-spacing: .06em !important;
+        }
+        .postpaid-card .wallet-card-head b {
+          border-color: #dbeafe !important;
+          background: #eff6ff !important;
+          color: #1d4ed8 !important;
+        }
+        .wallet-card > small {
+          margin-top: 0 !important;
+          color: #84938a !important;
+          font-size: 9px !important;
+          letter-spacing: .12em !important;
+        }
+        .wallet-card > strong {
+          margin-top: 7px !important;
+          color: #123c2a !important;
+          font-size: clamp(27px, 3vw, 36px) !important;
+          line-height: 1.1 !important;
+          letter-spacing: -.045em !important;
+          font-weight: 900 !important;
+        }
+        .postpaid-card > strong { color: #1e40af !important; }
+        .wallet-card > p {
+          min-height: 30px !important;
+          margin: 8px 0 14px !important;
+          color: #718078 !important;
+          font-size: 10px !important;
+          line-height: 1.55 !important;
+        }
+        .wallet-card > button {
+          min-height: 38px !important;
+          gap: 8px !important;
+          padding: 0 12px !important;
+          border: 1px solid #c9f0dc !important;
+          border-radius: 11px !important;
+          background: #ecfdf5 !important;
+          color: #047857 !important;
+          font-size: 10px !important;
+          font-weight: 850 !important;
+          transition: background .2s ease, transform .2s ease !important;
+        }
+        .wallet-card > button:hover {
+          background: #d1fae5 !important;
+          transform: translateY(-1px);
+        }
+        .postpaid-card > button {
+          border-color: #dbeafe !important;
+          background: #eff6ff !important;
+          color: #1d4ed8 !important;
+        }
+        .postpaid-card > button:hover { background: #dbeafe !important; }
+        @media (max-width: 600px) {
+          .wallet-billing-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 9px !important;
+          }
+          .wallet-card {
+            min-height: 190px !important;
+            padding: 13px !important;
+            border-radius: 17px !important;
+          }
+          .wallet-card-head {
+            gap: 5px !important;
+            margin-bottom: 16px !important;
+          }
+          .wallet-card-head span {
+            gap: 6px !important;
+            font-size: 11px !important;
+          }
+          .wallet-card-head span svg {
+            width: 29px !important;
+            height: 29px !important;
+            padding: 7px !important;
+            border-radius: 9px !important;
+          }
+          .wallet-card-head b {
+            padding: 4px 6px !important;
+            font-size: 6px !important;
+          }
+          .wallet-card > small { font-size: 7px !important; }
+          .wallet-card > strong {
+            font-size: clamp(21px, 6vw, 28px) !important;
+          }
+          .wallet-card > p {
+            min-height: 42px !important;
+            margin: 7px 0 10px !important;
+            font-size: 8px !important;
+            line-height: 1.45 !important;
+          }
+          .wallet-card > button {
+            min-height: 32px !important;
+            gap: 5px !important;
+            padding: 0 8px !important;
+            border-radius: 9px !important;
+            font-size: 8px !important;
+          }
+        }
+        /* Colorful animated Wallet & Billing cards */
+        @keyframes walletCardEntrance {
+          from { opacity: 0; transform: translateY(16px) scale(.985); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes walletGradientFlow {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        @keyframes walletOrbFloat {
+          0%, 100% { transform: translate3d(0,0,0) scale(1); }
+          50% { transform: translate3d(-10px,9px,0) scale(1.08); }
+        }
+        @keyframes walletShimmer {
+          0% { transform: translateX(-150%) skewX(-18deg); }
+          55%, 100% { transform: translateX(250%) skewX(-18deg); }
+        }
+        @keyframes walletIconBob {
+          0%, 100% { transform: translateY(0) rotate(0); }
+          50% { transform: translateY(-3px) rotate(-3deg); }
+        }
+        .wallet-billing-grid {
+          gap: 16px !important;
+        }
+        .wallet-card {
+          min-height: 190px !important;
+          padding: 16px !important;
+          border: 1px solid rgba(255,255,255,.6) !important;
+          border-radius: 24px !important;
+          box-shadow: 0 14px 35px rgba(15,23,42,.10), inset 0 1px 0 rgba(255,255,255,.45) !important;
+          animation: walletCardEntrance .65s cubic-bezier(.2,.8,.2,1) both;
+          transition: transform .28s ease, box-shadow .28s ease !important;
+        }
+        .wallet-card:nth-child(2) { animation-delay: .12s; }
+        .wallet-card:hover {
+          transform: translateY(-6px) !important;
+          box-shadow: 0 22px 48px rgba(15,23,42,.17), inset 0 1px 0 rgba(255,255,255,.5) !important;
+        }
+        .prepaid-card {
+          color: #fff !important;
+          background: linear-gradient(125deg,#047857,#10b981,#34d399,#059669) !important;
+          background-size: 240% 240% !important;
+          animation: walletCardEntrance .65s cubic-bezier(.2,.8,.2,1) both, walletGradientFlow 10s ease infinite;
+        }
+        .postpaid-card {
+          color: #fff !important;
+          background: linear-gradient(125deg,#4338ca,#2563eb,#0ea5e9,#6366f1) !important;
+          background-size: 240% 240% !important;
+          animation: walletCardEntrance .65s cubic-bezier(.2,.8,.2,1) .12s both, walletGradientFlow 11s ease infinite;
+        }
+        .wallet-card::before {
+          content: "" !important;
+          position: absolute !important;
+          inset: 0 !important;
+          z-index: 0 !important;
+          width: 42% !important;
+          height: 100% !important;
+          background: linear-gradient(100deg,transparent,rgba(255,255,255,.16),transparent) !important;
+          animation: walletShimmer 7s ease-in-out infinite !important;
+          pointer-events: none !important;
+        }
+        .wallet-card-orb {
+          z-index: 0 !important;
+          width: 190px !important;
+          height: 190px !important;
+          right: -65px !important;
+          top: -95px !important;
+          background: rgba(255,255,255,.15) !important;
+          animation: walletOrbFloat 7s ease-in-out infinite !important;
+          pointer-events: none !important;
+        }
+        .wallet-card-head, .wallet-card > small, .wallet-card > strong,
+        .wallet-card > p, .wallet-card > button { position: relative !important; z-index: 2 !important; }
+        .wallet-card-head { margin-bottom: 14px !important; }
+        .wallet-card-head span { color: #fff !important; font-size: 13px !important; gap: 8px !important; }
+        .wallet-card-head span svg {
+          width: 30px !important; height: 30px !important; padding: 7px !important;
+          flex: 0 0 30px !important; border-radius: 10px !important; box-sizing: border-box !important;
+          color: #047857 !important; background: rgba(255,255,255,.95) !important;
+          box-shadow: 0 7px 16px rgba(0,0,0,.10) !important;
+          animation: walletIconBob 3.5s ease-in-out infinite;
+        }
+        .postpaid-card .wallet-card-head span svg { color: #4338ca !important; }
+        .wallet-card-head b {
+          padding: 6px 9px !important; border: 1px solid rgba(255,255,255,.32) !important;
+          border-radius: 999px !important; background: rgba(255,255,255,.17) !important;
+          color: #fff !important; font-size: 8px !important; letter-spacing: .07em !important;
+          backdrop-filter: blur(8px);
+        }
+        .wallet-card > small { margin-top: 0 !important; color: rgba(255,255,255,.78) !important; font-size: 9px !important; letter-spacing: .13em !important; }
+        .wallet-card > strong { margin-top: 6px !important; color: #fff !important; font-size: clamp(25px,2.8vw,34px) !important; line-height: 1.08 !important; letter-spacing: -.045em !important; text-shadow: 0 2px 12px rgba(0,0,0,.08); }
+        .wallet-card > p { min-height: 26px !important; margin: 7px 0 11px !important; color: rgba(255,255,255,.84) !important; font-size: 10px !important; line-height: 1.5 !important; }
+        .wallet-card > button {
+          min-height: 38px !important; gap: 8px !important; padding: 0 13px !important;
+          border: 1px solid rgba(255,255,255,.45) !important; border-radius: 12px !important;
+          background: rgba(255,255,255,.95) !important; color: #047857 !important;
+          font-size: 10px !important; font-weight: 900 !important;
+          box-shadow: 0 6px 16px rgba(0,0,0,.08) !important;
+          transition: transform .22s ease, box-shadow .22s ease, background .22s ease !important;
+        }
+        .postpaid-card > button { color: #3730a3 !important; }
+        .wallet-card > button:hover { transform: translateY(-2px) !important; box-shadow: 0 10px 22px rgba(0,0,0,.15) !important; background: #fff !important; }
+        @media (max-width: 600px) {
+          .wallet-billing-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 9px !important; }
+          .wallet-card { min-width: 0 !important; min-height: 165px !important; padding: 11px !important; border-radius: 16px !important; }
+          .wallet-card-head { gap: 4px !important; margin-bottom: 12px !important; }
+          .wallet-card-head span { gap: 5px !important; font-size: 11px !important; }
+          .wallet-card-head span svg { width: 25px !important; height: 25px !important; padding: 5px !important; flex-basis: 25px !important; border-radius: 8px !important; }
+          .wallet-card-head b { padding: 3px 5px !important; font-size: 6px !important; letter-spacing: .03em !important; }
+          .wallet-card > small { font-size: 7px !important; letter-spacing: .08em !important; }
+          .wallet-card > strong { font-size: clamp(19px,5.2vw,25px) !important; overflow-wrap: anywhere !important; }
+          .wallet-card > p { min-height: 35px !important; margin: 6px 0 9px !important; font-size: 8px !important; line-height: 1.4 !important; }
+          .wallet-card > button { width: 100% !important; min-height: 31px !important; gap: 4px !important; padding: 0 5px !important; border-radius: 8px !important; font-size: 8px !important; white-space: nowrap !important; }
+          .wallet-card-orb { width: 105px !important; height: 105px !important; right: -42px !important; top: -52px !important; }
+        }
+        @media (max-width: 360px) {
+          .wallet-billing-grid { gap: 7px !important; }
+          .wallet-card { padding: 9px !important; }
+          .wallet-card-head span { font-size: 10px !important; }
+          .wallet-card-head b { font-size: 5px !important; }
+          .wallet-card > button { font-size: 7px !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .wallet-card, .wallet-card::before, .wallet-card-orb, .wallet-card-head span svg { animation: none !important; transition: none !important; }
+          .wallet-card:hover { transform: none !important; }
+        }
+
+        /* Subscription cards: compact icons, colorful premium finish, responsive layout */
+        .dashboard-subscription-strip { gap: 12px !important; }
+        .subscription-card {
+          overflow: hidden !important;
+          border: 1px solid rgba(16,185,129,.18) !important;
+          border-radius: 20px !important;
+          box-shadow: 0 8px 24px rgba(15,65,49,.09) !important;
+          transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease !important;
+          animation: subCardEnter .55s cubic-bezier(.2,.8,.2,1) both, subCardGlow 6s ease-in-out infinite !important;
+        }
+        .subscription-card:hover { transform: translateY(-4px) !important; box-shadow: 0 15px 30px rgba(5,150,105,.17) !important; }
+        .subscription-card-top {
+          position: relative !important; overflow: hidden !important;
+          background-image: linear-gradient(125deg,#047857 0%,#059669 40%,#0d9488 72%,#16a34a 100%) !important;
+          background-size: 220% 220% !important;
+          animation: subGradientMove 9s ease-in-out infinite !important;
+        }
+        .subscription-card:nth-child(3n + 2) .subscription-card-top {
+          background-image: linear-gradient(125deg,#4338ca 0%,#6d28d9 45%,#9333ea 75%,#2563eb 100%) !important;
+        }
+        .subscription-card:nth-child(3n) .subscription-card-top {
+          background-image: linear-gradient(125deg,#0e7490 0%,#0891b2 48%,#0d9488 100%) !important;
+        }
+        .subscription-card-top::before {
+          content: ""; position: absolute; inset: 0; pointer-events: none;
+          background: linear-gradient(105deg,transparent 25%,rgba(255,255,255,.20) 46%,transparent 65%);
+          transform: translateX(-130%); animation: subSheen 8s ease-in-out infinite;
+        }
+        .subscription-card-top::after {
+          content: ""; position: absolute; width: 120px; height: 120px; right: -48px; top: -68px;
+          border-radius: 50%; background: rgba(255,255,255,.09); pointer-events: none;
+        }
+        .subscription-card-head, .subscription-top-metrics { position: relative; z-index: 1; }
+        .subscription-logo {
+          width: 25px !important; height: 25px !important; min-width: 25px !important;
+          padding: 2px !important; border-radius: 8px !important; background: white !important;
+          box-shadow: 0 3px 8px rgba(0,0,0,.12) !important;
+          animation: subIconFloat 3.4s ease-in-out infinite !important;
+        }
+        .subscription-brand { gap: 7px !important; }
+        .subscription-kicker { font-size: 7px !important; letter-spacing: .08em !important; }
+        .subscription-size { font-size: 17px !important; line-height: 1.1 !important; }
+        .subscription-status { font-size: 8px !important; padding: 5px 9px !important; border-radius: 999px !important; box-shadow: 0 2px 6px rgba(0,0,0,.07); }
+        .subscription-top-metrics { gap: 7px !important; margin-top: 10px !important; }
+        .subscription-metric { padding: 8px 9px !important; border-radius: 11px !important; background: rgba(255,255,255,.13) !important; border: 1px solid rgba(255,255,255,.16) !important; backdrop-filter: blur(5px); }
+        .subscription-metric-label { font-size: 7px !important; }
+        .subscription-metric-value { font-size: 13px !important; }
+        .subscription-card-body { padding: 12px !important; }
+        .subscription-date-label { font-size: 7px !important; letter-spacing: .05em; }
+        .subscription-date-value { font-size: 9px !important; }
+        .subscription-progress { width: 52px !important; height: 4px !important; border-radius: 99px !important; overflow: hidden; }
+        .subscription-progress span { border-radius: inherit !important; transition: width .8s ease; }
+        .subscription-card button { min-height: 34px !important; border-radius: 10px !important; font-size: 10px !important; gap: 5px !important; transition: transform .2s ease, filter .2s ease !important; }
+        .subscription-card button:hover { transform: translateY(-1px); filter: saturate(1.12); }
+        .subscription-card button svg, .subscription-card button img { width: 13px !important; height: 13px !important; flex-shrink: 0 !important; }
+        .subscription-card-body svg { width: 14px; height: 14px; }
+        @keyframes subCardEnter { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes subGradientMove { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+        @keyframes subSheen { 0%,68%,100% { transform: translateX(-130%); } 84% { transform: translateX(130%); } }
+        @keyframes subIconFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+        @keyframes subCardGlow { 0%,100% { box-shadow: 0 7px 20px rgba(15,65,49,.08); } 50% { box-shadow: 0 10px 25px rgba(5,150,105,.14); } }
+        @media (max-width: 600px) {
+          .dashboard-subscription-strip { display: flex !important; gap: 9px !important; padding: 2px 1px 8px !important; overflow-x: auto !important; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+          .subscription-card { flex: 0 0 100% !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; border-radius: 16px !important; scroll-snap-align: start; }
+          .subscription-card-top { padding: 10px !important; }
+          .subscription-logo { width: 23px !important; height: 23px !important; min-width: 23px !important; }
+          .subscription-kicker { font-size: 6px !important; }
+          .subscription-size { font-size: 15px !important; }
+          .subscription-status { padding: 4px 7px !important; font-size: 7px !important; }
+          .subscription-top-metrics { gap: 6px !important; margin-top: 8px !important; }
+          .subscription-metric { padding: 7px !important; }
+          .subscription-metric-label { font-size: 6px !important; }
+          .subscription-metric-value { font-size: 12px !important; }
+          .subscription-card-body { padding: 10px !important; }
+          .subscription-dates { gap: 5px !important; }
+          .subscription-progress { width: 38px !important; }
+          .subscription-date-value { font-size: 8px !important; }
+          .subscription-card button { min-height: 32px !important; font-size: 9px !important; padding: 7px 5px !important; }
+          .subscription-card button svg { width: 12px !important; height: 12px !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .subscription-card, .subscription-card-top, .subscription-logo, .subscription-card-top::before { animation: none !important; }
+          .subscription-card, .subscription-card button, .subscription-progress span { transition: none !important; }
+        }
       `}</style>
 
       <div className="dashboard-container">
         {/* Compact mobile brand bar */}
-        <div className="dashboard-mobile-top">
-          <div className="dashboard-mobile-brand">
-            <img src={LOGO_SRC} alt="Farm Fresh Dairy" />
-            <div>
-              <strong>FarmFreshDairy</strong>
-              <span>FRESHNESS DELIVERED DAILY</span>
-            </div>
-          </div>
-
-          <div className="dashboard-mobile-user">
-            <UserRound size={13} />
-            <span>{customerName}</span>
-          </div>
-        </div>
+       
 
         {/* Hero */}
         <section className="dashboard-hero">
           <div className="dashboard-hero-shine" />
+          
 
           <div className="dashboard-hero-content">
             <div className="dashboard-hero-row">
@@ -2997,9 +3573,15 @@ const handleContinueRegularSchedule = async () => {
                   Customer dashboard
                 </div>
 
-                <h1 className="dashboard-hero-title">
+                {/* <h1 className="dashboard-hero-title">
                   Welcome back, <span>{customerName}</span> 👋
-                </h1>
+                </h1> */}
+                
+                  <h1>
+                     <span className="dashboard-hero-title">{greeting}</span>, <span className="dashboard-hero-title">{customerName}</span>
+                    <span className="dashboard-hero-title"> 👋</span>
+                  </h1>
+
 
                 <p className="dashboard-hero-copy">
                   Manage your milk subscriptions, deliveries, orders and
@@ -3013,7 +3595,7 @@ const handleContinueRegularSchedule = async () => {
               </div>
             </div>
 
-            <div className="dashboard-actions">
+            {/* <div className="dashboard-actions">
               <button
                 className="dashboard-action primary"
                 onClick={() => navigate("/products")}
@@ -3043,7 +3625,7 @@ const handleContinueRegularSchedule = async () => {
                 <LogOut size={14} />
                 Logout
               </button>
-            </div>
+            </div> */}
           </div>
         </section>
 

@@ -944,10 +944,20 @@ export async function rejectExtraMilk(id) {
 //     addressData
 //   );
 // }
+
 export async function createPaymentOrder({
   amount,
-  customer_id = null,
+  customer_id,
+  subscription_id,
 }) {
+  if (!customer_id) {
+    throw new Error("Customer ID is required.");
+  }
+
+  if (!subscription_id) {
+    throw new Error("Subscription ID is required.");
+  }
+
   const response = await fetch(
     `${API_URL}/payments/create-order`,
     {
@@ -958,6 +968,7 @@ export async function createPaymentOrder({
       body: JSON.stringify({
         amount,
         customer_id,
+        subscription_id,
       }),
     }
   );
@@ -966,13 +977,13 @@ export async function createPaymentOrder({
 
   if (!response.ok) {
     throw new Error(
-      data?.message ||
-        "Unable to create payment order"
+      data?.message || "Unable to create payment order."
     );
   }
 
   return data;
 }
+
 export async function verifyPayment(paymentData) {
   const response = await fetch(
     `${API_URL}/payments/verify`,
