@@ -526,10 +526,16 @@ export async function autoResumePausedSubscriptionsService() {
     .select(`
       id,
       customer_id,
+      payment_method,
       status,
       is_paused,
       pause_from,
-      pause_to
+      pause_to,
+      subscription_items(
+        product_id,
+        size,
+        quantity
+      )
     `)
     .eq("is_paused", true)
     .lt("pause_to", today)
@@ -555,6 +561,66 @@ export async function autoResumePausedSubscriptionsService() {
   const resumed = [];
 
   for (const subscription of subscriptions) {
+    const paymentMethod = String(subscription.payment_method || "")
+      .trim()
+      .toLowerCase();
+    const isPrepaid = paymentMethod === "online" || paymentMethod === "prepaid";
+
+    // A wallet-exhausted prepaid subscription must not be auto-resumed.
+    // The daily generator will validate the full delivery cost before creating a new delivery.
+    if (isPrepaid) {
+      const { data: wallet, error: walletError } = await supabaseAdmin
+        .from("wallet_accounts")
+        .select("balance, status")
+        .eq("customer_id", subscription.customer_id)
+        .maybeSingle();
+
+      if (walletError) throw walletError;
+
+      const walletBalance = wallet?.status === "Active"
+        ? Number(wallet.balance)
+        : 0;
+
+      // Validate the wallet against the full next normal delivery cost,
+      // not merely a positive balance.
+      const { data: overrides, error: overridesError } = await supabaseAdmin
+        .from("subscription_delivery_overrides")
+        .select("product_id, size, quantity")
+        .eq("subscription_id", subscription.id)
+        .eq("delivery_date", today)
+        .eq("status", "Scheduled");
+
+      if (overridesError) throw overridesError;
+
+      let nextDeliveryAmount = 0;
+      for (const item of subscription.subscription_items || []) {
+        let quantity = Number(item.quantity || 0);
+        let size = item.size;
+        const override = (overrides || []).find(
+          (row) => row.product_id === item.product_id
+        );
+        if (override) {
+          size = override.size;
+          quantity = Number(override.quantity || 0);
+        }
+        if (quantity <= 0) continue;
+        const unitPrice = await getProductSizePrice(item.product_id, size);
+        nextDeliveryAmount += quantity * unitPrice;
+      }
+
+      if (
+        !Number.isFinite(walletBalance) ||
+        walletBalance < nextDeliveryAmount ||
+        nextDeliveryAmount <= 0
+      ) {
+        console.log("AUTO RESUME SKIPPED: prepaid wallet cannot cover next delivery:", {
+          subscriptionId: subscription.id,
+          walletBalance,
+          nextDeliveryAmount,
+        });
+        continue;
+      }
+    }
 
     console.log(
       "AUTO RESUMING SUBSCRIPTION:",
@@ -600,18 +666,13 @@ export async function autoResumePausedSubscriptionsService() {
 
   return resumed;
 }
+
 export async function generateTodayDeliveriesService() {
   const today = getIndiaToday();
-   await autoResumePausedSubscriptionsService();
 
-  // ==========================================================
-  // GET ACTIVE SUBSCRIPTIONS
-  // ==========================================================
+  await autoResumePausedSubscriptionsService();
 
-  // ==========================================================
-  // GET ACTIVE SUBSCRIPTIONS
-  // ==========================================================
-
+  // 1. Fetch active subscriptions and their products
   const {
     data: subscriptions,
     error,
@@ -632,655 +693,318 @@ export async function generateTodayDeliveriesService() {
   const updated = [];
   let skipped = 0;
 
-  // ==========================================================
-  // PROCESS EACH SUBSCRIPTION
-  // ==========================================================
-
   for (const subscription of subscriptions || []) {
+    try {
+      console.log("=================================");
+      console.log("CHECKING SUBSCRIPTION:", subscription.id);
+      console.log("Customer:", subscription.customer_id);
+      console.log("Payment method:", subscription.payment_method);
+      console.log("Today:", today);
 
-    console.log("=================================");
-    console.log("CHECKING SUBSCRIPTION:", subscription.id);
-    console.log("Customer:", subscription.customer_id);
-    console.log("Start:", subscription.start_date);
-    console.log("End:", subscription.end_date);
-    console.log("Frequency:", subscription.frequency);
-    console.log("Paused:", subscription.is_paused);
-    console.log("Pause From:", subscription.pause_from);
-    console.log("Pause To:", subscription.pause_to);
-    console.log("Today:", today);
+      // 2. Determine prepaid/postpaid BEFORE checking dates.
+      const paymentMethod = String(
+        subscription.payment_method || ""
+      )
+        .trim()
+        .toLowerCase();
 
-    // ========================================================
-    // 1. NORMAL DELIVERY ELIGIBILITY
-    // ========================================================
+      const isPrepaid =
+        paymentMethod === "online" ||
+        paymentMethod === "prepaid";
 
-    const normalEligible = shouldGenerateDelivery(
-      subscription,
-      today
-    );
-
-    console.log(
-      "NORMAL DELIVERY ELIGIBLE:",
-      subscription.id,
-      normalEligible
-    );
-
-    // ========================================================
-// CHECK PRODUCT-SPECIFIC DELIVERY SIZE OVERRIDES FOR TODAY
-// ========================================================
-
-const {
-  data: deliveryOverrides,
-  error: overrideError,
-} = await supabaseAdmin
-  .from("subscription_delivery_overrides")
-  .select(`
-    id,
-    subscription_id,
-    product_id,
-    delivery_date,
-    size,
-    quantity,
-    status
-  `)
-  .eq("subscription_id", subscription.id)
-  .eq("delivery_date", today)
-  .eq("status", "Scheduled");
-
-if (overrideError) {
-  console.error(
-    "Delivery Override Query Error:",
-    overrideError
-  );
-
-  throw overrideError;
-}
-
-console.log(
-  "DELIVERY OVERRIDES:",
-  deliveryOverrides || []
-);
-
-// ========================================================
-    // 2. CHECK APPROVED EXTRA MILK FOR TODAY
-    // ========================================================
-
-    const {
-      data: extraMilkRequests,
-      error: extraError,
-    } = await supabaseAdmin
-      .from("extra_milk_requests")
-      .select(`
-        *,
-        products(
-          id,
-          name,
-          price,
-          is_available
-        )
-      `)
-      .eq("subscription_id", subscription.id)
-      .eq("status", "Approved")
-      .lte("from_date", today)
-      .gte("to_date", today);
-
-    if (extraError) {
-      console.error(
-        "Extra Milk Query Error:",
-        extraError
+      // Prepaid ignores start/end dates.
+      // Postpaid still respects subscription dates.
+      const normalEligible = shouldGenerateDelivery(
+        subscription,
+        today,
+        { ignoreSubscriptionDates: isPrepaid }
       );
 
-      throw extraError;
-    }
+      console.log("NORMAL DELIVERY ELIGIBLE:", {
+        subscriptionId: subscription.id,
+        isPrepaid,
+        normalEligible,
+      });
 
-    console.log(
-      "APPROVED EXTRA MILK:",
-      extraMilkRequests || []
-    );
-
-    // ========================================================
-    // 3. IF NORMAL DELIVERY IS NOT ELIGIBLE
-    //    BUT EXTRA MILK EXISTS
-    //    WE STILL NEED A DELIVERY RECORD
-    // ========================================================
-
-    if (
-      !normalEligible &&
-      (!extraMilkRequests ||
-        extraMilkRequests.length === 0)
-    ) {
-      console.log(
-        "SKIPPED: No normal delivery and no extra milk."
-      );
-
-      skipped++;
-      continue;
-    }
-    // ========================================================
-// PREPAID WALLET CHECK
-// ========================================================
-
-const paymentMethod = String(
-  subscription.payment_method || ""
-)
-  .trim()
-  .toLowerCase();
-
-const isPrepaid =
-  paymentMethod === "online" ||
-  paymentMethod === "prepaid";
-
-if (normalEligible && isPrepaid) {
-
-  // Get customer's latest wallet balance
-  const { data: walletTransaction, error: walletError } =
-    await supabaseAdmin
-      .from("wallet_transactions")
-      .select("balance_after")
-      .eq("customer_id", subscription.customer_id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-  if (walletError) {
-    console.error("Wallet Balance Query Error:", walletError);
-    throw walletError;
-  }
-
-  const walletBalance = Number(
-    walletTransaction?.balance_after || 0
-  );
-
-  // Calculate today's normal delivery amount
-  let todayDeliveryAmount = 0;
-
-  for (const item of subscription.subscription_items || []) {
-    let quantity = Number(item.quantity || 0);
-    let size = item.size;
-
-    const productOverride = (deliveryOverrides || []).find(
-      (override) =>
-        override.product_id === item.product_id
-    );
-
-    if (productOverride) {
-      size = productOverride.size;
-      quantity = Number(productOverride.quantity);
-    }
-
-    if (quantity <= 0) continue;
-
-    const unitPrice = await getProductSizePrice(
-      item.product_id,
-      size
-    );
-
-    todayDeliveryAmount += quantity * unitPrice;
-  }
-
-  console.log("PREPAID WALLET CHECK:", {
-    subscriptionId: subscription.id,
-    walletBalance,
-    todayDeliveryAmount,
-  });
-
-  // Wallet empty or insufficient
-  if (
-    todayDeliveryAmount <= 0 ||
-    walletBalance < todayDeliveryAmount
-  ) {
-    console.log(
-      "PREPAID WALLET INSUFFICIENT → PAUSING SUBSCRIPTION"
-    );
-
-    const { error: pauseError } = await supabaseAdmin
-      .from("subscriptions")
-      .update({
-        status: "Paused",
-        is_paused: true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", subscription.id);
-
-    if (pauseError) {
-      throw pauseError;
-    }
-
-    skipped++;
-    continue;
-  }
-}
-
-    // ========================================================
-    // 4. CHECK WHETHER TODAY'S DELIVERY ALREADY EXISTS
-    // ========================================================
-
-    const {
-      data: existingDelivery,
-      error: existingError,
-    } = await supabaseAdmin
-      .from("subscription_deliveries")
-      .select(
-        "id, delivery_number, status"
-      )
-      .eq(
-        "subscription_id",
-        subscription.id
-      )
-      .eq(
-        "delivery_date",
-        today
-      )
-      .maybeSingle();
-
-    if (existingError) {
-      throw existingError;
-    }
-
-    let delivery;
-
-    // ========================================================
-    // 5. EXISTING DELIVERY
-    // ========================================================
-
-    if (existingDelivery) {
-
-      console.log(
-        "TODAY'S DELIVERY ALREADY EXISTS:",
-        existingDelivery
-      );
-
-      delivery = existingDelivery;
-
-      updated.push(delivery);
-
-    } else {
-
-      // ======================================================
-      // 6. CREATE TODAY'S DELIVERY
-      // ======================================================
-
-      const deliveryNumber =
-        await generateDeliveryNumber();
-
+      // 3. Fetch today's scheduled delivery overrides
       const {
-        data: newDelivery,
-        error: deliveryError,
+        data: deliveryOverrides,
+        error: overrideError,
+      } = await supabaseAdmin
+        .from("subscription_delivery_overrides")
+        .select(`
+          id,
+          subscription_id,
+          product_id,
+          delivery_date,
+          size,
+          quantity,
+          status
+        `)
+        .eq("subscription_id", subscription.id)
+        .eq("delivery_date", today)
+        .eq("status", "Scheduled");
+
+      if (overrideError) throw overrideError;
+
+      // 4. Fetch approved extra milk requests for today
+      const {
+        data: extraMilkRequests,
+        error: extraError,
+      } = await supabaseAdmin
+        .from("extra_milk_requests")
+        .select(`
+          *,
+          products(
+            id,
+            name,
+            price,
+            is_available
+          )
+        `)
+        .eq("subscription_id", subscription.id)
+        .eq("status", "Approved")
+        .lte("from_date", today)
+        .gte("to_date", today);
+
+      if (extraError) throw extraError;
+
+      const hasExtraMilk =
+        (extraMilkRequests || []).length > 0;
+
+      // No normal delivery and no approved extra milk
+      if (!normalEligible && !hasExtraMilk) {
+        console.log("SKIPPED: Not eligible for delivery.");
+        skipped++;
+        continue;
+      }
+
+      // 6. Check if today's delivery already exists
+      const {
+        data: existingDelivery,
+        error: existingError,
       } = await supabaseAdmin
         .from("subscription_deliveries")
-        .insert({
-          delivery_number:
-            deliveryNumber,
-
-          subscription_id:
-            subscription.id,
-
-          customer_id:
-            subscription.customer_id,
-
-          address_id:
-            subscription.address_id,
-
-          delivery_date:
-            today,
-
-          delivery_type:
-            subscription.delivery_type,
-
-          status:
-            "Pending",
-        })
-        .select()
-        .single();
-
-      if (deliveryError) {
-
-        console.error(
-          "Delivery Insert Error:",
-          deliveryError
-        );
-
-        throw deliveryError;
-      }
-
-      delivery = newDelivery;
-
-      console.log(
-        "NEW DELIVERY CREATED:",
-        delivery.id
-      );
-
-      created.push(delivery);
-
-      // ======================================================
-      // 7. ADD NORMAL SUBSCRIPTION ITEMS
-      //    ONLY WHEN NORMAL DELIVERY IS ELIGIBLE
-      // ======================================================
-
-      if (normalEligible) {
-
-  const normalItems = [];
-
-  for (
-    const item
-    of subscription.subscription_items || []
-  ) {
-
-    // ======================================================
-    // NORMAL SUBSCRIPTION VALUES
-    // ======================================================
-
-    let quantity =
-      Number(item.quantity || 0);
-
-    let size =
-      item.size;
-
-    // ======================================================
-    // APPLY DATE-SPECIFIC OVERRIDE FOR THIS PRODUCT ONLY
-    // ======================================================
-
-    const productOverride = (deliveryOverrides || []).find(
-      (override) =>
-        override.product_id === item.product_id
-    );
-
-    if (productOverride) {
-      console.log(
-        "APPLYING PRODUCT-SPECIFIC DELIVERY OVERRIDE:",
-        {
-          subscriptionId: subscription.id,
-          deliveryDate: today,
-          productId: item.product_id,
-          normalSize: item.size,
-          overrideSize: productOverride.size,
-          normalQuantity: item.quantity,
-          overrideQuantity: productOverride.quantity,
-        }
-      );
-
-      size = productOverride.size;
-      quantity = Number(productOverride.quantity);
-    }
-
-    // ======================================================
-    // VALIDATE QUANTITY
-    // ======================================================
-
-    if (quantity <= 0) {
-
-      console.log(
-        "Skipping subscription item - invalid quantity:",
-        item
-      );
-
-      continue;
-    }
-
-    // ======================================================
-    // GET SIZE-SPECIFIC PRICE
-    // ======================================================
-
-    const unitPrice =
-      await getProductSizePrice(
-        item.product_id,
-        size
-      );
-
-    console.log(
-      "FINAL DELIVERY SIZE:",
-      size
-    );
-
-    console.log(
-      "FINAL DELIVERY QUANTITY:",
-      quantity
-    );
-
-    console.log(
-      "UNIT PRICE:",
-      unitPrice
-    );
-
-    // ======================================================
-    // CREATE DELIVERY ITEM
-    // ======================================================
-
-    normalItems.push({
-
-      delivery_id:
-        delivery.id,
-
-      product_id:
-        item.product_id,
-
-      quantity,
-
-      size,
-
-      unit_price:
-        unitPrice,
-
-      total_price:
-        quantity * unitPrice,
-
-      is_extra:
-        false,
-
-    });
-  }
-
-  // ========================================================
-  // INSERT DELIVERY ITEMS
-  // ========================================================
-
-  if (normalItems.length > 0) {
-
-    const {
-      error: itemError,
-    } = await supabaseAdmin
-      .from(
-        "subscription_delivery_items"
-      )
-      .insert(normalItems);
-
-    if (itemError) {
-      throw itemError;
-    }
-  }
-} else {
-
-        console.log(
-          "SUBSCRIPTION PAUSED → NORMAL MILK NOT ADDED"
-        );
-      }
-    }
-
-    // ========================================================
-    // 8. ADD APPROVED EXTRA MILK
-    // ========================================================
-
-    for (
-      const request
-      of extraMilkRequests || []
-    ) {
-
-      console.log("--------------------------------");
-      console.log(
-        "PROCESSING EXTRA MILK REQUEST"
-      );
-
-      console.log(
-        "Request ID:",
-        request.id
-      );
-
-      console.log(
-        "Product:",
-        request.products?.name
-      );
-
-      console.log(
-        "Size:",
-        request.size
-      );
-
-      console.log(
-        "Quantity:",
-        request.quantity
-      );
-
-      // ======================================================
-      // 9. PREVENT DUPLICATE EXTRA MILK
-      // ======================================================
-
-      const {
-        data: existingExtraItem,
-        error: existingExtraError,
-      } = await supabaseAdmin
-        .from(
-          "subscription_delivery_items"
-        )
-        .select("id")
-        .eq(
-          "delivery_id",
-          delivery.id
-        )
-        .eq(
-          "extra_milk_request_id",
-          request.id
-        )
+        .select("id, delivery_number, status")
+        .eq("subscription_id", subscription.id)
+        .eq("delivery_date", today)
         .maybeSingle();
 
-      if (existingExtraError) {
+      if (existingError) throw existingError;
 
-        console.error(
-          "Existing Extra Item Check Error:",
-          existingExtraError
-        );
+      let delivery;
 
-        throw existingExtraError;
-      }
-
-      if (existingExtraItem) {
-
+      if (existingDelivery) {
         console.log(
-          "EXTRA MILK ALREADY ADDED:",
-          request.id
+          "TODAY'S DELIVERY ALREADY EXISTS:",
+          existingDelivery.id
         );
 
-        continue;
+        delivery = existingDelivery;
+        updated.push(delivery);
+      } else {
+        // 7. Create today's delivery
+        const deliveryNumber = await generateDeliveryNumber();
+
+        const {
+          data: newDelivery,
+          error: deliveryError,
+        } = await supabaseAdmin
+          .from("subscription_deliveries")
+          .insert({
+            delivery_number: deliveryNumber,
+            subscription_id: subscription.id,
+            customer_id: subscription.customer_id,
+            address_id: subscription.address_id,
+            delivery_date: today,
+            delivery_type: subscription.delivery_type,
+            status: "Pending",
+          })
+          .select()
+          .single();
+
+        if (deliveryError) throw deliveryError;
+
+        delivery = newDelivery;
+        created.push(delivery);
+
+        console.log("NEW DELIVERY CREATED:", delivery.id);
       }
 
-      // ======================================================
-      // 10. VALIDATE QUANTITY
-      // ======================================================
+      // 8. Build expected normal items and compare them with today's saved items.
+      // This handles new deliveries, empty existing deliveries, and partially saved items.
+      if (normalEligible) {
+        const expectedNormalItems = [];
 
-      const quantity =
-        Number(request.quantity || 0);
+        for (const item of subscription.subscription_items || []) {
+          let quantity = Number(item.quantity || 0);
+          let size = item.size;
+          const productOverride = (deliveryOverrides || []).find(
+            (override) => override.product_id === item.product_id
+          );
 
-      if (quantity <= 0) {
+          if (productOverride) {
+            size = productOverride.size;
+            quantity = Number(productOverride.quantity || 0);
+          }
+          if (quantity <= 0) continue;
 
-        console.log(
-          "Skipping Extra Milk - invalid quantity"
+          const unitPrice = await getProductSizePrice(item.product_id, size);
+          expectedNormalItems.push({
+            delivery_id: delivery.id,
+            product_id: item.product_id,
+            quantity,
+            size,
+            unit_price: unitPrice,
+            total_price: quantity * unitPrice,
+            is_extra: false,
+          });
+        }
+
+        const {
+          data: existingNormalItems,
+          error: normalItemsCheckError,
+        } = await supabaseAdmin
+          .from("subscription_delivery_items")
+          .select("id, product_id, size")
+          .eq("delivery_id", delivery.id)
+          .eq("is_extra", false);
+
+        if (normalItemsCheckError) throw normalItemsCheckError;
+
+        const existingKeys = new Set(
+          (existingNormalItems || []).map((item) =>
+            `${item.product_id}::${String(item.size || "").trim().toLowerCase()}`
+          )
+        );
+        const missingNormalItems = expectedNormalItems.filter((item) =>
+          !existingKeys.has(
+            `${item.product_id}::${String(item.size || "").trim().toLowerCase()}`
+          )
         );
 
-        continue;
+        // Before adding any missing normal items, prepaid must cover their full cost.
+        if (isPrepaid && missingNormalItems.length > 0) {
+          const {
+            data: wallet,
+            error: walletError,
+          } = await supabaseAdmin
+            .from("wallet_accounts")
+            .select("balance, status")
+            .eq("customer_id", subscription.customer_id)
+            .maybeSingle();
+
+          if (walletError) throw walletError;
+          const walletBalance = wallet?.status === "Active"
+            ? Number(wallet.balance)
+            : 0;
+          const missingItemsAmount = missingNormalItems.reduce(
+            (sum, item) => sum + Number(item.total_price || 0),
+            0
+          );
+
+          console.log("PREPAID WALLET CHECK FOR MISSING NORMAL ITEMS:", {
+            subscriptionId: subscription.id,
+            walletBalance,
+            missingItemsAmount,
+            missingItemsCount: missingNormalItems.length,
+          });
+
+          if (
+            !Number.isFinite(walletBalance) ||
+            missingItemsAmount <= 0 ||
+            walletBalance < missingItemsAmount
+          ) {
+            const { error: pauseError } = await supabaseAdmin
+              .from("subscriptions")
+              .update({
+                status: "Paused",
+                is_paused: true,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", subscription.id);
+
+            if (pauseError) throw pauseError;
+            console.log("SKIPPED: prepaid wallet cannot cover missing normal items.");
+            skipped++;
+            continue;
+          }
+        }
+
+        if (missingNormalItems.length > 0) {
+          const { error: itemError } = await supabaseAdmin
+            .from("subscription_delivery_items")
+            .insert(missingNormalItems);
+          if (itemError) throw itemError;
+        }
       }
 
-      // ======================================================
-      // 11. GET ACTUAL SIZE PRICE
-      //    FROM product_sizes
-      // ======================================================
+      // 9. Add approved extra milk, avoiding duplicates
+      for (const request of extraMilkRequests || []) {
+        const {
+          data: existingExtraItem,
+          error: existingExtraError,
+        } = await supabaseAdmin
+          .from("subscription_delivery_items")
+          .select("id")
+          .eq("delivery_id", delivery.id)
+          .eq("extra_milk_request_id", request.id)
+          .maybeSingle();
 
-      const unitPrice =
-        await getProductSizePrice(
+        if (existingExtraError) throw existingExtraError;
+
+        if (existingExtraItem) {
+          console.log(
+            "EXTRA MILK ALREADY ADDED:",
+            request.id
+          );
+          continue;
+        }
+
+        const quantity = Number(request.quantity || 0);
+
+        if (quantity <= 0) continue;
+
+        const unitPrice = await getProductSizePrice(
           request.product_id,
           request.size
         );
 
-      console.log(
-        "EXTRA MILK SIZE PRICE:",
-        request.size,
-        "₹",
-        unitPrice
-      );
+        const extraItem = {
+          delivery_id: delivery.id,
+          product_id: request.product_id,
+          quantity,
+          size: request.size,
+          unit_price: unitPrice,
+          total_price: quantity * unitPrice,
+          is_extra: true,
+          extra_milk_request_id: request.id,
+        };
 
-      // ======================================================
-      // 12. CREATE EXTRA MILK ITEM
-      // ======================================================
+        const { error: insertExtraError } = await supabaseAdmin
+          .from("subscription_delivery_items")
+          .insert(extraItem);
 
-      const extraItem = {
+        if (insertExtraError) throw insertExtraError;
 
-        delivery_id:
-          delivery.id,
-
-        product_id:
-          request.product_id,
-
-        quantity,
-
-        size:
-          request.size,
-
-        unit_price:
-          unitPrice,
-
-        total_price:
-          quantity * unitPrice,
-
-        is_extra:
-          true,
-
-        extra_milk_request_id:
-          request.id,
-      };
-
-      console.log(
-        "INSERTING EXTRA MILK ITEM:",
-        extraItem
-      );
-
-      // ======================================================
-      // 13. INSERT EXTRA MILK
-      // ======================================================
-
-      const {
-        error: insertExtraError,
-      } = await supabaseAdmin
-        .from(
-          "subscription_delivery_items"
-        )
-        .insert(extraItem);
-
-      if (insertExtraError) {
-
-        console.error(
-          "Extra Milk Insert Error:",
-          insertExtraError
-        );
-
-        throw insertExtraError;
+        console.log("EXTRA MILK ADDED:", request.id);
       }
 
       console.log(
-        "✅ EXTRA MILK ADDED:",
-        request.id
+        "DELIVERY PROCESSING COMPLETE:",
+        delivery.id
       );
+    } catch (subscriptionError) {
+      console.error(
+        "DELIVERY GENERATION FAILED FOR SUBSCRIPTION:",
+        subscription.id,
+        subscriptionError
+      );
+
+      // Stop the job on unexpected database/service errors.
+      throw subscriptionError;
     }
-
-    // ========================================================
-    // 14. LOG RESULT
-    // ========================================================
-
-    console.log(
-      "✅ DELIVERY PROCESSING COMPLETE:",
-      delivery.id
-    );
   }
-
-  // ==========================================================
-  // RETURN
-  // ==========================================================
 
   return {
     created,
@@ -1289,107 +1013,93 @@ if (normalEligible && isPrepaid) {
   };
 }
 
-function shouldGenerateDelivery(subscription, today) {
 
+
+function shouldGenerateDelivery(
+  subscription,
+  today,
+  { ignoreSubscriptionDates = false } = {}
+) {
   console.log("----- ELIGIBILITY CHECK -----");
 
-  const todayDate = new Date(today);
-  const startDate = new Date(subscription.start_date);
+  const todayDate = new Date(`${today}T00:00:00`);
+  const startDate = subscription.start_date
+    ? new Date(`${subscription.start_date}T00:00:00`)
+    : null;
 
-  console.log("todayDate:", todayDate);
-  console.log("startDate:", startDate);
-
-  // Before subscription starts
-  if (todayDate < startDate) {
-    console.log("❌ Before start date");
-    return false;
-  }
-
-  // Subscription ended
+  // Postpaid: respect subscription start date.
+  // Prepaid: do not block delivery based on start date.
   if (
-    subscription.end_date &&
-    todayDate > new Date(subscription.end_date)
+    !ignoreSubscriptionDates &&
+    startDate &&
+    todayDate < startDate
   ) {
-    console.log("❌ Subscription ended");
+    console.log("Before subscription start date");
     return false;
   }
 
-  // Paused
+  // Postpaid: respect subscription end date.
+  // Prepaid: do not block delivery based on end date.
+  if (
+    !ignoreSubscriptionDates &&
+    subscription.end_date &&
+    todayDate > new Date(`${subscription.end_date}T00:00:00`)
+  ) {
+    console.log("Subscription ended");
+    return false;
+  }
+
+  // Respect pause settings for both customer types.
   if (
     subscription.is_paused &&
     subscription.pause_from &&
     subscription.pause_to
   ) {
+    const pauseFrom = new Date(
+      `${subscription.pause_from}T00:00:00`
+    );
+    const pauseTo = new Date(
+      `${subscription.pause_to}T00:00:00`
+    );
 
-    const pauseFrom =
-      new Date(subscription.pause_from);
-
-    const pauseTo =
-      new Date(subscription.pause_to);
-
-    console.log("Pause from:", pauseFrom);
-    console.log("Pause to:", pauseTo);
-
-    if (
-      todayDate >= pauseFrom &&
-      todayDate <= pauseTo
-    ) {
-      console.log("❌ Subscription paused");
+    if (todayDate >= pauseFrom && todayDate <= pauseTo) {
+      console.log("Subscription paused");
       return false;
     }
   }
 
-  const frequency =
-    (subscription.frequency || "")
-      .trim()
-      .toLowerCase();
-
-  console.log("Frequency:", frequency);
+  const frequency = String(
+    subscription.frequency || "Daily"
+  )
+    .trim()
+    .toLowerCase();
 
   switch (frequency) {
-
     case "daily":
-
-      console.log("✅ DAILY → ELIGIBLE");
-
       return true;
 
     case "alternate":
     case "alternate day":
     case "alternate days": {
+      if (!startDate) return false;
 
       const diffDays = Math.floor(
-        (
-          todayDate.getTime() -
-          startDate.getTime()
-        ) /
-        (1000 * 60 * 60 * 24)
-      );
-
-      console.log(
-        "Alternate diffDays:",
-        diffDays
+        (todayDate.getTime() - startDate.getTime()) /
+          (1000 * 60 * 60 * 24)
       );
 
       return diffDays % 2 === 0;
     }
 
     case "weekly":
-
-      return (
-        todayDate.getDay() ===
-        startDate.getDay()
-      );
+      if (!startDate) return false;
+      return todayDate.getDay() === startDate.getDay();
 
     default:
-
-      console.log(
-        "⚠️ Unknown frequency, allowing delivery"
-      );
-
       return true;
   }
 }
+
 async function generateDeliveryNumber() {
 
   const { count } = await supabaseAdmin
@@ -1401,26 +1111,111 @@ async function generateDeliveryNumber() {
 
   return `SDL${String((count || 0) + 1).padStart(6, "0")}`;
 }
+
+
 export async function assignSubscriptionDeliveryService(
   id,
   deliveryBoyId
 ) {
-
-  const { data, error } =
+  const { data: delivery, error: deliveryError } =
     await supabaseAdmin
       .from("subscription_deliveries")
-      .update({
-        delivery_boy_id: deliveryBoyId,
-        status: "Assigned",
-      })
+      .select(`
+        id,
+        status,
+        customer_id,
+        subscription_id,
+        subscription_delivery_items (
+          quantity,
+          unit_price,
+          total_price
+        ),
+        subscriptions (
+          payment_method
+        )
+      `)
       .eq("id", id)
-      .select()
       .single();
+
+  if (deliveryError) throw deliveryError;
+
+  const paymentMethod = String(
+    delivery.subscriptions?.payment_method || ""
+  ).trim().toLowerCase();
+
+  const isPrepaid =
+    paymentMethod === "online" ||
+    paymentMethod === "prepaid";
+
+  if (isPrepaid) {
+    const requiredAmount = (
+      delivery.subscription_delivery_items || []
+    ).reduce((sum, item) => {
+      const itemTotal = Number(
+        item.total_price ??
+          Number(item.quantity || 0) *
+            Number(item.unit_price || 0)
+      );
+
+      return sum + itemTotal;
+    }, 0);
+
+    const { data: wallet, error: walletError } =
+      await supabaseAdmin
+        .from("wallet_accounts")
+        .select("balance, status")
+        .eq("customer_id", delivery.customer_id)
+        .maybeSingle();
+
+    if (walletError) throw walletError;
+
+    const balance =
+      wallet?.status === "Active"
+        ? Number(wallet.balance)
+        : 0;
+
+    if (
+      !wallet ||
+      !Number.isFinite(balance) ||
+      requiredAmount <= 0 ||
+      balance < requiredAmount
+    ) {
+      // Pause the subscription; do not assign the delivery.
+      const { error: pauseError } = await supabaseAdmin
+        .from("subscriptions")
+        .update({
+          status: "Paused",
+          is_paused: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", delivery.subscription_id);
+
+      if (pauseError) throw pauseError;
+
+      throw new Error(
+        `Delivery not assigned: wallet balance ₹${balance.toFixed(2)}, ` +
+        `required ₹${requiredAmount.toFixed(2)}. Recharge required.`
+      );
+    }
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("subscription_deliveries")
+    .update({
+      delivery_boy_id: deliveryBoyId,
+      status: "Assigned",
+      assigned_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
 
   if (error) throw error;
 
   return data;
 }
+
+
 export async function getCustomerDeliverySummaryService(customerId) {
   const { data, error } = await supabaseAdmin
     .from("subscription_deliveries")
@@ -1517,37 +1312,53 @@ export async function bulkAssignSubscriptionDeliveriesService(
    AUTO EXPIRE SUBSCRIPTIONS
    ========================================================== */
 
+
 export async function expireSubscriptionsService() {
   const today = getIndiaToday();
 
-  const {
-    data,
-    error,
-  } = await supabaseAdmin
+  const { data: subscriptions, error: fetchError } =
+    await supabaseAdmin
+      .from("subscriptions")
+      .select("id, customer_id, start_date, end_date, payment_method")
+      .eq("status", "Active")
+      .lt("end_date", today);
+
+  if (fetchError) throw fetchError;
+
+  const postpaidIds = (subscriptions || [])
+    .filter((subscription) => {
+      const method = String(
+        subscription.payment_method || ""
+      ).trim().toLowerCase();
+
+      return method === "cod" || method === "postpaid";
+    })
+    .map((subscription) => subscription.id);
+
+  if (postpaidIds.length === 0) {
+    console.log("AUTO EXPIRY: No expired postpaid subscriptions.");
+    return [];
+  }
+
+  const { data, error } = await supabaseAdmin
     .from("subscriptions")
     .update({
       status: "Expired",
       updated_at: new Date().toISOString(),
     })
+    .in("id", postpaidIds)
     .eq("status", "Active")
-    .lt("end_date", today)
     .select("id, customer_id, start_date, end_date, status");
 
-  if (error) {
-    console.error(
-      "Expire Subscriptions Error:",
-      error
-    );
-
-    throw error;
-  }
+  if (error) throw error;
 
   console.log(
-    `AUTO EXPIRY: ${data?.length || 0} subscription(s) expired.`
+    `AUTO EXPIRY: ${data?.length || 0} postpaid subscription(s) expired.`
   );
 
   return data || [];
 }
+
 // ==========================================================
 // DELIVERY SIZE OVERRIDES
 // ==========================================================
