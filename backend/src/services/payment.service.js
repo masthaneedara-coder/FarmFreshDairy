@@ -3,6 +3,8 @@ import crypto from "crypto";
 import razorpay from "../config/razorpay.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { creditWallet } from "./wallet.service.js";
+import { createSubscriptionService } from "./subscription.service.js";
+
 
 async function creditVerifiedPaymentToWallet({
   customerId,
@@ -262,316 +264,251 @@ export async function createPaymentService(payment) {
    Verify Razorpay Payment
 ========================================================== */
 
+
 export async function verifyPaymentService({
   razorpay_order_id,
   razorpay_payment_id,
   razorpay_signature,
   customer_id,
-  subscription_id,
+  intent_id,
 }) {
   try {
     if (
       !razorpay_order_id ||
       !razorpay_payment_id ||
-      !razorpay_signature
+      !razorpay_signature ||
+      !customer_id
     ) {
       return {
         data: null,
-        error: {
-          message: "Razorpay payment verification details are required.",
-        },
-      };
-    }
-
-    if (!customer_id || !subscription_id) {
-      return {
-        data: null,
-        error: {
-          message: "Customer ID and Subscription ID are required.",
-        },
+        error: { message: "Payment details and customer ID are required." },
       };
     }
 
     const secret = process.env.RAZORPAY_KEY_SECRET;
-
     if (!secret) {
       throw new Error("Razorpay secret key is not configured.");
     }
 
-    // 1. Validate subscription ownership.
-    const { data: subscription, error: subscriptionError } =
-      await supabaseAdmin
+    // 1. Find the payment intent. A subscription does not exist yet.
+    let query = supabaseAdmin
+      .from("payment_intents")
+      .select("*")
+      .eq("razorpay_order_id", razorpay_order_id)
+      .eq("customer_id", customer_id);
+
+    if (intent_id) query = query.eq("id", intent_id);
+
+    const { data: intent, error: intentError } =
+      await query.maybeSingle();
+
+    if (intentError) throw intentError;
+
+    if (!intent) {
+      return {
+        data: null,
+        error: { message: "Payment intent not found." },
+      };
+    }
+
+    // If already finalized, return the existing subscription.
+    if (intent.status === "COMPLETED" && intent.subscription_id) {
+      const { data: subscription, error } = await supabaseAdmin
         .from("subscriptions")
-        .select("id, customer_id, total_amount")
-        .eq("id", subscription_id)
+        .select("*")
+        .eq("id", intent.subscription_id)
         .eq("customer_id", customer_id)
         .maybeSingle();
 
-    if (subscriptionError) throw subscriptionError;
+      if (error) throw error;
+      if (!subscription) {
+        throw new Error("Completed payment needs subscription reconciliation.");
+      }
 
-    if (!subscription) {
       return {
-        data: null,
-        error: {
-          message: "Subscription not found for this customer.",
+        data: {
+          verified: true,
+          alreadyProcessed: true,
+          subscription,
+          payment: { payment_id: razorpay_payment_id, status: "Paid" },
         },
+        error: null,
       };
     }
 
-    // 2. Fetch and validate the Razorpay order.
+    // 2. Verify the Razorpay order matches the intent.
     const order = await razorpay.orders.fetch(razorpay_order_id);
-
-    if (!order) {
-      return {
-        data: null,
-        error: { message: "Razorpay order not found." },
-      };
-    }
 
     if (
       String(order.notes?.customer_id) !== String(customer_id) ||
-      String(order.notes?.subscription_id) !== String(subscription_id)
+      String(order.notes?.payment_intent_id) !== String(intent.id)
     ) {
-      return {
-        data: null,
-        error: {
-          message: "Razorpay order does not match this customer and subscription.",
-        },
-      };
+      throw new Error("Razorpay order does not match this payment intent.");
     }
 
     if (
-      Number(order.amount) !==
-      Math.round(Number(subscription.total_amount) * 100)
+      Number(order.amount) !== Math.round(Number(intent.amount) * 100) ||
+      order.currency !== intent.currency
     ) {
-      return {
-        data: null,
-        error: {
-          message: "Razorpay order amount does not match the subscription.",
-        },
-      };
+      throw new Error("Razorpay order amount or currency mismatch.");
     }
 
-    // 3. Verify Razorpay signature using constant-time comparison.
+    // 3. Verify the Razorpay signature.
     const expectedSignature = crypto
       .createHmac("sha256", secret)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest();
 
-    let receivedSignature;
-
-    try {
-      receivedSignature = Buffer.from(razorpay_signature, "hex");
-    } catch {
-      receivedSignature = Buffer.alloc(0);
-    }
+    const receivedSignature = Buffer.from(razorpay_signature, "hex");
 
     if (
       receivedSignature.length !== expectedSignature.length ||
       !crypto.timingSafeEqual(expectedSignature, receivedSignature)
     ) {
-      return {
-        data: null,
-        error: { message: "Invalid payment signature." },
-      };
+      throw new Error("Invalid payment signature.");
     }
 
-    // 4. Fetch payment and confirm it belongs to this order.
-    const razorpayPayment =
-      await razorpay.payments.fetch(razorpay_payment_id);
-
-    if (razorpayPayment.order_id !== razorpay_order_id) {
-      return {
-        data: null,
-        error: {
-          message: "Payment does not belong to this Razorpay order.",
-        },
-      };
-    }
+    // 4. Confirm Razorpay reports this payment as captured.
+    const rpPayment = await razorpay.payments.fetch(razorpay_payment_id);
 
     if (
-      Number(razorpayPayment.amount) !== Number(order.amount) ||
-      razorpayPayment.currency !== order.currency
+      rpPayment.order_id !== razorpay_order_id ||
+      Number(rpPayment.amount) !== Number(order.amount) ||
+      rpPayment.currency !== order.currency ||
+      rpPayment.status !== "captured"
     ) {
-      return {
-        data: null,
-        error: { message: "Payment amount or currency does not match." },
-      };
+      throw new Error("Payment is not captured or payment details do not match.");
     }
 
-    if (razorpayPayment.status !== "captured") {
-      return {
-        data: null,
-        error: {
-          message: `Payment is not captured. Current status: ${razorpayPayment.status}`,
-        },
-      };
+    const amount = Number(rpPayment.amount) / 100;
+
+    if (Math.round(amount * 100) !== Math.round(Number(intent.amount) * 100)) {
+      throw new Error("Captured payment amount does not match the intent.");
     }
 
-    const paymentAmount = Number(razorpayPayment.amount) / 100;
-
-    // 5. Idempotency check: do not insert the same payment twice.
-    const { data: existingPayment, error: lookupError } =
-      await supabaseAdmin
-        .from("payments")
-        .select("*")
-        .eq("transaction_id", razorpay_payment_id)
-        .maybeSingle();
+    // 5. Reuse an existing payment record on retries.
+    let { data: paymentRecord, error: lookupError } = await supabaseAdmin
+      .from("payments")
+      .select("*")
+      .eq("transaction_id", razorpay_payment_id)
+      .maybeSingle();
 
     if (lookupError) throw lookupError;
 
+    if (paymentRecord) {
+      if (
+        String(paymentRecord.customer_id) !== String(customer_id) ||
+        Math.round(Number(paymentRecord.amount) * 100) !== Math.round(amount * 100) ||
+        paymentRecord.payment_status !== "Paid"
+      ) {
+        throw new Error("Existing payment record does not match this payment.");
+      }
 
-if (existingPayment) {
-  // Never credit a payment associated with another customer/subscription.
-  if (
-    String(existingPayment.customer_id) !== String(customer_id) ||
-    String(existingPayment.subscription_id) !== String(subscription_id)
-  ) {
-    return {
-      data: null,
-      error: {
-        message: "This payment is already associated with another record.",
-      },
-    };
-  }
+      if (paymentRecord.subscription_id) {
+        const { data: subscription, error } = await supabaseAdmin
+          .from("subscriptions")
+          .select("*")
+          .eq("id", paymentRecord.subscription_id)
+          .eq("customer_id", customer_id)
+          .maybeSingle();
 
-  // Ensure the saved record matches the verified Razorpay payment.
-  if (
-    existingPayment.payment_status !== "Paid" ||
-    Math.round(Number(existingPayment.amount) * 100) !==
-      Math.round(paymentAmount * 100)
-  ) {
-    return {
-      data: null,
-      error: {
-        message: "Saved payment details do not match the verified payment.",
-      },
-    };
-  }
+        if (error) throw error;
+        if (!subscription) throw new Error("Payment needs reconciliation.");
 
-  // Safe to retry: wallet_credit checks the PaymentRecord reference.
-  await creditVerifiedPaymentToWallet({
-    customerId: customer_id,
-    paymentRecordId: existingPayment.id,
-    amount: Number(existingPayment.amount),
-    razorpayPaymentId: existingPayment.transaction_id,
-  });
-
-  // Repair subscription payment details if a previous attempt failed.
-  const { data: updatedSubscription, error: updateError } =
-    await supabaseAdmin
-      .from("subscriptions")
-      .update({
-        payment_status: "Paid",
-        payment_reference: razorpay_payment_id,
-        payment_amount: paymentAmount,
-        payment_date: new Date().toISOString(),
-      })
-      .eq("id", subscription_id)
-      .eq("customer_id", customer_id)
-      .select("id")
-      .maybeSingle();
-
-  if (updateError || !updatedSubscription) {
-    console.error(
-      "Payment saved but subscription update failed:",
-      updateError || "No matching subscription row"
-    );
-
-    return {
-      data: null,
-      error: {
-        message:
-          "Payment is saved and wallet credit was checked, but subscription status needs reconciliation. Retry verification; do not pay again.",
-      },
-    };
-  }
-
-  return {
-    data: {
-      verified: true,
-      alreadyProcessed: true,
-      payment: {
-        id: existingPayment.id,
-        payment_id: existingPayment.transaction_id,
-        order_id: razorpay_order_id,
-        amount: Number(existingPayment.amount),
-        status: existingPayment.payment_status,
-      },
-      message: "Payment verified, wallet credit checked, and subscription status confirmed.",
-    },
-    error: null,
-  };
-}
-
-
-    // 6. Save verified payment linked to the real subscription.
-    const { data: payment, error: paymentError } =
-      await createPaymentService({
-        subscription_id,
+        return {
+          data: {
+            verified: true,
+            alreadyProcessed: true,
+            payment: paymentRecord,
+            subscription,
+          },
+          error: null,
+        };
+      }
+    } else {
+      const { data, error } = await createPaymentService({
+        order_id: null,
+        subscription_id: null,
         customer_id,
-        amount: paymentAmount,
+        amount,
         payment_method: "ONLINE",
         transaction_id: razorpay_payment_id,
         payment_status: "Paid",
         paid_at: new Date().toISOString(),
       });
 
-    if (paymentError || !payment) {
-      console.error("Payment insert error:", paymentError);
-      return {
-        data: null,
-        error: { message: "Unable to save verified payment." },
-      };
+      if (error) {
+        // A concurrent request may have inserted this transaction.
+        const { data: retryRecord, error: retryError } = await supabaseAdmin
+          .from("payments")
+          .select("*")
+          .eq("transaction_id", razorpay_payment_id)
+          .maybeSingle();
+
+        if (retryError) throw retryError;
+        if (!retryRecord) throw error;
+
+        paymentRecord = retryRecord;
+      } else {
+        paymentRecord = data;
+      }
     }
-    await creditVerifiedPaymentToWallet({
-  customerId: customer_id,
-  paymentRecordId: payment.id,
-  amount: paymentAmount,
-  razorpayPaymentId: razorpay_payment_id,
-});
 
-    // 7. Update payment details on the subscription.
-    const { error: updateError } = await supabaseAdmin
-      .from("subscriptions")
-      .update({
-        payment_status: "Paid",
-        payment_reference: razorpay_payment_id,
-        payment_amount: paymentAmount,
-        payment_date: new Date().toISOString(),
-      })
-      .eq("id", subscription_id)
-      .eq("customer_id", customer_id);
+    // 6. Create the subscription only after successful payment verification.
+    // Pass the stored server-side payload, not the browser's amount.
+    const payload = {
+      ...intent.checkout_payload,
+      customer_id,
+      total_amount: amount,
+      payment_method: "ONLINE",
+      payment_status: "PAID",
+      payment_reference: razorpay_payment_id,
+      payment_amount: amount,
+      payment_date: new Date().toISOString(),
+    };
 
-    if (updateError) {
-      // Payment was saved, so do not pretend the entire operation failed
-      // without logging the partial result for reconciliation.
-      console.error(
-        "Payment saved but subscription payment status update failed:",
-        updateError
-      );
+    const result = await createSubscriptionService(payload);
+
+    if (result?.error || !result?.data?.id) {
+      console.error("Subscription finalization failed:", result?.error);
 
       return {
         data: null,
         error: {
           message:
-            "Payment was verified and saved, but subscription status update failed. Reconcile this payment before retrying.",
+            "Payment was verified, but subscription creation needs attention. Do not pay again.",
         },
       };
+    }
+
+    // 7. Mark the intent complete.
+    const { error: updateError } = await supabaseAdmin
+      .from("payment_intents")
+      .update({
+        status: "COMPLETED",
+        razorpay_payment_id,
+        subscription_id: result.data.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", intent.id);
+
+    if (updateError) {
+      console.error("Payment succeeded but intent update failed:", updateError);
     }
 
     return {
       data: {
         verified: true,
         alreadyProcessed: false,
-        payment: {
-          id: payment.id,
+        payment: result.payment || {
+          id: paymentRecord.id,
           payment_id: razorpay_payment_id,
-          order_id: razorpay_order_id,
-          amount: paymentAmount,
+          amount,
           status: "Paid",
         },
-        message: "Payment verified successfully.",
+        subscription: result.data,
+        billing: result.billing || null,
+        message: "Payment verified and subscription created.",
       },
       error: null,
     };
@@ -580,9 +517,8 @@ if (existingPayment) {
 
     return {
       data: null,
-      error: {
-        message: error.message || "Payment verification failed.",
-      },
+      error: { message: error.message || "Payment verification failed." },
     };
   }
 }
+
