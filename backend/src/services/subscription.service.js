@@ -9,6 +9,7 @@ import {
 ========================================================== */
 
 
+
 export async function createSubscriptionService(subscriptionData) {
   const {
     customer_id,
@@ -542,11 +543,82 @@ export async function updateSubscriptionStatusService(
    Delete Subscription
 ========================================================== */
 
+/* ==========================================================
+   Delete Subscription
+========================================================== */
+
 export async function deleteSubscriptionService(subscriptionId) {
-  return await supabaseAdmin
+  if (!subscriptionId) {
+    const error = new Error("Subscription ID is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // 1. Fetch subscription before deletion
+  const {
+    data: subscription,
+    error: fetchError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .select("id, status")
+    .eq("id", subscriptionId)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error("Fetch subscription error:", fetchError);
+    throw new Error("Unable to verify subscription.");
+  }
+
+  if (!subscription) {
+    const error = new Error("Subscription not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // 2. Allow only these statuses
+  const allowedStatuses = [
+    "stopped",
+    "expired",
+    "cancelled",
+  ];
+
+  const status = String(subscription.status || "")
+    .trim()
+    .toLowerCase();
+
+  if (!allowedStatuses.includes(status)) {
+    const error = new Error(
+      "Only Stopped, Expired, or Cancelled subscriptions can be deleted."
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  // 3. Delete the subscription
+  const { error: deleteError } = await supabaseAdmin
     .from("subscriptions")
     .delete()
     .eq("id", subscriptionId);
+
+  if (deleteError) {
+    console.error("Delete subscription error:", deleteError);
+
+    if (deleteError.code === "23503") {
+      const error = new Error(
+        "Cannot delete this subscription because related records exist. Preserve the related delivery and billing history."
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
+    throw new Error("Unable to delete subscription.");
+  }
+
+  return {
+    success: true,
+    message: "Subscription deleted successfully.",
+    subscriptionId,
+  };
 }
 
 /* ==========================================================
@@ -1599,4 +1671,8 @@ export async function autoResumePausedSubscriptionsService() {
     throw error;
   }
 }
+
+
+
+
 
