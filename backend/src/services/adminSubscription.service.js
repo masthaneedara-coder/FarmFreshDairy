@@ -7,6 +7,7 @@ import { supabaseAdmin } from "../config/supabase.js";
 // ======================================
 // Get All Subscriptions - OPTIMIZED
 // ======================================
+
 export async function getAllSubscriptionsService() {
   const { data: subscriptions, error } = await supabaseAdmin
     .from("subscriptions")
@@ -16,29 +17,32 @@ export async function getAllSubscriptionsService() {
       address_id,
       delivery_time,
       total_amount,
+      payment_method,
+      payment_status,
+      payment_date,
+      payment_reference,
+      payment_amount,
       status,
       is_paused,
       pause_from,
       pause_to,
+      paused_days,
       start_date,
       end_date,
       created_at,
-
-      customers(
+      customers (
         full_name,
         phone
       ),
-
-      addresses(
+      addresses (
         house_no,
         street,
         area
       ),
-
-      subscription_items(
+      subscription_items (
         quantity,
         size,
-        products(
+        products (
           name
         )
       )
@@ -46,106 +50,86 @@ export async function getAllSubscriptionsService() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error(
-      "Get All Subscriptions Error:",
-      error
-    );
-
+    console.error("Get All Subscriptions Error:", error);
     throw error;
   }
+
+  const cleanAddressPart = (value) =>
+    String(value ?? "").trim().replace(/,\s*$/, "");
+
+  const normalizeAddress = (value) =>
+    value.toLowerCase().replace(/[,\s]+/g, " ").trim();
 
   return (subscriptions || []).map((sub) => {
     const customer = sub.customers;
     const address = sub.addresses;
 
-    // Get first subscription item
     const item = Array.isArray(sub.subscription_items)
       ? sub.subscription_items[0]
       : sub.subscription_items;
 
     const product = item?.products;
 
+    const houseNo = cleanAddressPart(address?.house_no);
+    const street = cleanAddressPart(address?.street);
+
+    // Do not repeat the house number if it is already in the street.
+    const normalizedHouse = normalizeAddress(houseNo);
+    const normalizedStreet = normalizeAddress(street);
+
+    const formattedAddress = !houseNo
+      ? street || "-"
+      : !street
+        ? houseNo
+        : normalizedStreet.includes(normalizedHouse)
+          ? street
+          : `${houseNo}, ${street}`;
+
     return {
       subscriptionId: sub.id,
 
-      // ==============================
       // Customer
-      // ==============================
-      customerName:
-        customer?.full_name || "-",
+      customerName: customer?.full_name || "-",
+      phone: customer?.phone || "-",
 
-      phone:
-        customer?.phone || "-",
-
-      // ==============================
       // Product
-      // ==============================
-      product:
-        product?.name || "Milk",
+      product: product?.name || "Milk",
+      qty: item?.quantity ?? 1,
+      size: item?.size || "-",
 
-      // ==============================
-      // Quantity
-      // ==============================
-      qty:
-        item?.quantity || "1",
-
-      // ==============================
-      // Size
-      // ==============================
-      size:
-        item?.size || "-",
-
-      // ==============================
       // Delivery
-      // ==============================
-      deliveryType:
-        sub.delivery_time,
+      deliveryType: sub.delivery_time || "-",
 
-      monthlyAmount:
-        sub.total_amount,
+      // Amounts
+      monthlyAmount: sub.total_amount ?? 0,
+      totalAmount: sub.total_amount ?? 0,
+      paymentAmount: sub.payment_amount ?? sub.total_amount ?? 0,
 
-      // ==============================
-      // Subscription Status
-      // ==============================
-      status:
-        sub.is_paused === true
-          ? "Paused"
-          : sub.status,
+      // Payment information
+      payment_method: sub.payment_method || "N/A",
+      payment_status: sub.payment_status || "Pending",
+      payment_date: sub.payment_date || null,
+      payment_reference:
+        sub.payment_reference ||
+        sub.razorpay_payment_id ||
+        "N/A",
 
-      // ==============================
-      // Pause Information
-      // ==============================
-      is_paused:
-        sub.is_paused === true,
+      // Subscription status
+      status: sub.is_paused === true ? "Paused" : sub.status,
+      is_paused: sub.is_paused === true,
 
-      pause_from:
-        sub.pause_from || null,
+      // Pause information
+      pause_from: sub.pause_from || null,
+      pause_to: sub.pause_to || null,
+      paused_days: sub.paused_days ?? 0,
 
-      pause_to:
-        sub.pause_to || null,
-
-      // ==============================
       // Dates
-      // ==============================
-      startDate:
-        sub.start_date,
+      startDate: sub.start_date,
+      expireDate: sub.end_date,
 
-      expireDate:
-        sub.end_date,
-
-      // ==============================
       // Address
-      // ==============================
-      address: address
-        ? `${address.house_no || ""}${
-            address.house_no && address.street
-              ? ", "
-              : ""
-          }${address.street || ""}`
-        : "-",
-
-      area:
-        address?.area || "-",
+      address: formattedAddress,
+      area: address?.area || "-",
     };
   });
 }
