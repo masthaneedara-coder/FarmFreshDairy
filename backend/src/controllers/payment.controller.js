@@ -10,37 +10,18 @@ import {
 
 export async function createOrder(req, res) {
   try {
-    const {
-      amount,
-      customer_id,
-      subscription_id,
-    } = req.body;
+    const { customer_id, checkout_payload } = req.body;
 
-    if (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+    if (!customer_id || !checkout_payload) {
       return res.status(400).json({
         success: false,
-        message: "Valid amount is required.",
-      });
-    }
-
-    if (!customer_id) {
-      return res.status(400).json({
-        success: false,
-        message: "Customer ID is required.",
-      });
-    }
-
-    if (!subscription_id) {
-      return res.status(400).json({
-        success: false,
-        message: "Subscription ID is required.",
+        message: "Customer ID and checkout details are required.",
       });
     }
 
     const { data, error } = await createOrderService({
-      amount: Number(amount),
       customer_id,
-      subscription_id,
+      checkout_payload,
     });
 
     if (error) {
@@ -50,16 +31,19 @@ export async function createOrder(req, res) {
       });
     }
 
-    if (!data?.id) {
+    if (!data?.order?.id || !data?.intent_id) {
       return res.status(500).json({
         success: false,
-        message: "Razorpay order was not created successfully.",
+        message: "Razorpay order or payment intent was not created.",
       });
     }
 
     return res.status(201).json({
       success: true,
-      order: data,
+      order: data.order,
+      intent_id: data.intent_id,
+      amount: data.amount,
+      currency: data.currency,
     });
   } catch (err) {
     console.error("Create Order Error:", err);
@@ -70,7 +54,6 @@ export async function createOrder(req, res) {
     });
   }
 }
-
 /* ==========================================================
    Verify Razorpay Payment
 ========================================================== */
