@@ -945,17 +945,26 @@ export async function rejectExtraMilk(id) {
 //   );
 // }
 
+
 export async function createPaymentOrder({
-  amount,
   customer_id,
-  subscription_id,
+  checkout_payload,
 }) {
   if (!customer_id) {
-    throw new Error("Customer ID is required.");
+    throw new Error("Customer ID is required. Please sign in again.");
   }
 
-  if (!subscription_id) {
-    throw new Error("Subscription ID is required.");
+  if (
+    !checkout_payload?.product_id ||
+    !checkout_payload?.address_id ||
+    !checkout_payload?.size ||
+    !checkout_payload?.start_date ||
+    !Number.isFinite(Number(checkout_payload?.quantity)) ||
+    Number(checkout_payload.quantity) <= 0
+  ) {
+    throw new Error(
+      "Checkout details are incomplete. Please return to your subscription details and check your selections."
+    );
   }
 
   const response = await fetch(
@@ -966,16 +975,15 @@ export async function createPaymentOrder({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount,
         customer_id,
-        subscription_id,
+        checkout_payload,
       }),
     }
   );
 
   const data = await response.json();
 
-  if (!response.ok) {
+  if (!response.ok || !data?.success) {
     throw new Error(
       data?.message || "Unable to create payment order."
     );
@@ -983,6 +991,7 @@ export async function createPaymentOrder({
 
   return data;
 }
+
 
 export async function verifyPayment(paymentData) {
   const response = await fetch(

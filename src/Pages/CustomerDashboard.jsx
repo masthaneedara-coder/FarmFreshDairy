@@ -3784,20 +3784,22 @@ const handleContinueRegularSchedule = async () => {
 
                 const isActive = !isPaused && status === "active";
                 const isStopped = status === "stopped";
-                const remainingDays = getRemainingDays(sub.expireDate);
+                const validity = getSubscriptionValidity(
+                    sub.startDate || sub.start_date,
+                    sub.expireDate || sub.end_date
+                  );
+                
+            
+
+            const remainingDays = validity.remainingDays;
+            const progressPercent = validity.progressPercent;
+
                 const isExpired = isSubscriptionExpired(sub.expireDate);
                 const canRenew =
                   isExpired ||
                   (remainingDays !== null && remainingDays <= 2);
                 const isExpanded = expandedSubscriptionId === sub.id;
 
-                const progressPercent =
-                  remainingDays === null
-                    ? 0
-                    : Math.min(
-                        100,
-                        Math.max(0, ((30 - remainingDays) / 30) * 100)
-                      );
 
                 return (
                   <article
@@ -4046,11 +4048,7 @@ const handleContinueRegularSchedule = async () => {
                                   )}
 
                                   <strong>
-                                    {remainingDays}{" "}
-                                    {remainingDays === 1
-                                      ? "Day"
-                                      : "Days"}{" "}
-                                    Remaining
+                                    {validity.text}
                                   </strong>
                                 </div>
 
@@ -4736,3 +4734,67 @@ function ModernQuick({ icon, title, desc, onClick }) {
     </button>
   );
 }
+
+function getSubscriptionValidity(startDate, endDate) {
+  if (!startDate || !endDate) {
+    return {
+      text: "Validity unavailable",
+      remainingDays: null,
+      progressPercent: 0,
+    };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return {
+      text: "Validity unavailable",
+      remainingDays: null,
+      progressPercent: 0,
+    };
+  }
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const remainingDays = Math.ceil((end - today) / DAY);
+  const totalDays = Math.max(1, Math.round((end - start) / DAY) + 1);
+  const elapsedDays = Math.max(
+    0,
+    Math.floor((today - start) / DAY)
+  );
+
+  if (today < start) {
+    const daysUntilStart = Math.ceil((start - today) / DAY);
+
+    return {
+      text: `Starts in ${daysUntilStart} ${
+        daysUntilStart === 1 ? "Day" : "Days"
+      }`,
+      remainingDays: daysUntilStart,
+      progressPercent: 0,
+    };
+  }
+
+  if (today > end) {
+    return {
+      text: "Subscription Expired",
+      remainingDays: 0,
+      progressPercent: 100,
+    };
+  }
+
+  return {
+    text: `${remainingDays} ${
+      remainingDays === 1 ? "Day" : "Days"
+    } Remaining`,
+    remainingDays,
+    progressPercent: Math.min(
+      100,
+      Math.max(0, (elapsedDays / totalDays) * 100)
+    ),
+  };
+}
+

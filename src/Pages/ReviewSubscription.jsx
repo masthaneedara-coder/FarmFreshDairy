@@ -6,6 +6,15 @@ import SubscriptionPaymentModal from "../Components/subscription/SubscriptionPay
 export default function ReviewSubscription() {
   const { state } = useLocation();
   const navigate = useNavigate();
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const handleActivateClick = () => {
+  console.log("Continue to payment clicked");
+  setShowPaymentModal(true);
+};
+
+const handleClosePaymentModal = () => {
+  setShowPaymentModal(false);
+};
 
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -58,7 +67,7 @@ const prepareOnlineSubscription = async () => {
   return id;
 };
 
-const [subscriptionId, setSubscriptionId] = useState(null);
+//const [subscriptionId, setSubscriptionId] = useState(null);
 
   const selectedAddress = state?.addresses?.find(
     (address) => String(address.id) === String(state?.form?.addressId)
@@ -76,9 +85,20 @@ const [subscriptionId, setSubscriptionId] = useState(null);
     : "Address not selected";
 
   const amount = Number(state?.monthlyAmount || 0);
+  const checkoutPayload = {
+  product_id: state?.product?.id,
+  address_id: state?.form?.addressId,
+  quantity: state?.form?.quantity,
+  size: state?.form?.size,
+  frequency: state?.form?.frequency,
+  delivery_time: state?.form?.deliveryTime,
+  start_date: state?.form?.startDate,
+  total_amount: amount,
+};
   const money = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
 
 const handlePayment = async (payment) => {
+  // Preserve the existing COD behavior.
   if (payment.paymentMethod === "COD") {
     setShowPaymentModal(false);
 
@@ -93,15 +113,23 @@ const handlePayment = async (payment) => {
     return;
   }
 
-  // Online payment was already verified by the payment modal.
-  // The subscription already exists, so do not create it again.
-  if (payment.paymentId && subscriptionId) {
+  // Online subscription is created by the backend after
+  // successful payment verification.
+  if (
+    payment.paymentMethod === "ONLINE" &&
+    payment.paymentStatus === "PAID" &&
+    payment.subscriptionId
+  ) {
     setShowPaymentModal(false);
     alert("Subscription payment successful!");
     navigate("/dashboard");
+    return;
   }
-};
 
+  throw new Error(
+    "Payment was not confirmed or the subscription was not returned. Please check the payment status."
+  );
+};
   async function checkExistingSubscription() {
     try {
       setCheckingExistingSubscription(true);
@@ -374,13 +402,12 @@ const handlePayment = async (payment) => {
         </div>
       )}
 
-   <SubscriptionPaymentModal
-  open={showPaymentModal}
+ <SubscriptionPaymentModal
+  open={paymentModalOpen}
   amount={amount}
   customer={customer}
-  subscriptionId={subscriptionId}
-  onPrepareSubscription={prepareOnlineSubscription}
-  onClose={() => setShowPaymentModal(false)}
+  checkoutPayload={checkoutPayload}
+  onClose={handleClosePaymentModal}
   onContinue={handlePayment}
 />
     </div>

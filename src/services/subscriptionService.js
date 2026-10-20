@@ -112,9 +112,9 @@ export async function getUpcomingDelivery(customerId) {
    Delete Subscription
 ========================================================== */
 
-export async function removeSubscription(id) {
-  return await deleteSubscription(id);
-}
+// export async function removeSubscription(id) {
+//   return await deleteSubscription(id);
+// }
 
 /* ==========================================================
    Delivery Summary
@@ -129,4 +129,15 @@ export async function getSubscriptionDeliverySummary(
     );
 
   return response.summary;
+}
+/* ==========================================================
+   Delete Subscription
+========================================================== */
+
+export async function removeSubscription(subscriptionId) {
+  if (!subscriptionId) {
+    throw new Error("Subscription ID is required.");
+  }
+
+  return await deleteSubscription(subscriptionId);
 }
