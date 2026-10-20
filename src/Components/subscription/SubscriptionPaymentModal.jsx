@@ -148,12 +148,23 @@ export default function SubscriptionPaymentModal({
         payment: verify.payment ?? null,
       });
 
-    } catch (error) {
-      console.error("Subscription payment error:", error);
-      alert(error?.message || "Payment failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+   } catch (error) {
+  console.error("Subscription payment error:", error);
+
+  const message = error?.message || "";
+
+  if (
+    message.toLowerCase().includes("cancelled by customer")
+  ) {
+    // Cancellation is not a successful payment.
+    // Do not call onContinue or create a subscription.
+    return;
+  }
+
+  alert(message || "Payment failed. Please try again.");
+} finally {
+  setLoading(false);
+}
   };
 
   return (

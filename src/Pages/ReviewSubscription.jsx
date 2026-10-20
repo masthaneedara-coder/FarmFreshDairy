@@ -28,44 +28,44 @@ const handleClosePaymentModal = () => {
     return null;
   }
 });
-const prepareOnlineSubscription = async () => {
-  if (!customer?.id) {
-    throw new Error("Please sign in again.");
-  }
+// const prepareOnlineSubscription = async () => {
+//   if (!customer?.id) {
+//     throw new Error("Please sign in again.");
+//   }
 
-  if (subscriptionId) return subscriptionId;
+//   if (subscriptionId) return subscriptionId;
 
-  const payload = {
-    customer_id: customer.id,
-    product_id: state.product.id,
-    address_id: state.form.addressId,
-    quantity: state.form.quantity,
-    size: state.form.size,
-    frequency: state.form.frequency,
-    delivery_time: state.form.deliveryTime,
-    start_date: state.form.startDate,
-    total_amount: amount,
-    payment_method: "ONLINE",
-    payment_status: "Pending",
-  };
+//   const payload = {
+//     customer_id: customer.id,
+//     product_id: state.product.id,
+//     address_id: state.form.addressId,
+//     quantity: state.form.quantity,
+//     size: state.form.size,
+//     frequency: state.form.frequency,
+//     delivery_time: state.form.deliveryTime,
+//     start_date: state.form.startDate,
+//     total_amount: amount,
+//     payment_method: "ONLINE",
+//     payment_status: "Pending",
+//   };
 
-  const response = await createSubscription(payload);
+//   const response = await createSubscription(payload);
 
-  const id =
-    response?.subscription?.id ??
-    response?.data?.subscription?.id ??
-    response?.data?.id ??
-    response?.id;
+//   const id =
+//     response?.subscription?.id ??
+//     response?.data?.subscription?.id ??
+//     response?.data?.id ??
+//     response?.id;
 
-  if (!id) {
-    throw new Error(
-      "Subscription was created, but its ID was not returned. Check the createSubscription API response."
-    );
-  }
+//   if (!id) {
+//     throw new Error(
+//       "Subscription was created, but its ID was not returned. Check the createSubscription API response."
+//     );
+//   }
 
-  setSubscriptionId(id);
-  return id;
-};
+//   setSubscriptionId(id);
+//   return id;
+// };
 
 //const [subscriptionId, setSubscriptionId] = useState(null);
 
