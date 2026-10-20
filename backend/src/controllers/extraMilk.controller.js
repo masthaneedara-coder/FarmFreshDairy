@@ -10,35 +10,75 @@ import {
 // ======================================
 // Create
 // ======================================
+
 export async function createExtraMilkRequest(req, res) {
   try {
-    console.log("=================================");
-    console.log("CREATE EXTRA MILK REQUEST");
-    console.log("Request Body:", req.body);
-    console.log(
-      "Estimated Amount:",
-      req.body.estimated_amount
+    console.log("[ExtraMilk] Creating customer request");
+
+    // 1. Create the request as Pending
+    const createdRequest = await createExtraMilkRequestService(
+      req.body
     );
-    console.log("=================================");
 
-    const request =
-      await createExtraMilkRequestService(req.body);
+    // 2. Attempt automatic approval and atomic stock reservation
+    let request;
 
-    res.status(201).json({
+    try {
+      request = await approveExtraMilkService(createdRequest.id);
+    } catch (approvalError) {
+      if (
+        approvalError.code === "INSUFFICIENT_STOCK" ||
+        approvalError.statusCode === 409
+      ) {
+        return res.status(409).json({
+          success: false,
+          code: "INSUFFICIENT_STOCK",
+          message:
+            "Your extra milk request is pending because sufficient stock is currently unavailable.",
+          request: createdRequest,
+        });
+      }
+
+      // The request exists, but approval failed for another reason.
+      console.error(
+        "[ExtraMilk] Automatic approval failed:",
+        approvalError
+      );
+
+      return res.status(500).json({
+        success: false,
+        code: "AUTO_APPROVAL_FAILED",
+        message:
+          "Your request was created, but automatic approval could not be completed. Please check your request status before retrying.",
+        request: createdRequest,
+      });
+    }
+
+    // 3. Return the actual request status
+    if (request.status !== "Approved") {
+      return res.status(202).json({
+        success: true,
+        message: "Your extra milk request is awaiting approval.",
+        request,
+      });
+    }
+
+    return res.status(201).json({
       success: true,
-      message: "Extra milk request created successfully.",
+      message:
+        "Your extra milk request has been approved and stock reserved.",
       request,
     });
-
   } catch (err) {
-    console.error("Create Extra Milk Error:", err);
+    console.error("[ExtraMilk] Request creation failed:", err);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: err.message,
+      message: err.message || "Failed to create extra milk request.",
     });
   }
 }
+
 
 // ======================================
 // Admin List
