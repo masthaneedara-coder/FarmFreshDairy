@@ -9,6 +9,7 @@ import {
 import {
   createSubscriptionRenewalLink,
 } from "../config/api";
+import { removeSubscription } from "../services/subscriptionService";
 
 
 export default function AdminSubscriptions() {
@@ -26,6 +27,31 @@ export default function AdminSubscriptions() {
   // Performance: only render/load summaries for the visible page.
   const PAGE_SIZE = 12;
   const [currentPage, setCurrentPage] = useState(1);
+  const [deletingId, setDeletingId] = useState(null);
+
+const handleDeleteSubscription = async (subscriptionId) => {
+  const confirmed = window.confirm(
+    "Delete this subscription permanently? This action cannot be undone."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setDeletingId(subscriptionId);
+
+    await removeSubscription(subscriptionId);
+
+    // Refresh the list using your existing loading function.
+    await loadSubscriptions();
+
+    window.alert("Subscription deleted successfully.");
+  } catch (error) {
+    console.error("Delete subscription error:", error);
+    window.alert(error.message || "Unable to delete subscription.");
+  } finally {
+    setDeletingId(null);
+  }
+};
 
   async function loadSubscriptions() {
   try {
@@ -312,20 +338,102 @@ const stats = useMemo(() => {
   }
 };
 
-  const getRemainingDays = (expireDate) => {
-    if (!expireDate) return null;
+ 
+const getSubscriptionValidity = (startDate, endDate) => {
+  if (!startDate || !endDate) {
+    return {
+      text: "Validity Not Available",
+      remainingDays: null,
+      progressPercent: 0,
+      expired: false,
+      upcoming: false,
+    };
+  }
 
-    const today = new Date();
-    const expiry = new Date(expireDate);
-
-    today.setHours(0, 0, 0, 0);
-    expiry.setHours(0, 0, 0, 0);
-
-    return Math.max(
-      0,
-      Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    );
+  const parseDate = (value) => {
+    const dateString = String(value).slice(0, 10);
+    const date = new Date(`${dateString}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
   };
+
+  const start = parseDate(startDate);
+  const end = parseDate(endDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (!start || !end || end < start) {
+    return {
+      text: "Validity Not Available",
+      remainingDays: null,
+      progressPercent: 0,
+      expired: false,
+      upcoming: false,
+    };
+  }
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const totalDays = Math.floor((end - start) / DAY) + 1;
+
+  if (today < start) {
+    const daysUntilStart = Math.ceil((start - today) / DAY);
+
+    return {
+      text: `Starts in ${daysUntilStart} ${
+        daysUntilStart === 1 ? "Day" : "Days"
+      }`,
+      remainingDays: null,
+      progressPercent: 0,
+      expired: false,
+      upcoming: true,
+    };
+  }
+
+  if (today > end) {
+    return {
+      text: "Subscription Expired",
+      remainingDays: 0,
+      progressPercent: 100,
+      expired: true,
+      upcoming: false,
+    };
+  }
+
+  const remainingDays = Math.ceil((end - today) / DAY);
+  const elapsedDays = Math.floor((today - start) / DAY);
+
+  return {
+    text: `${remainingDays} ${
+      remainingDays === 1 ? "Day" : "Days"
+    } Remaining`,
+    remainingDays,
+    progressPercent: Math.min(
+      100,
+      Math.max(0, (elapsedDays / totalDays) * 100)
+    ),
+    expired: false,
+    upcoming: false,
+  };
+};
+const getRemainingDays = (expireDate) => {
+  if (!expireDate) return null;
+
+  const dateValue = String(expireDate).slice(0, 10);
+  const expiry = new Date(`${dateValue}T00:00:00`);
+
+  if (Number.isNaN(expiry.getTime())) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return Math.max(
+    0,
+    Math.ceil(
+      (expiry.getTime() - today.getTime()) /
+        (1000 * 60 * 60 * 24)
+    )
+  );
+};
+
 
   // Active, non-paused subscriptions expiring today through the next 5 days.
   const expiringSoonSubscriptions = subscriptions.filter((sub) => {
@@ -769,9 +877,22 @@ const stats = useMemo(() => {
         ) : (
           <div className="space-y-3 sm:space-y-4">
             {visibleSubscriptions.map((sub, index) => {
-              const expireDate = sub.expireDate || sub.endDate;
-              const remainingDays = getRemainingDays(expireDate);
-              const expired = isExpired(expireDate);
+              
+            const startDate =
+              sub.startDate || sub.start_date || sub.date;
+
+            const expireDate =
+              sub.expireDate || sub.endDate || sub.end_date;
+
+            const validity = getSubscriptionValidity(
+              startDate,
+              expireDate
+            );
+
+            const remainingDays = validity.remainingDays;
+            const expired = validity.expired;
+            const upcoming = validity.upcoming;
+
 
               const displayStatus = expired
                 ? "Expired"
@@ -1045,13 +1166,7 @@ const stats = useMemo(() => {
                                   : "text-green-700"
                               }`}
                             >
-                              {expired
-                                ? "Expired"
-                                : remainingDays === null
-                                ? "Validity Not Available"
-                                : `${remainingDays} ${
-                                    remainingDays === 1 ? "Day" : "Days"
-                                  } Remaining`}
+                             {validity.text}
                             </p>
                           </div>
                         </div>
@@ -1256,6 +1371,20 @@ const stats = useMemo(() => {
                         >
                           ⛔ Stop
                         </button>
+        
+
+{["Stopped", "Expired", "Cancelled"].includes(displayStatus) && (
+  <button
+    type="button"
+    onClick={() => handleDeleteSubscription(subscriptionId)}
+    disabled={deletingId === subscriptionId}
+    className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+  >
+    {deletingId === subscriptionId
+      ? "Deleting..."
+      : "🗑️ Delete Subscription"}
+  </button>
+)}
                       </div>
                     </div>
                   </div>
@@ -1395,4 +1524,74 @@ function InfoBox({ label, value }) {
 
     </div>
   );
+}
+
+function getSubscriptionValidity(startDate, endDate) {
+  if (!startDate || !endDate) {
+    return {
+      text: "Validity unavailable",
+      remainingDays: null,
+      progressPercent: 0,
+    };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime())
+  ) {
+    return {
+      text: "Validity unavailable",
+      remainingDays: null,
+      progressPercent: 0,
+    };
+  }
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const totalDays = Math.max(
+    1,
+    Math.floor((end - start) / DAY) + 1
+  );
+
+  if (today < start) {
+    const daysUntilStart = Math.ceil((start - today) / DAY);
+
+    return {
+      text: `Starts in ${daysUntilStart} ${
+        daysUntilStart === 1 ? "Day" : "Days"
+      }`,
+      remainingDays: daysUntilStart,
+      progressPercent: 0,
+    };
+  }
+
+  if (today > end) {
+    return {
+      text: "Subscription Expired",
+      remainingDays: 0,
+      progressPercent: 100,
+    };
+  }
+
+  const remainingDays = Math.ceil((end - today) / DAY);
+  const elapsedDays = Math.max(
+    0,
+    Math.floor((today - start) / DAY)
+  );
+
+  return {
+    text: `${remainingDays} ${
+      remainingDays === 1 ? "Day" : "Days"
+    } Remaining`,
+    remainingDays,
+    progressPercent: Math.min(
+      100,
+      Math.max(0, (elapsedDays / totalDays) * 100)
+    ),
+  };
 }
