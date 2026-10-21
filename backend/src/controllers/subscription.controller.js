@@ -1,3 +1,5 @@
+import { supabaseAdmin } from "../config/supabase.js";
+import razorpay from "../config/razorpay.js";
 import {
   createSubscriptionService,
   getCustomerSubscriptionService,
@@ -701,223 +703,274 @@ export async function getRenewalLinkDetails(
     });
   }
 }
+export async function createRenewalPaymentOrder(req, res) {
+  try {
+    const { token } = req.params;
+
+    // Validate the renewal link first.
+    const result =
+      await getSubscriptionRenewalLinkService(token);
+
+    const subscription = result.subscription;
+    const linkId = result.linkId;
+
+    if (!linkId) {
+      return res.status(400).json({
+        success: false,
+        message: "Renewal link ID is missing.",
+      });
+    }
+
+    const status = String(subscription.status || "")
+      .trim()
+      .toLowerCase();
+
+    if (["stopped", "cancelled", "canceled"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "This subscription cannot be renewed.",
+      });
+    }
+
+    const amount = Number(subscription.total_amount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid subscription amount.",
+      });
+    }
+
+    const customerId = subscription.customer_id;
+
+    if (!customerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Subscription customer was not found.",
+      });
+    }
+
+    const renewalKey = String(linkId);
+
+    // Prevent a second order if this link already has a
+    // payment intent. A retry should reuse the existing order.
+    const { data: existingIntent, error: lookupError } =
+      await supabaseAdmin
+        .from("payment_intents")
+        .select("*")
+        .eq("renewal_key", renewalKey)
+        .maybeSingle();
+
+    if (lookupError) throw lookupError;
+
+    if (existingIntent) {
+      if (
+        existingIntent.status === "PAID" ||
+        existingIntent.razorpay_payment_id
+      ) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Payment has already been recorded. Please check renewal status.",
+        });
+      }
+
+      if (
+        existingIntent.status === "CREATED" &&
+        existingIntent.razorpay_order_id
+      ) {
+        return res.json({
+          success: true,
+          order: {
+            id: existingIntent.razorpay_order_id,
+            amount: Math.round(amount * 100),
+            currency: existingIntent.currency || "INR",
+          },
+          intent_id: existingIntent.id,
+          amount,
+          currency: existingIntent.currency || "INR",
+        });
+      }
+
+      return res.status(409).json({
+        success: false,
+        message:
+          "A previous payment attempt needs checking before another order can be created.",
+      });
+    }
+
+    const keyId = process.env.RAZORPAY_KEY_ID;
+
+    if (!keyId) {
+      throw new Error("Razorpay is not configured.");
+    }
+
+    // Create a payment intent first.
+    const { data: intent, error: insertError } =
+      await supabaseAdmin
+        .from("payment_intents")
+        .insert({
+          customer_id: customerId,
+          subscription_id: subscription.id,
+          amount,
+          currency: "INR",
+          status: "CREATED",
+          renewal_key: renewalKey,
+          checkout_payload: {
+            flow: "SUBSCRIPTION_RENEWAL",
+            subscription_id: subscription.id,
+            renewal_link_id: linkId,
+            renewal_key: renewalKey,
+          },
+        })
+        .select()
+        .single();
+
+    if (insertError) throw insertError;
+
+    // Create the Razorpay order using the server-calculated amount.
+    const order = await razorpay.orders.create({
+      amount: Math.round(amount * 100),
+      currency: "INR",
+      receipt: `renew_${String(linkId).replace(/-/g, "").slice(0, 20)}`,
+      notes: {
+        customer_id: String(customerId),
+        payment_intent_id: String(intent.id),
+        renewal_link_id: String(linkId),
+        renewal_key: renewalKey,
+      },
+    });
+
+    const { error: updateError } = await supabaseAdmin
+      .from("payment_intents")
+      .update({
+        razorpay_order_id: order.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", intent.id);
+
+    if (updateError) {
+      console.error("Saving Razorpay order failed:", updateError);
+      throw new Error(
+        "The payment order needs reconciliation. Please do not retry payment yet."
+      );
+    }
+
+    return res.status(201).json({
+      success: true,
+      order: {
+        id: order.id,
+        amount: order.amount,
+        currency: order.currency,
+      },
+      intent_id: intent.id,
+      amount,
+      currency: "INR",
+      key: keyId,
+    });
+  } catch (err) {
+    console.error("Create Renewal Payment Order Error:", err);
+
+    return res.status(400).json({
+      success: false,
+      message:
+        err.message || "Unable to create renewal payment order.",
+    });
+  }
+}
 
 
 /* ==========================================================
    CUSTOMER RENEW USING SECURE LINK
 ========================================================== */
 
-export async function renewUsingLink(
-  req,
-  res
-) {
+export async function renewUsingLink(req, res) {
   try {
     const { token } = req.params;
+    const paymentMethod = String(
+      req.body?.paymentMethod || ""
+    ).trim().toUpperCase();
 
-    // --------------------------------------------------------
-    // 1. Verify token
-    // --------------------------------------------------------
+    // This endpoint handles COD only.
+    // Razorpay renewals must use the payment-order endpoint.
+    if (paymentMethod !== "COD") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "For online renewal, use the Razorpay payment flow.",
+      });
+    }
 
+    // Validate the secure renewal link.
     const result =
-      await getSubscriptionRenewalLinkService(
-        token
+      await getSubscriptionRenewalLinkService(token);
+
+    const subscription = result.subscription;
+    const linkId = result.linkId;
+
+    if (!linkId) {
+      throw new Error(
+        "Renewal link ID is missing. Update the renewal-link service first."
       );
+    }
 
-    const subscription =
-      result.subscription;
-
-    // --------------------------------------------------------
-    // 2. Prevent stopped subscriptions
-    // --------------------------------------------------------
-
-    const status =
-      String(subscription.status || "")
-        .trim()
-        .toLowerCase();
+    const status = String(
+      subscription.status || ""
+    ).trim().toLowerCase();
 
     if (
-      status === "stopped" ||
-      status === "cancelled" ||
-      status === "canceled"
+      ["stopped", "cancelled", "canceled"].includes(status)
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "This subscription cannot be renewed.",
+        message: "This subscription cannot be renewed.",
       });
     }
 
-    // --------------------------------------------------------
-    // 3. Renewal amount
-    // --------------------------------------------------------
+    const totalAmount = Number(subscription.total_amount);
 
-    const totalAmount =
-      Number(subscription.total_amount || 0);
-
-    if (
-      !Number.isFinite(totalAmount) ||
-      totalAmount <= 0
-    ) {
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
       return res.status(400).json({
         success: false,
-        message:
-          "Invalid subscription amount.",
+        message: "Invalid subscription amount.",
       });
     }
 
-    // --------------------------------------------------------
-    // 4. Calculate payment information
-    // --------------------------------------------------------
-
-    const paymentMethod =
-      subscription.payment_method || "COD";
-
-    const paymentStatus =
-      "Pending";
-
-    // --------------------------------------------------------
-    // 5. Calculate renewal end date
-    //
-    // Existing renewSubscriptionService()
-    // already determines the renewal START.
-    //
-    // We calculate only the 30-day END DATE here.
-    // --------------------------------------------------------
-
-    const todayIST =
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Kolkata",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date());
-
-    const today =
-      new Date(`${todayIST}T00:00:00`);
-
-    const currentEnd =
-      subscription.end_date
-        ? new Date(
-            `${subscription.end_date}T00:00:00`
-          )
-        : null;
-
-    let renewalStart;
-
-    if (
-      currentEnd &&
-      !Number.isNaN(currentEnd.getTime()) &&
-      currentEnd >= today
-    ) {
-      renewalStart =
-        new Date(currentEnd);
-
-      renewalStart.setDate(
-        renewalStart.getDate() + 1
-      );
-    } else {
-      renewalStart =
-        new Date(today);
-    }
-
-    const renewalEnd =
-      new Date(renewalStart);
-
-    renewalEnd.setDate(
-      renewalEnd.getDate() + 30
-    );
-
-    const endDate =
-      renewalEnd
-        .toISOString()
-        .split("T")[0];
-
-    // --------------------------------------------------------
-    // 6. USE EXISTING RENEW SERVICE
-    // --------------------------------------------------------
-
-    const {
-      data,
-      billing,
-      error,
-    } = await renewSubscriptionService(
-      subscription.id,
-      endDate,
-      totalAmount,
+    // Finalize renewal atomically in Supabase.
+    // The database RPC must validate the link and prevent duplicate renewals.
+    const { data, error } = await supabaseAdmin.rpc(
+      "finalize_subscription_renewal",
       {
-        payment_method:
-          paymentMethod,
-
-        payment_status:
-          paymentStatus,
-
-        payment_amount:
-          totalAmount,
-
-        subtotal:
-          totalAmount,
-
-        discount: 0,
-
-        gst: 0,
-
-        gst_percent: 2,
+        p_link_id: linkId,
+        p_renewal_key: String(linkId),
+        p_payment_method: "COD",
+        p_payment_reference: null,
+        p_payment_intent_id: null,
       }
     );
 
     if (error) {
+      console.error("COD renewal finalization failed:", error);
+
       return res.status(400).json({
         success: false,
-        message: error.message,
+        message: error.message ||
+          "Unable to finalize subscription renewal.",
       });
     }
 
-    // --------------------------------------------------------
-    // 7. Mark link as used
-    // --------------------------------------------------------
-
-   // --------------------------------------------------------
-// 7. EXPIRE RENEWAL LINK AFTER SUCCESSFUL RENEWAL
-// --------------------------------------------------------
-
-const usedLink =
-  await markSubscriptionRenewalLinkUsedService(
-    token
-  );
-
-// Renewal succeeded, but token could not be expired.
-if (!usedLink) {
-  console.error(
-    "WARNING: Subscription renewed successfully, but renewal link could not be expired."
-  );
-}
-
-// --------------------------------------------------------
-// 8. SUCCESS
-// --------------------------------------------------------
-
-return res.json({
-  success: true,
-
-  message:
-    "Subscription renewed successfully. This renewal link can no longer be used.",
-
-  subscription: data,
-
-  billing,
-
-  linkExpired: true,
-});
-
+    return res.json({
+      success: true,
+      message: "Subscription renewed successfully with COD.",
+      renewal: data,
+    });
   } catch (err) {
-    console.error(
-      "Renew Using Link Error:",
-      err
-    );
+    console.error("Renew Using Link Error:", err);
 
     return res.status(400).json({
       success: false,
-      message: err.message,
+      message: err.message ||
+        "Unable to renew subscription.",
     });
   }
 }

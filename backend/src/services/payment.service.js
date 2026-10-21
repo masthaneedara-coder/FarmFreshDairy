@@ -281,7 +281,9 @@ export async function verifyPaymentService({
     ) {
       return {
         data: null,
-        error: { message: "Payment details and customer ID are required." },
+        error: {
+          message: "Payment details and customer ID are required.",
+        },
       };
     }
 
@@ -290,14 +292,16 @@ export async function verifyPaymentService({
       throw new Error("Razorpay secret key is not configured.");
     }
 
-    // 1. Find the payment intent. A subscription does not exist yet.
+    // 1. Find the payment intent belonging to this customer and order.
     let query = supabaseAdmin
       .from("payment_intents")
       .select("*")
       .eq("razorpay_order_id", razorpay_order_id)
       .eq("customer_id", customer_id);
 
-    if (intent_id) query = query.eq("id", intent_id);
+    if (intent_id) {
+      query = query.eq("id", intent_id);
+    }
 
     const { data: intent, error: intentError } =
       await query.maybeSingle();
@@ -305,14 +309,19 @@ export async function verifyPaymentService({
     if (intentError) throw intentError;
 
     if (!intent) {
-      return {
-        data: null,
-        error: { message: "Payment intent not found." },
-      };
+      throw new Error("Payment intent not found.");
     }
 
-    // If already finalized, return the existing subscription.
-    if (intent.status === "COMPLETED" && intent.subscription_id) {
+    const isRenewal =
+      intent.checkout_payload?.flow === "SUBSCRIPTION_RENEWAL";
+
+    // Idempotency for completed normal subscription checkout.
+    // PAID is the supported database status; COMPLETED is not.
+    if (
+      !isRenewal &&
+      intent.status === "PAID" &&
+      intent.subscription_id
+    ) {
       const { data: subscription, error } = await supabaseAdmin
         .from("subscriptions")
         .select("*")
@@ -322,7 +331,9 @@ export async function verifyPaymentService({
 
       if (error) throw error;
       if (!subscription) {
-        throw new Error("Completed payment needs subscription reconciliation.");
+        throw new Error(
+          "Payment was marked paid, but the subscription needs reconciliation."
+        );
       }
 
       return {
@@ -330,13 +341,16 @@ export async function verifyPaymentService({
           verified: true,
           alreadyProcessed: true,
           subscription,
-          payment: { payment_id: razorpay_payment_id, status: "Paid" },
+          payment: {
+            payment_id: intent.razorpay_payment_id || razorpay_payment_id,
+            status: "Paid",
+          },
         },
         error: null,
       };
     }
 
-    // 2. Verify the Razorpay order matches the intent.
+    // 2. Validate the Razorpay order against the stored intent.
     const order = await razorpay.orders.fetch(razorpay_order_id);
 
     if (
@@ -353,7 +367,11 @@ export async function verifyPaymentService({
       throw new Error("Razorpay order amount or currency mismatch.");
     }
 
-    // 3. Verify the Razorpay signature.
+    // 3. Verify Razorpay's signature using a timing-safe comparison.
+    if (!/^[a-fA-F0-9]{64}$/.test(razorpay_signature)) {
+      throw new Error("Invalid payment signature format.");
+    }
+
     const expectedSignature = crypto
       .createHmac("sha256", secret)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -368,7 +386,7 @@ export async function verifyPaymentService({
       throw new Error("Invalid payment signature.");
     }
 
-    // 4. Confirm Razorpay reports this payment as captured.
+    // 4. Confirm the payment is captured and matches the order.
     const rpPayment = await razorpay.payments.fetch(razorpay_payment_id);
 
     if (
@@ -377,16 +395,21 @@ export async function verifyPaymentService({
       rpPayment.currency !== order.currency ||
       rpPayment.status !== "captured"
     ) {
-      throw new Error("Payment is not captured or payment details do not match.");
+      throw new Error(
+        "Payment is not captured or payment details do not match."
+      );
     }
 
     const amount = Number(rpPayment.amount) / 100;
 
-    if (Math.round(amount * 100) !== Math.round(Number(intent.amount) * 100)) {
+    if (
+      Math.round(amount * 100) !==
+      Math.round(Number(intent.amount) * 100)
+    ) {
       throw new Error("Captured payment amount does not match the intent.");
     }
 
-    // 5. Reuse an existing payment record on retries.
+    // 5. Find or create the payment record idempotently.
     let { data: paymentRecord, error: lookupError } = await supabaseAdmin
       .from("payments")
       .select("*")
@@ -398,32 +421,11 @@ export async function verifyPaymentService({
     if (paymentRecord) {
       if (
         String(paymentRecord.customer_id) !== String(customer_id) ||
-        Math.round(Number(paymentRecord.amount) * 100) !== Math.round(amount * 100) ||
+        Math.round(Number(paymentRecord.amount) * 100) !==
+          Math.round(amount * 100) ||
         paymentRecord.payment_status !== "Paid"
       ) {
         throw new Error("Existing payment record does not match this payment.");
-      }
-
-      if (paymentRecord.subscription_id) {
-        const { data: subscription, error } = await supabaseAdmin
-          .from("subscriptions")
-          .select("*")
-          .eq("id", paymentRecord.subscription_id)
-          .eq("customer_id", customer_id)
-          .maybeSingle();
-
-        if (error) throw error;
-        if (!subscription) throw new Error("Payment needs reconciliation.");
-
-        return {
-          data: {
-            verified: true,
-            alreadyProcessed: true,
-            payment: paymentRecord,
-            subscription,
-          },
-          error: null,
-        };
       }
     } else {
       const { data, error } = await createPaymentService({
@@ -438,7 +440,7 @@ export async function verifyPaymentService({
       });
 
       if (error) {
-        // A concurrent request may have inserted this transaction.
+        // Handle a concurrent request that inserted the same transaction.
         const { data: retryRecord, error: retryError } = await supabaseAdmin
           .from("payments")
           .select("*")
@@ -449,13 +451,68 @@ export async function verifyPaymentService({
         if (!retryRecord) throw error;
 
         paymentRecord = retryRecord;
+
+        if (
+          String(paymentRecord.customer_id) !== String(customer_id) ||
+          Math.round(Number(paymentRecord.amount) * 100) !==
+            Math.round(amount * 100) ||
+          paymentRecord.payment_status !== "Paid"
+        ) {
+          throw new Error("Existing payment record does not match this payment.");
+        }
       } else {
         paymentRecord = data;
       }
     }
 
-    // 6. Create the subscription only after successful payment verification.
-    // Pass the stored server-side payload, not the browser's amount.
+    // 6. Subscription renewal: use the existing atomic database RPC.
+    if (isRenewal) {
+      const renewalKey = intent.renewal_key;
+      const linkId = intent.checkout_payload?.renewal_link_id;
+
+      if (!renewalKey || !linkId) {
+        throw new Error(
+          "Renewal details are missing. Payment needs reconciliation; do not pay again."
+        );
+      }
+
+      if (
+        String(intent.checkout_payload?.customer_id || customer_id) !==
+        String(customer_id)
+      ) {
+        throw new Error("Renewal customer does not match the payment.");
+      }
+
+      const { data: renewal, error: renewalError } =
+        await supabaseAdmin.rpc("finalize_subscription_renewal", {
+          p_link_id: linkId,
+          p_renewal_key: renewalKey,
+          p_payment_method: "ONLINE",
+          p_payment_reference: razorpay_payment_id,
+          p_payment_intent_id: intent.id,
+        });
+
+      if (renewalError) {
+        console.error("Renewal finalization failed:", renewalError);
+        throw new Error(
+          "Payment was verified, but renewal finalization needs checking. Do not pay again."
+        );
+      }
+
+      return {
+        data: {
+          verified: true,
+          alreadyProcessed: false,
+          payment: paymentRecord,
+          renewal,
+          message: "Payment verified and subscription renewal finalized.",
+        },
+        error: null,
+      };
+    }
+
+    // 7. Normal new-subscription checkout.
+    // Use the server-stored checkout payload, not a browser-supplied amount.
     const payload = {
       ...intent.checkout_payload,
       customer_id,
@@ -481,11 +538,11 @@ export async function verifyPaymentService({
       };
     }
 
-    // 7. Mark the intent complete.
+    // Store the supported PAID status and resulting subscription ID.
     const { error: updateError } = await supabaseAdmin
       .from("payment_intents")
       .update({
-        status: "COMPLETED",
+        status: "PAID",
         razorpay_payment_id,
         subscription_id: result.data.id,
         updated_at: new Date().toISOString(),
@@ -493,18 +550,36 @@ export async function verifyPaymentService({
       .eq("id", intent.id);
 
     if (updateError) {
-      console.error("Payment succeeded but intent update failed:", updateError);
+      console.error(
+        "Subscription created, but payment intent update failed:",
+        updateError
+      );
+
+      // Do not tell the customer payment failed: the subscription exists.
+    }
+
+    // Associate the payment with the new subscription.
+    const { error: paymentUpdateError } = await supabaseAdmin
+      .from("payments")
+      .update({
+        subscription_id: result.data.id,
+      })
+      .eq("transaction_id", razorpay_payment_id);
+
+    if (paymentUpdateError) {
+      console.error(
+        "Subscription created, but payment association failed:",
+        paymentUpdateError
+      );
     }
 
     return {
       data: {
         verified: true,
         alreadyProcessed: false,
-        payment: result.payment || {
-          id: paymentRecord.id,
-          payment_id: razorpay_payment_id,
-          amount,
-          status: "Paid",
+        payment: {
+          ...paymentRecord,
+          subscription_id: result.data.id,
         },
         subscription: result.data,
         billing: result.billing || null,
@@ -517,7 +592,9 @@ export async function verifyPaymentService({
 
     return {
       data: null,
-      error: { message: error.message || "Payment verification failed." },
+      error: {
+        message: error.message || "Payment verification failed.",
+      },
     };
   }
 }

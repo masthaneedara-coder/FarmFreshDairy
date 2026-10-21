@@ -27,7 +27,7 @@ export async function createOrder(req, res) {
     if (error) {
       return res.status(400).json({
         success: false,
-        message: error.message,
+        message: error.message || "Unable to create payment order.",
       });
     }
 
@@ -45,15 +45,18 @@ export async function createOrder(req, res) {
       amount: data.amount,
       currency: data.currency,
     });
-  } catch (err) {
-    console.error("Create Order Error:", err);
+  } catch (error) {
+    console.error("Create Order Error:", error);
 
     return res.status(500).json({
       success: false,
-      message: err.message || "Unable to create payment order.",
+      message: "Unable to create payment order.",
     });
   }
 }
+/* ==========================================================
+   Verify Razorpay Payment
+========================================================== */
 /* ==========================================================
    Verify Razorpay Payment
 ========================================================== */
@@ -65,7 +68,8 @@ export async function verifyPayment(req, res) {
       razorpay_payment_id,
       razorpay_signature,
       customer_id,
-      subscription_id,
+      intent_id,
+      payment_intent_id,
     } = req.body;
 
     if (
@@ -79,38 +83,42 @@ export async function verifyPayment(req, res) {
       });
     }
 
-    if (!customer_id || !subscription_id) {
+    if (!customer_id) {
       return res.status(400).json({
         success: false,
-        message: "Customer ID and Subscription ID are required.",
+        message: "Customer ID is required.",
       });
     }
+
+    // Support either frontend field name.
+    const resolvedIntentId = intent_id || payment_intent_id;
 
     const { data, error } = await verifyPaymentService({
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
       customer_id,
-      subscription_id,
+      intent_id: resolvedIntentId,
     });
 
     if (error) {
       return res.status(400).json({
         success: false,
-        message: error.message,
+        message: error.message || "Payment verification failed.",
       });
     }
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       payment: data,
     });
-  } catch (err) {
-    console.error("Verify Payment Error:", err);
+  } catch (error) {
+    console.error("Verify Payment Controller Error:", error);
 
     return res.status(500).json({
       success: false,
-      message: err.message || "Payment verification failed.",
+      message: "An unexpected error occurred while verifying payment.",
     });
   }
 }
+  

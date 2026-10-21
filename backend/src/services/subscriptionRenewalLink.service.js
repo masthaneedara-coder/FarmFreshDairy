@@ -254,9 +254,10 @@ export async function getSubscriptionRenewalLinkService(
   }
 
   return {
-    subscription,
-    expiresAt: link.expires_at,
-  };
+  linkId: link.id,
+  subscription,
+  expiresAt: link.expires_at,
+};
 }
 
 

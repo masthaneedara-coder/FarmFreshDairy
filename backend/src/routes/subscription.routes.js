@@ -18,6 +18,7 @@ import {
   createRenewalLink,
   getRenewalLinkDetails,
   renewUsingLink,
+  createRenewalPaymentOrder,
 } from "../controllers/subscription.controller.js";
 
 const router = express.Router();
@@ -70,20 +71,19 @@ router.get(
 router.post("/:id/pause", pauseSubscription);
 
 router.post("/:id/resume", resumeSubscription);
+router.post("/:id/renewal-link", createRenewalLink);
+
+router.get("/renew-link/:token", getRenewalLinkDetails);
 router.post(
-  "/:id/renewal-link",
-  createRenewalLink
+  "/renew-link/:token/payment-order",
+  createRenewalPaymentOrder
 );
 
-router.get(
-  "/renew-link/:token",
-  getRenewalLinkDetails
-);
 
-router.post(
-  "/renew-link/:token",
-  renewUsingLink
-);
+
+router.post("/renew-link/:token", renewUsingLink);
+
+
 
 
 export default router;
