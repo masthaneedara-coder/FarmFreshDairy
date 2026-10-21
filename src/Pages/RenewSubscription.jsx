@@ -17,7 +17,7 @@ import {
   getRenewalLinkDetails,
   renewSubscriptionUsingLink,
   createRenewalPaymentOrder,
-  verifyPayment,
+  verifyRenewalPayment,
 } from "../config/api";
 
 export default function RenewSubscription() {
@@ -95,15 +95,17 @@ async function handleConfirmRenewal() {
 
     // COD renewal
     if (paymentMethod === "COD") {
-      const result = await renewSubscriptionUsingLink(token, "COD");
+  const result = await renewSubscriptionUsingLink(token, "COD");
 
-      if (!result?.success) {
-        throw new Error(result?.message || "Renewal failed.");
-      }
+  if (!result?.success) {
+    throw new Error(result?.message || "Renewal failed.");
+  }
 
-      setSuccess(true);
-      return;
-    }
+  setSuccess(true);
+  return;
+}
+
+
 
     // Online payment requires Razorpay Checkout.
     const result = await createRenewalPaymentOrder(token);
