@@ -257,6 +257,7 @@ export async function verifyRenewalPaymentService({
   };
 }
 
+
 export async function renewByCodService(token) {
   const {
     subscription,
@@ -264,47 +265,107 @@ export async function renewByCodService(token) {
     renewalKey,
   } = await getValidRenewal(token);
 
-  // COD uses a separate key from the online-payment intent.
-  const { data: existing, error: lookupError } =
+  // Prevent COD if this renewal has already been paid online.
+  const { data: onlineIntents, error: onlineLookupError } =
+    await supabaseAdmin
+      .from("payment_intents")
+      .select(
+        "id,status,razorpay_order_id,razorpay_payment_id"
+      )
+      .eq("renewal_key", renewalKey);
+
+  if (onlineLookupError) throw onlineLookupError;
+
+  for (const intent of onlineIntents || []) {
+    if (
+      intent.status === "PAID" ||
+      intent.razorpay_payment_id
+    ) {
+      throw new Error(
+        "Online payment has already been recorded. COD is unavailable for this renewal."
+      );
+    }
+
+    // If an online order exists, verify every payment attempt before
+    // permitting COD. Do not infer failure from browser cancellation.
+    if (intent.razorpay_order_id) {
+      const order = await razorpay.orders.fetch(
+        intent.razorpay_order_id
+      );
+
+      const payments = await razorpay.orders.fetchPayments(
+        intent.razorpay_order_id
+      );
+
+      const capturedPayment = (payments.items || []).some(
+        (payment) => payment.status === "captured"
+      );
+
+      if (capturedPayment || order.status === "paid") {
+        throw new Error(
+          "Razorpay reports a successful payment. Please verify renewal status before using COD."
+        );
+      }
+
+      const unresolvedPayment = (payments.items || []).some(
+        (payment) =>
+          ["authorized", "created"].includes(payment.status)
+      );
+
+      if (unresolvedPayment) {
+        throw new Error(
+          "A Razorpay payment attempt is still pending. Please wait until its status is confirmed before choosing COD."
+        );
+      }
+    }
+  }
+
+  // Use a separate idempotency key for COD.
+  const codKey = `cod:${renewalKey}`;
+
+  const { data: existingCod, error: codLookupError } =
     await supabaseAdmin
       .from("payment_intents")
       .select("id,status")
-      .eq("renewal_key", `cod:${renewalKey}`)
+      .eq("renewal_key", codKey)
       .maybeSingle();
 
-  if (lookupError) throw lookupError;
+  if (codLookupError) throw codLookupError;
 
-  if (existing) {
-    throw new Error("This renewal has already been submitted.");
+  if (existingCod) {
+    throw new Error(
+      "This COD renewal has already been submitted."
+    );
   }
 
-  /*
-   * The COD finalization must also be atomic and idempotent.
-   * Do not deploy this placeholder sequence as a production-safe
-   * renewal until Step 4 is completed.
-   */
-  const { error: intentError } = await supabaseAdmin
-    .from("payment_intents")
-    .insert({
-      customer_id: subscription.customer_id,
-      subscription_id: subscription.id,
-      amount,
-      currency: "INR",
-      checkout_payload: {
-        purpose: "subscription_renewal",
-        payment_method: "COD",
-        renewal_key: renewalKey,
-      },
-      renewal_key: `cod:${renewalKey}`,
-      status: "CREATED",
-    });
+  // Record the COD request. This is not yet the final renewal;
+  // atomic renewal finalization must be handled by the database RPC.
+  const { data: intent, error: insertError } =
+    await supabaseAdmin
+      .from("payment_intents")
+      .insert({
+        customer_id: subscription.customer_id,
+        subscription_id: subscription.id,
+        amount,
+        currency: "INR",
+        checkout_payload: {
+          purpose: "subscription_renewal",
+          payment_method: "COD",
+          renewal_key: renewalKey,
+        },
+        renewal_key: codKey,
+        status: "PENDING_COD",
+      })
+      .select("id")
+      .single();
 
-  if (intentError) throw intentError;
+  if (insertError) throw insertError;
 
   return {
     subscription_id: subscription.id,
     amount,
     payment_method: "COD",
     payment_status: "Pending",
+    intent_id: intent.id,
   };
 }
