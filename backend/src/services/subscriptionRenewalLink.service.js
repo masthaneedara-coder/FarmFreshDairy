@@ -68,21 +68,70 @@ export async function createSubscriptionRenewalLinkService(subscriptionId) {
     );
   }
 
+ 
   // ========================================================
-  // 3. INVALIDATE OLD RENEWAL LINKS
+  // 3. CHECK EXISTING RENEWAL LINKS AND PAYMENT INTENTS
   // ========================================================
 
-  const { error: invalidateError } =
-    await supabaseAdmin
+  const now = new Date().toISOString();
+
+  const {
+    data: existingLinks,
+    error: existingLinksError,
+  } = await supabaseAdmin
+    .from("subscription_renewal_links")
+    .select("id, expires_at, used_at, created_at")
+    .eq("subscription_id", subscriptionId)
+    .is("used_at", null)
+    .gt("expires_at", now)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (existingLinksError) {
+    throw existingLinksError;
+  }
+
+  if (existingLinks?.length) {
+    const existingLink = existingLinks[0];
+
+    // Check whether a Razorpay payment intent already exists
+    // for this renewal link.
+    const {
+      data: existingIntent,
+      error: intentError,
+    } = await supabaseAdmin
+      .from("payment_intents")
+      .select("id, status, razorpay_order_id, razorpay_payment_id")
+      .eq("renewal_key", existingLink.id)
+      .maybeSingle();
+
+    if (intentError) {
+      throw intentError;
+    }
+
+    if (existingIntent) {
+      // Never invalidate a link that has a payment intent.
+      // Its original token cannot be recovered from token_hash.
+      throw new Error(
+        "An existing renewal link has a payment record. " +
+        "Do not create another link or payment order until " +
+        "the existing renewal is reconciled."
+      );
+    }
+
+    // No payment intent exists. Invalidate the old link so
+    // a fresh token and usable URL can be generated below.
+    const {
+      error: invalidateError,
+    } = await supabaseAdmin
       .from("subscription_renewal_links")
-      .update({
-        used_at: new Date().toISOString(),
-      })
-      .eq("subscription_id", subscriptionId)
+      .update({ used_at: now })
+      .eq("id", existingLink.id)
       .is("used_at", null);
 
-  if (invalidateError) {
-    throw invalidateError;
+    if (invalidateError) {
+      throw invalidateError;
+    }
   }
 
   // ========================================================
