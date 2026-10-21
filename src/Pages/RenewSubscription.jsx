@@ -16,6 +16,8 @@ import {
 import {
   getRenewalLinkDetails,
   renewSubscriptionUsingLink,
+  createRenewalPaymentOrder,
+  verifyPayment,
 } from "../config/api";
 
 export default function RenewSubscription() {
@@ -26,6 +28,8 @@ export default function RenewSubscription() {
   const [renewing, setRenewing] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  const [showPaymentOptions, setShowPaymentOptions] = useState(false);
+const [paymentMethod, setPaymentMethod] = useState("COD");
 
   useEffect(() => {
     loadSubscription();
@@ -51,33 +55,10 @@ export default function RenewSubscription() {
     }
   }
 
-  async function handleRenew() {
-    try {
-      setRenewing(true);
-      setError("");
-
-      const result =
-        await renewSubscriptionUsingLink(token);
-
-      if (!result?.success) {
-        throw new Error(
-          result?.message ||
-            "Renewal failed."
-        );
-      }
-
-      setSuccess(true);
-    } catch (err) {
-      console.error("Renewal error:", err);
-
-      setError(
-        err?.message ||
-          "Unable to renew subscription."
-      );
-    } finally {
-      setRenewing(false);
-    }
-  }
+ function handleRenew() {
+  setError("");
+  setShowPaymentOptions(true);
+}
 
   function formatDate(value) {
     if (!value) return "-";
@@ -104,6 +85,116 @@ export default function RenewSubscription() {
       value || 0
     ).toLocaleString("en-IN")}`;
   }
+
+ 
+
+async function handleConfirmRenewal() {
+  try {
+    setRenewing(true);
+    setError("");
+
+    // COD renewal
+    if (paymentMethod === "COD") {
+      const result = await renewSubscriptionUsingLink(token, "COD");
+
+      if (!result?.success) {
+        throw new Error(result?.message || "Renewal failed.");
+      }
+
+      setSuccess(true);
+      return;
+    }
+
+    // Online payment requires Razorpay Checkout.
+    const result = await createRenewalPaymentOrder(token);
+
+    if (!result?.success || !result?.order?.id || !result?.intent_id) {
+      throw new Error(
+        result?.message || "Unable to create the payment order."
+      );
+    }
+
+    if (!result?.key) {
+      throw new Error("Razorpay Key ID is missing from the server response.");
+    }
+
+    if (!window.Razorpay) {
+      throw new Error(
+        "Razorpay Checkout is not loaded. Please refresh and try again."
+      );
+    }
+
+    const customer = subscription || {};
+
+    const options = {
+      key: result.key,
+      amount: result.order.amount,
+      currency: result.order.currency || "INR",
+      name: "FarmFreshDairy",
+      description: "Subscription Renewal",
+      order_id: result.order.id,
+      prefill: {
+        name: customer.customerName || "",
+        contact: customer.phone || "",
+      },
+      theme: {
+        color: "#16a34a",
+      },
+      modal: {
+        ondismiss: () => {
+          setError("Payment was cancelled or left incomplete. You can retry.");
+          setRenewing(false);
+        },
+      },
+      handler: async (response) => {
+        try {
+          const verification = await verifyRenewalPayment({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            customer_id: customer.customer_id || customer.customerId,
+            intent_id: result.intent_id,
+          });
+
+          if (!verification?.success || !verification?.payment?.verified) {
+            throw new Error(
+              verification?.message || "Payment verification failed."
+            );
+          }
+
+          setSuccess(true);
+        } catch (verifyError) {
+          console.error("Renewal payment verification failed:", verifyError);
+          setError(
+            verifyError?.message ||
+              "Payment may have been received, but renewal confirmation needs checking. Do not pay again."
+          );
+        } finally {
+          setRenewing(false);
+        }
+      },
+    };
+
+    const checkout = new window.Razorpay(options);
+
+    checkout.on("payment.failed", (event) => {
+      console.error("Razorpay payment failed:", event.error);
+      setError(
+        event.error?.description ||
+          "Payment failed. Please retry or choose COD."
+      );
+      setRenewing(false);
+    });
+
+    checkout.open();
+  } catch (err) {
+    console.error("Confirm Renewal Error:", err);
+    setError(err?.message || "Unable to renew subscription.");
+    setRenewing(false);
+  }
+}
+
+
 
   /* ==========================================================
      LOADING
@@ -632,6 +723,63 @@ export default function RenewSubscription() {
 
               </div>
             )}
+            {showPaymentOptions && (
+  <div className="mt-5 rounded-2xl border border-green-100 bg-green-50 p-4">
+    <h3 className="text-lg font-black text-green-900">
+      Choose Payment Method
+    </h3>
+
+    <p className="mt-1 text-sm text-slate-600">
+      Renewal Amount: {formatMoney(subscription.amount)}
+    </p>
+
+    <div className="mt-4 space-y-3">
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border bg-white p-4">
+        <input
+          type="radio"
+          name="paymentMethod"
+          value="ONLINE"
+          checked={paymentMethod === "ONLINE"}
+          onChange={() => setPaymentMethod("ONLINE")}
+        />
+        <div>
+          <p className="font-bold text-slate-800">
+            UPI / Online Payment
+          </p>
+          <p className="text-xs text-slate-500">
+            Pay securely through Razorpay
+          </p>
+        </div>
+      </label>
+
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border bg-white p-4">
+        <input
+          type="radio"
+          name="paymentMethod"
+          value="COD"
+          checked={paymentMethod === "COD"}
+          onChange={() => setPaymentMethod("COD")}
+        />
+        <div>
+          <p className="font-bold text-slate-800">
+            Cash on Delivery
+          </p>
+          <p className="text-xs text-slate-500">
+            Pay according to the COD collection process
+          </p>
+        </div>
+      </label>
+    </div>
+
+    <button
+      type="button"
+      onClick={handleConfirmRenewal}
+      className="mt-4 w-full rounded-xl bg-green-600 px-4 py-3 font-black text-white"
+    >
+      Continue with {paymentMethod === "ONLINE" ? "Online Payment" : "COD"}
+    </button>
+  </div>
+)}
 
 
             {/* RENEW BUTTON */}

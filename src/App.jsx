@@ -173,14 +173,14 @@ export default function App() {
             </AdminRoute>
           }
         />
-        <Route
+        {/* <Route
   path="/notifications"
   element={
     <CustomerRoute>
       <Notifications />
     </CustomerRoute>
   }
-/>
+/> */}
         <Route
           path="/admin/orders"
           element={

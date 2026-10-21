@@ -1106,20 +1106,34 @@ export async function createSubscriptionRenewalLink(
 }
 
 
-export async function getRenewalLinkDetails(
-  token
-) {
+
+export async function getRenewalLinkDetails(token) {
   return await getJSON(
-    `${API_URL}/subscriptions/renew-link/${token}`
+    `${API_URL}/subscriptions/renew-link/${encodeURIComponent(token)}`
   );
 }
 
-
-export async function renewSubscriptionUsingLink(
-  token
-) {
+// COD renewal
+export async function renewSubscriptionUsingLink(token, paymentMethod = "COD") {
   return await postJSON(
-    `${API_URL}/subscriptions/renew-link/${token}`,
+    `${API_URL}/subscriptions/renew-link/${encodeURIComponent(token)}`,
+    { paymentMethod }
+  );
+}
+
+// Create Razorpay order for subscription renewal
+export async function createRenewalPaymentOrder(token) {
+  return await postJSON(
+    `${API_URL}/subscriptions/renew-link/${encodeURIComponent(token)}/payment-order`,
     {}
   );
 }
+
+// Verify Razorpay payment and finalize the renewal
+export async function verifyRenewalPayment(paymentData) {
+  return await postJSON(
+    `${API_URL}/payments/verify`,
+    paymentData
+  );
+}
+
