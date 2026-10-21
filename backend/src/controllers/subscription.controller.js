@@ -703,29 +703,29 @@ export async function getRenewalLinkDetails(
     });
   }
 }
+
 export async function createRenewalPaymentOrder(req, res) {
   try {
     const { token } = req.params;
 
-    // Validate the renewal link first.
-    const result =
-      await getSubscriptionRenewalLinkService(token);
+    // 1. Validate renewal link.
+    const result = await getSubscriptionRenewalLinkService(token);
+
+    if (!result?.subscription || !result?.linkId) {
+      return res.status(400).json({
+        success: false,
+        message: "Renewal link is invalid or unavailable.",
+      });
+    }
 
     const subscription = result.subscription;
     const linkId = result.linkId;
-
-    if (!linkId) {
-      return res.status(400).json({
-        success: false,
-        message: "Renewal link ID is missing.",
-      });
-    }
 
     const status = String(subscription.status || "")
       .trim()
       .toLowerCase();
 
-    if (["stopped", "cancelled", "canceled"].includes(status)) {
+    if (["stopped", "cancelled", "canceled", "deleted"].includes(status)) {
       return res.status(400).json({
         success: false,
         message: "This subscription cannot be renewed.",
@@ -733,15 +733,9 @@ export async function createRenewalPaymentOrder(req, res) {
     }
 
     const amount = Number(subscription.total_amount);
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid subscription amount.",
-      });
-    }
-
     const customerId = subscription.customer_id;
+    const renewalKey = String(linkId);
+    const keyId = process.env.RAZORPAY_KEY_ID;
 
     if (!customerId) {
       return res.status(400).json({
@@ -750,10 +744,18 @@ export async function createRenewalPaymentOrder(req, res) {
       });
     }
 
-    const renewalKey = String(linkId);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid subscription amount.",
+      });
+    }
 
-    // Prevent a second order if this link already has a
-    // payment intent. A retry should reuse the existing order.
+    if (!keyId) {
+      throw new Error("Razorpay is not configured.");
+    }
+
+    // 2. Look up the existing intent for this renewal link.
     const { data: existingIntent, error: lookupError } =
       await supabaseAdmin
         .from("payment_intents")
@@ -764,6 +766,7 @@ export async function createRenewalPaymentOrder(req, res) {
     if (lookupError) throw lookupError;
 
     if (existingIntent) {
+      // Never create another order if payment may have succeeded.
       if (
         existingIntent.status === "PAID" ||
         existingIntent.razorpay_payment_id
@@ -771,41 +774,39 @@ export async function createRenewalPaymentOrder(req, res) {
         return res.status(409).json({
           success: false,
           message:
-            "Payment has already been recorded. Please check renewal status.",
+            "Payment may already have been recorded. Check payment and renewal status before retrying.",
         });
       }
 
+      // Reuse the existing order if it is still CREATED.
       if (
         existingIntent.status === "CREATED" &&
         existingIntent.razorpay_order_id
       ) {
-        return res.json({
+        return res.status(200).json({
           success: true,
           order: {
             id: existingIntent.razorpay_order_id,
-            amount: Math.round(amount * 100),
+            amount: Math.round(Number(existingIntent.amount) * 100),
             currency: existingIntent.currency || "INR",
           },
           intent_id: existingIntent.id,
-          amount,
+          amount: Number(existingIntent.amount),
           currency: existingIntent.currency || "INR",
+          key: keyId,
         });
       }
 
+      // A stale intent without an order needs reconciliation.
+      // Do not silently create a new order.
       return res.status(409).json({
         success: false,
         message:
-          "A previous payment attempt needs checking before another order can be created.",
+          "A previous payment attempt needs reconciliation before retrying.",
       });
     }
 
-    const keyId = process.env.RAZORPAY_KEY_ID;
-
-    if (!keyId) {
-      throw new Error("Razorpay is not configured.");
-    }
-
-    // Create a payment intent first.
+    // 3. Create a new intent only when none exists.
     const { data: intent, error: insertError } =
       await supabaseAdmin
         .from("payment_intents")
@@ -828,34 +829,55 @@ export async function createRenewalPaymentOrder(req, res) {
 
     if (insertError) throw insertError;
 
-    // Create the Razorpay order using the server-calculated amount.
-    const order = await razorpay.orders.create({
-      amount: Math.round(amount * 100),
-      currency: "INR",
-      receipt: `renew_${String(linkId).replace(/-/g, "").slice(0, 20)}`,
-      notes: {
-        customer_id: String(customerId),
-        payment_intent_id: String(intent.id),
-        renewal_link_id: String(linkId),
-        renewal_key: renewalKey,
-      },
-    });
+    // 4. Create the Razorpay order.
+    let order;
 
-    const { error: updateError } = await supabaseAdmin
-      .from("payment_intents")
-      .update({
-        razorpay_order_id: order.id,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", intent.id);
-
-    if (updateError) {
-      console.error("Saving Razorpay order failed:", updateError);
-      throw new Error(
-        "The payment order needs reconciliation. Please do not retry payment yet."
-      );
+    try {
+      order = await razorpay.orders.create({
+        amount: Math.round(amount * 100),
+        currency: "INR",
+        receipt: `renew_${String(linkId)
+          .replace(/-/g, "")
+          .slice(0, 20)}`,
+        notes: {
+          customer_id: String(customerId),
+          payment_intent_id: String(intent.id),
+          renewal_link_id: String(linkId),
+          renewal_key: renewalKey,
+        },
+      });
+    } catch (orderError) {
+      // Keep the intent for investigation; don't falsely mark it paid.
+      console.error("Razorpay order creation failed:", orderError);
+      return res.status(502).json({
+        success: false,
+        message:
+          "Razorpay order creation failed. The payment intent needs reconciliation before retrying.",
+      });
     }
 
+    // 5. Save the order ID against the intent.
+    const { data: updatedIntent, error: updateError } =
+      await supabaseAdmin
+        .from("payment_intents")
+        .update({
+          razorpay_order_id: order.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", intent.id)
+        .select("id")
+        .single();
+
+    if (updateError || !updatedIntent) {
+      console.error("Saving Razorpay order failed:", updateError);
+      return res.status(500).json({
+        success: false,
+        message:
+          "The Razorpay order was created but could not be linked to the payment intent. Do not retry payment until reconciled.",
+      });
+    }
+
+    // 6. Return Checkout details.
     return res.status(201).json({
       success: true,
       order: {
@@ -871,13 +893,13 @@ export async function createRenewalPaymentOrder(req, res) {
   } catch (err) {
     console.error("Create Renewal Payment Order Error:", err);
 
-    return res.status(400).json({
+    return res.status(500).json({
       success: false,
-      message:
-        err.message || "Unable to create renewal payment order.",
+      message: "Unable to create renewal payment order.",
     });
   }
 }
+
 
 
 /* ==========================================================
