@@ -19,6 +19,8 @@ export default function Products() {
   const [quantities, setQuantities] = useState({});
   const [selectedSizes, setSelectedSizes] = useState({});
   const [toast, setToast] = useState("");
+  const [search, setSearch] = useState("");
+const [activeCategory, setActiveCategory] = useState("All");
 
   /* ----------------------------------
      PLAY CART SOUND
@@ -172,10 +174,13 @@ export default function Products() {
   }
 };
 
+  
   /* ----------------------------------
      LOAD PRODUCTS
   ---------------------------------- */
   useEffect(() => {
+    let mounted = true;
+
     const loadProducts = async () => {
       try {
         const data = await fetchProducts();
@@ -192,471 +197,275 @@ export default function Products() {
 
         const normalized = list
           .map((item, index) => normalizeProduct(item, index))
-          .filter((p) => p.name && p.name.trim() !== "");
+          .filter((product) => product.name.trim() !== "");
 
         console.log("Normalized products:", normalized);
 
-        setProducts(normalized);
+        if (mounted) {
+          setProducts(normalized);
+        }
       } catch (error) {
         console.error("Products fetch failed:", error);
-        setProducts([]);
+
+        if (mounted) {
+          setProducts([]);
+        }
       }
     };
 
     loadProducts();
     setCartCount(getCartItemCount());
 
-    // sync cart count if localStorage changes in another tab/page
-    const onStorage = () => setCartCount(getCartItemCount());
+    const onStorage = () => {
+      setCartCount(getCartItemCount());
+    };
+
     window.addEventListener("storage", onStorage);
 
-    return () => window.removeEventListener("storage", onStorage);
+    return () => {
+      mounted = false;
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
+  
+const categories = [
+  "All",
+  ...new Set(
+    products
+      .map((product) => String(product.category || "").trim())
+      .filter(Boolean)
+  ),
+];
 
-  /* ----------------------------------
-     QUANTITY HANDLERS
-  ---------------------------------- */
-  const increaseQty = (product) => {
-    const current = quantities[product.id] || 1;
-    const stock = toNumber(product.stock, 0);
+const visibleProducts = products.filter((product) => {
+  const matchesSearch = String(product.name || "")
+    .toLowerCase()
+    .includes(search.trim().toLowerCase());
 
-    if (current < stock) {
-      setQuantities((prev) => ({
-        ...prev,
-        [product.id]: current + 1,
-      }));
-    }
-  };
+  const matchesCategory =
+    activeCategory === "All" ||
+    String(product.category || "").trim() === activeCategory;
 
-  const decreaseQty = (product) => {
-    const current = quantities[product.id] || 1;
+  return matchesSearch && matchesCategory;
+});
 
-    if (current > 1) {
-      setQuantities((prev) => ({
-        ...prev,
-        [product.id]: current - 1,
-      }));
-    }
-  };
+const notify = (message) => {
+  setToast(message);
+  window.setTimeout(() => setToast(""), 2000);
+};
+const searchInputRef = useRef(null);
+const handleAddToCart = async (product) => {
+  const qty = quantities[product.id] || 1;
+  const size = selectedSizes[product.id] || "1L";
 
-  /* ----------------------------------
-     ADD TO CART
-  ---------------------------------- */
-  const handleAddToCart = async (product) => {
-    const qty = quantities[product.id] || 1;
-    const size = selectedSizes[product.id] || "1L";
-    const price = getPrice(
-  product.price,
-  size,
-  product.name
-);
+  const price = getPrice(
+    product.price,
+    size,
+    product.name
+  );
 
-    if (!customer) {
-      setToast("Please login to add products to cart");
-      setTimeout(() => setToast(""), 1800);
-      navigate("/auth");
-      return;
-    }
+  if (!customer) {
+    setToast("Please login to add products to cart");
+    window.setTimeout(() => setToast(""), 1800);
+    navigate("/auth");
+    return;
+  }
 
-    if (!product.name || price <= 0) {
-      setToast("Product data is invalid");
-      setTimeout(() => setToast(""), 1800);
-      return;
-    }
+  if (!product.name || price <= 0) {
+    setToast("Product data is invalid");
+    window.setTimeout(() => setToast(""), 1800);
+    return;
+  }
 
-    try {
-      await addProductToCart({
-        customer_id: customer.id,
-        product_id: product.id,
-        quantity: qty,
-        price,
-        size,
-      });
+  try {
+    await addProductToCart({
+      customer_id: customer.id,
+      product_id: product.id,
+      quantity: qty,
+      price,
+      size,
+    });
 
-      // Keep the existing local cart badge in sync.
-      addToCart({
-        id: product.id,
-        name: product.name,
-        image: product.image || FALLBACK_IMAGE,
-        size,
-        qty,
-        price,
-        stock: product.stock,
-        total: qty * price,
-      });
+    addToCart({
+      id: product.id,
+      name: product.name,
+      image: product.image || FALLBACK_IMAGE,
+      size,
+      qty,
+      price,
+      stock: product.stock,
+      total: qty * price,
+    });
 
-      setCartCount(getCartItemCount());
-      setToast(`${product.name} added to cart`);
-      playCartSound();
+    setCartCount(getCartItemCount());
+    setToast(`${product.name} added to cart`);
+    playCartSound();
 
-      setTimeout(() => setToast(""), 1800);
-    } catch (err) {
-      console.error("Add to cart failed:", err);
-      setToast(err?.message || "Failed to add item");
-      setTimeout(() => setToast(""), 2200);
-    }
-  };
+    window.setTimeout(() => setToast(""), 1800);
+  } catch (err) {
+    console.error("Add to cart failed:", err);
+    setToast(err?.message || "Failed to add item");
+    window.setTimeout(() => setToast(""), 2200);
+  }
+};
 
-  const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState("All");
 
-  const categories = [
-    "All",
-    ...Array.from(
-      new Set(
-        products
-          .map((p) => String(p.category || "").trim())
-          .filter(Boolean)
-      )
-    ),
-  ];
 
-  const visibleProducts = products.filter((product) => {
-    const matchesSearch = product.name
-      .toLowerCase()
-      .includes(search.trim().toLowerCase());
-
-    const matchesCategory =
-      activeCategory === "All" ||
-      String(product.category || "").trim() === activeCategory;
-
-    return matchesSearch && matchesCategory;
-  });
-
-  return (
-    <div className="min-h-screen bg-[#f6fbf7] text-slate-900">
-      <audio ref={audioRef} preload="auto">
-        <source
-          src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"
-          type="audio/ogg"
-        />
+    return (
+    <div className="min-h-screen bg-white pb-28 text-slate-900">
+      <audio ref={audioRef} preload="none">
+        <source src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" type="audio/ogg" />
       </audio>
 
-      {/* Floating cart */}
-      <button
-        onClick={() => navigate("/cart")}
-        className="fixed right-4 bottom-5 sm:right-7 sm:bottom-7 z-50 group"
-        aria-label="Open cart"
-      >
-        <span className="absolute inset-0 rounded-[22px] bg-emerald-400/30 blur-xl group-hover:blur-2xl transition" />
-        <span className="relative flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-emerald-500 to-green-700 text-2xl shadow-[0_16px_40px_rgba(16,185,129,.35)] ring-4 ring-white">
-          🛒
-          {cartCount > 0 && (
-            <span className="absolute -right-1 -top-2 flex min-w-6 h-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-black text-white shadow-lg animate-bounce">
-              {cartCount}
-            </span>
-          )}
-        </span>
-      </button>
-
-      <div className="mx-auto max-w-[1500px] px-3 py-4 sm:px-5 lg:px-8 lg:py-7">
-        {/* HERO */}
-        <section className="relative overflow-hidden rounded-[32px] sm:rounded-[40px] bg-gradient-to-br from-[#063b24] via-[#087b45] to-[#11ad67] px-5 py-8 text-white shadow-[0_25px_70px_rgba(6,95,55,.22)] sm:px-9 sm:py-11 lg:px-14 lg:py-14">
-          <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl animate-pulse" />
-          <div className="absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-emerald-300/10 blur-3xl" />
-          <div className="absolute right-[18%] top-10 text-3xl opacity-60 animate-bounce">✦</div>
-
-          <div className="relative grid items-center gap-8 lg:grid-cols-[1fr_auto]">
-            <div className="max-w-3xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold backdrop-blur-md">
-                <span>🌿</span>
-                Farm Fresh • Pure • Delivered Daily
-              </div>
-
-              <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl">
-                Fresh dairy,
-                <span className="block text-emerald-100">made simple.</span>
-              </h1>
-
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-emerald-50 sm:text-base sm:leading-7">
-                Shop fresh milk, curd and everyday dairy essentials with
-                convenient sizes and doorstep delivery.
-              </p>
-
-              <div className="mt-7 flex flex-wrap gap-3 text-xs font-bold sm:text-sm">
-                <span className="rounded-2xl bg-white/10 px-4 py-2.5 ring-1 ring-white/10">
-                  🥛 Fresh Dairy
-                </span>
-                <span className="rounded-2xl bg-white/10 px-4 py-2.5 ring-1 ring-white/10">
-                  🚚 Home Delivery
-                </span>
-                <span className="rounded-2xl bg-white/10 px-4 py-2.5 ring-1 ring-white/10">
-                  🔒 Secure Checkout
-                </span>
-              </div>
-            </div>
-
-            <div className="hidden lg:flex h-44 w-44 items-center justify-center rounded-[38px] border border-white/20 bg-white/10 text-7xl shadow-2xl backdrop-blur-md">
-              🥛
-            </div>
-          </div>
-        </section>
-
-        {/* SEARCH + CONTROLS */}
-        <section className="sticky top-2 z-30 mt-5 rounded-[26px] border border-emerald-100 bg-white/90 p-3 shadow-[0_12px_35px_rgba(15,118,80,.10)] backdrop-blur-xl sm:p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg">
-                🔎
-              </span>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search milk, curd, ghee, paneer..."
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-medium outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setActiveCategory(category)}
-                  className={`shrink-0 rounded-2xl px-4 py-3 text-xs font-black transition-all duration-300 ${
-                    activeCategory === category
-                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-[1.02]"
-                      : "bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* SECTION TITLE */}
-        <div className="mt-8 mb-5 flex items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[.2em] text-emerald-600">
-              Our collection
-            </p>
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
-              Fresh Dairy Products
-            </h2>
-          </div>
-          <div className="rounded-2xl bg-white px-4 py-2 text-xs font-bold text-slate-500 shadow-sm ring-1 ring-slate-100">
-            {visibleProducts.length} products
-          </div>
+      {/* Page content: compact grocery-app layout */}
+      <main className="mx-auto max-w-[1500px]">
+        {/* Mobile category header; desktop keeps the site's existing Navbar */}
+        <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-slate-100 bg-white/95 px-4 backdrop-blur sm:hidden">
+          <button type="button" onClick={() => navigate(-1)} aria-label="Go back" className="flex h-10 w-8 items-center justify-start text-3xl font-light">‹</button>
+          <h1 className="min-w-0 flex-1 truncate px-2 text-center text-lg font-bold">
+            {activeCategory === "All" ? "Fresh Dairy Products" : activeCategory}
+          </h1>
+          <button type="button" onClick={() => notify("Search products below")} aria-label="Search products" className="flex h-10 w-9 items-center justify-center">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.8" cy="10.8" r="7"/><path d="m16 16 5 5"/></svg>
+          </button>
         </div>
 
-        {/* TOAST */}
-        {toast && (
-          <div className="fixed left-1/2 top-24 z-[60] -translate-x-1/2 animate-[fadeIn_.25s_ease-out]">
-            <div className="flex items-center gap-3 rounded-2xl border border-emerald-100 bg-white px-5 py-3 text-sm font-black text-emerald-700 shadow-2xl">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100">
-                ✓
-              </span>
-              {toast}
-            </div>
+        {/* Desktop search and filters */}
+        <section className="hidden border-b border-slate-100 bg-white p-4 sm:block lg:px-8">
+          <label className="relative block">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.8" cy="10.8" r="7"/><path d="m16 16 5 5"/></svg>
+            </span>
+            <input ref={searchInputRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search milk, curd, ghee, paneer..." aria-label="Search products" className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm outline-none focus:border-emerald-400 focus:bg-white" />
+          </label>
+          <div className="mt-3 flex gap-2 overflow-x-auto">
+            {categories.map((category) => (
+              <button key={category} type="button" onClick={() => setActiveCategory(category)} className={`shrink-0 rounded-xl px-4 py-2 text-xs font-bold ${activeCategory === category ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600"}`}>{category}</button>
+            ))}
           </div>
-        )}
-
-        {/* PRODUCT GRID */}
-        {visibleProducts.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-            {visibleProducts.map((product, index) => {
-              const currentSize = selectedSizes[product.id] || "1L";
-              const currentQty = quantities[product.id] || 1;
-              const currentPrice = getPrice(
-  product.price,
-  currentSize,
-  product.name
-);
-              const stock = toNumber(product.stock, 0);
-              const lowStock = stock > 0 && stock <= 5;
-
-              return (
-                <article
-                  key={product.id || index}
-                  className={`group relative overflow-hidden rounded-[26px] border bg-white shadow-[0_8px_30px_rgba(15,23,42,.07)] transition-all duration-500 hover:-translate-y-1.5 hover:shadow-[0_20px_45px_rgba(16,120,75,.16)] ${
-                    stock === 0
-                      ? "border-slate-200 opacity-75"
-                      : "border-emerald-100"
-                  }`}
-                >
-                  {/* IMAGE */}
-                  <div className="relative aspect-[1.05/1] overflow-hidden bg-gradient-to-br from-emerald-50 to-slate-100 sm:aspect-[1.12/1]">
-                    <img
-                      src={product.image || FALLBACK_IMAGE}
-                      alt={product.name}
-                      onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = FALLBACK_IMAGE;
-                      }}
-                      className="h-full w-full object-cover transition duration-700 group-hover:scale-110"
-                    />
-
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
-                    <div className="absolute left-3 top-3">
-                      <span
-                        className={`rounded-full px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide shadow-lg backdrop-blur-md sm:px-3 sm:text-[10px] ${
-                          stock > 0
-                            ? "bg-white/95 text-emerald-700"
-                            : "bg-red-500 text-white"
-                        }`}
-                      >
-                        {stock > 0 ? "● In Stock" : "Out of Stock"}
-                      </span>
-                    </div>
-
-                    {lowStock && (
-                      <div className="absolute bottom-3 left-3 rounded-full bg-amber-400 px-2.5 py-1.5 text-[9px] font-black text-amber-950 shadow-lg">
-                        ⚡ Only {stock} left
-                      </div>
-                    )}
-
-                    <div className="absolute right-3 top-3 rounded-full bg-black/50 px-2.5 py-1.5 text-[9px] font-bold text-white backdrop-blur-md">
-                      {stock} available
-                    </div>
-                  </div>
-
-                  {/* CONTENT */}
-                  <div className="p-3.5 sm:p-5">
-                    <div className="min-h-[44px]">
-                      <h3 className="line-clamp-2 text-sm font-black leading-5 text-slate-900 sm:text-lg">
-                        {product.name}
-                      </h3>
-                    </div>
-
-                    <div className="mt-2 flex items-end justify-between gap-2">
-                      <div>
-                        <p className="text-xl font-black text-emerald-700 sm:text-2xl">
-                          ₹{currentPrice}
-                        </p>
-                        <p className="text-[9px] font-medium text-slate-400 sm:text-[11px]">
-                          Base ₹{toNumber(product.price)}/L
-                        </p>
-                      </div>
-                      <span className="rounded-xl bg-emerald-50 px-2 py-1 text-[9px] font-bold text-emerald-700">
-                        Fresh
-                      </span>
-                    </div>
-
-                    <div className="mt-4">
-                      <label className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-slate-400">
-                        Select size
-                      </label>
-                      <select
-                        value={currentSize}
-                        onChange={(e) =>
-                          setSelectedSizes((prev) => ({
-                            ...prev,
-                            [product.id]: e.target.value,
-                          }))
-                        }
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                      >
-                        <option value="250ml">250 ml</option>
-                        <option value="500ml">500 ml</option>
-                        <option value="1L">1 Liter</option>
-                        <option value="2L">2 Liter</option>
-                        <option value="3L">3 Liter</option>
-                        <option value="5L">5 Liter</option>
-                      </select>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 p-1.5 ring-1 ring-slate-100">
-                      <button
-                        disabled={stock === 0 || currentQty <= 1}
-                        onClick={() => decreaseQty(product)}
-                        className="h-9 w-9 rounded-xl bg-white text-lg font-black text-slate-700 shadow-sm transition hover:bg-red-50 hover:text-red-500 active:scale-90 disabled:cursor-not-allowed disabled:opacity-35"
-                      >
-                        −
-                      </button>
-                      <div className="text-center">
-                        <span className="block text-sm font-black text-slate-900">
-                          {currentQty}
-                        </span>
-                        <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">
-                          Quantity
-                        </span>
-                      </div>
-                      <button
-                        disabled={stock === 0 || currentQty >= stock}
-                        onClick={() => increaseQty(product)}
-                        className="h-9 w-9 rounded-xl bg-emerald-600 text-lg font-black text-white shadow-sm transition hover:bg-emerald-700 active:scale-90 disabled:cursor-not-allowed disabled:bg-slate-300"
-                      >
-                        +
-                      </button>
-                    </div>
-
-                    <button
-                      disabled={stock === 0}
-                      onClick={() => handleAddToCart(product)}
-                      className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-xs font-black transition-all duration-300 active:scale-[.97] sm:text-sm ${
-                        stock === 0
-                          ? "cursor-not-allowed bg-slate-200 text-slate-400"
-                          : "bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-lg shadow-emerald-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-300"
-                      }`}
-                    >
-                      <span>{stock === 0 ? "Unavailable" : "Add to Cart"}</span>
-                      {stock > 0 && <span className="text-base">→</span>}
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="rounded-[32px] border border-emerald-100 bg-white px-6 py-16 text-center shadow-lg">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-50 text-4xl">
-              🥛
-            </div>
-            <h3 className="mt-5 text-2xl font-black text-slate-900">
-              No products found
-            </h3>
-            <p className="mt-2 text-sm text-slate-500">
-              Try another search or category.
-            </p>
-            <button
-              onClick={() => {
-                setSearch("");
-                setActiveCategory("All");
-              }}
-              className="mt-5 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-lg"
-            >
-              Show All Products
-            </button>
-          </div>
-        )}
-
-        {/* TRUST STRIP */}
-        <section className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            ["🥛", "Fresh Products"],
-            ["🚚", "Daily Delivery"],
-            ["💳", "Easy Payment"],
-            ["💚", "Quality First"],
-          ].map(([icon, title]) => (
-            <div
-              key={title}
-              className="rounded-2xl border border-emerald-100 bg-white p-4 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-            >
-              <div className="text-2xl">{icon}</div>
-              <p className="mt-2 text-[10px] font-black text-slate-600 sm:text-xs">
-                {title}
-              </p>
-            </div>
-          ))}
         </section>
+
+        {/* Compact banner carousel */}
+        <section className="overflow-hidden py-3 sm:px-6 sm:py-5">
+          <div className="mx-auto flex max-w-5xl gap-3 overflow-x-auto px-3 sm:px-0">
+            <div className="relative flex h-28 min-w-[78%] items-center overflow-hidden rounded-2xl bg-gradient-to-r from-sky-700 to-sky-400 px-5 text-white sm:h-40 sm:min-w-[55%]">
+              <div className="relative z-10">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/80">FarmFreshDairy</p>
+                <h2 className="mt-1 text-xl font-black sm:text-3xl">Fresh every day</h2>
+                <p className="mt-1 text-xs sm:text-sm">Quality essentials delivered to your door</p>
+              </div>
+              <span className="absolute -right-2 bottom-0 text-7xl opacity-80 sm:text-9xl" aria-hidden="true">🥛</span>
+            </div>
+            <div className="flex h-28 min-w-[70%] items-center rounded-2xl bg-gradient-to-r from-emerald-800 to-emerald-500 px-5 text-white sm:h-40 sm:min-w-[40%]">
+              <div><p className="text-xs font-bold uppercase tracking-wider text-white/80">Goodness in every drop</p><h2 className="mt-1 text-xl font-black sm:text-3xl">Shop dairy</h2><p className="mt-1 text-xs">Freshness you can trust</p></div>
+            </div>
+          </div>
+        </section>
+
+        <div className="px-3 pb-5 sm:px-6 lg:px-8">
+          <div className="mb-3 flex items-end justify-between sm:mb-5">
+            <div>
+              <p className="hidden text-[10px] font-extrabold uppercase tracking-[.18em] text-emerald-700 sm:block">Our collection</p>
+              <h2 className="text-lg font-extrabold sm:mt-1 sm:text-2xl">{activeCategory === "All" ? "Popular Products" : activeCategory}</h2>
+            </div>
+            <span className="text-[11px] font-medium text-slate-500">{visibleProducts.length} products</span>
+          </div>
+
+          {/* Mobile: category rail + 2-column products; desktop: regular grid */}
+          <div className="grid grid-cols-[66px_minmax(0,1fr)] gap-3 sm:block">
+            <aside className="sticky top-14 h-[calc(100dvh-230px)] overflow-y-auto border-r border-slate-100 pr-2 sm:hidden">
+              {categories.map((category, index) => (
+                <button key={category} type="button" onClick={() => setActiveCategory(category)} className={`mb-3 flex w-full flex-col items-center gap-1 rounded-xl px-1 py-2 text-center ${activeCategory === category ? "bg-pink-50 text-fuchsia-700" : "text-slate-600"}`}>
+                  <span className={`flex h-11 w-11 items-center justify-center rounded-xl text-xl ${activeCategory === category ? "bg-pink-100" : "bg-slate-50"}`}>{category === "All" ? "🧺" : /milk|dairy|curd|paneer|ghee/i.test(category) ? "🥛" : /egg/i.test(category) ? "🥚" : /fruit|veg/i.test(category) ? "🥬" : ["🥣", "🧀", "🫙", "🥛"][index % 4]}</span>
+                  <span className="line-clamp-2 w-full text-[9px] leading-3">{category}</span>
+                </button>
+              ))}
+            </aside>
+
+            <div>
+              {/* Search appears above products on mobile */}
+              <label className="relative mb-3 block sm:hidden">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.8" cy="10.8" r="7"/><path d="m16 16 5 5"/></svg></span>
+                <input ref={searchInputRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search products..." aria-label="Search products" className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs outline-none focus:border-emerald-400" />
+              </label>
+
+              {visibleProducts.length ? (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                  {visibleProducts.map((product) => {
+                    const size = selectedSizes[product.id] || "1L";
+                    const qty = quantities[product.id] || 1;
+                    const price = getPrice(product.price, size, product.name);
+                    const stock = toNumber(product.stock);
+                    const originalPrice = Math.round(toNumber(product.price) * (size === "500ml" ? 0.5 : size === "250ml" ? 0.25 : size === "2L" ? 2 : size === "3L" ? 3 : size === "5L" ? 5 : 1));
+                    const discount = originalPrice > price ? originalPrice - price : 0;
+
+                    return (
+                      <article key={product.id} className="min-w-0 bg-white">
+                        <div className="relative aspect-square overflow-hidden rounded-xl bg-slate-100 sm:rounded-2xl">
+                          <img src={product.image || FALLBACK_IMAGE} alt={product.name} loading="lazy" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = FALLBACK_IMAGE; }} className="h-full w-full object-cover" />
+                          <button type="button" aria-label={`Save ${product.name} to favourites`} onClick={() => notify("Favourites are not available yet")} className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-slate-500 shadow-sm">
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/></svg>
+                          </button>
+                          {stock <= 0 && <span className="absolute left-1 top-1 rounded-md bg-rose-500 px-1.5 py-1 text-[7px] font-bold text-white">OUT OF STOCK</span>}
+                          <button type="button" disabled={stock <= 0} onClick={() => handleAddToCart(product)} className="absolute bottom-1.5 right-1.5 flex h-10 min-w-[82px] items-center justify-center rounded-lg border-2 border-pink-500 bg-white px-4 text-sm font-bold tracking-wide text-pink-600 shadow-md disabled:opacity-50 sm:bottom-2 sm:right-2 sm:h-11 sm:min-w-[96px]">ADD</button>
+                        </div>
+
+                        <div className="pt-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded-md bg-green-700 px-1.5 py-1 text-xs font-extrabold text-white">₹{price}</span>
+                            {discount > 0 && <span className="text-[10px] text-slate-400 line-through">₹{originalPrice}</span>}
+                          </div>
+                          {discount > 0 && <p className="mt-1 text-[10px] font-bold text-green-700">₹{discount} OFF</p>}
+                          <h3 className="mt-1.5 line-clamp-2 text-sm font-medium leading-5 text-slate-900">{product.name}</h3>
+                          <p className="mt-1 text-xs text-slate-500">{size === "1L" ? "1 Liter" : size}</p>
+
+                          <div className="mt-2 flex items-center justify-between gap-1">
+                            <select aria-label={`Size for ${product.name}`} value={size} onChange={(e) => setSelectedSizes((prev) => ({ ...prev, [product.id]: e.target.value }))} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-1.5 py-1.5 text-[10px] sm:text-xs">
+                              <option value="250ml">250 ml</option><option value="500ml">500 ml</option><option value="1L">1 Liter</option><option value="2L">2 Liter</option><option value="3L">3 Liter</option><option value="5L">5 Liter</option>
+                            </select>
+                            <div className="flex items-center gap-1">
+                              <button type="button" disabled={stock <= 0 || qty <= 1} onClick={() => decreaseQty(product)} aria-label="Decrease quantity" className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-sm disabled:opacity-30">−</button>
+                              <span className="min-w-3 text-center text-xs font-semibold">{qty}</span>
+                              <button type="button" disabled={stock <= 0 || qty >= stock} onClick={() => increaseQty(product)} aria-label="Increase quantity" className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-sm text-white disabled:bg-slate-200">+</button>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-500">No products found. Try another category or search.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Bottom promo + cart bar, inspired by the reference */}
+      <div className="fixed inset-x-0 bottom-0 z-40 bg-gradient-to-t from-white via-white/95 to-transparent px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-4 sm:hidden">
+        <div className="flex items-stretch gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-[#292e3b] px-3 py-3 text-white shadow-lg">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-white/80 text-lg">%</span>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold">Fresh offers for you</p>
+              <p className="truncate text-[10px] text-white/75">Shop fresh, save more</p>
+            </div>
+          </div>
+          <button type="button" onClick={() => navigate("/cart")} className="flex w-[118px] shrink-0 items-center justify-center gap-2 rounded-2xl bg-pink-600 px-3 text-white shadow-lg">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L21 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="18" cy="20" r="1"/></svg>
+            <span className="text-left"><span className="block text-sm font-bold">Cart</span><span className="block text-[10px]">{cartCount} item{cartCount === 1 ? "" : "s"}</span></span>
+          </button>
+        </div>
       </div>
 
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translate(-50%, -8px); }
-          to { opacity: 1; transform: translate(-50%, 0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          *, *::before, *::after {
-            animation-duration: 0.01ms !important;
-            animation-iteration-count: 1 !important;
-            scroll-behavior: auto !important;
-            transition-duration: 0.01ms !important;
-          }
-        }
-      `}</style>
+      {/* Desktop floating cart */}
+      <button type="button" onClick={() => navigate("/cart")} aria-label={`Open cart, ${cartCount} items`} className="fixed bottom-6 right-6 z-50 hidden h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg sm:flex">
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L21 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="18" cy="20" r="1"/></svg>
+        {cartCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold">{cartCount}</span>}
+      </button>
+
+      {toast && <div role="status" className="fixed left-1/2 top-20 z-[70] -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-3 text-xs font-semibold text-white shadow-xl">{toast}</div>}
     </div>
   );
 }
