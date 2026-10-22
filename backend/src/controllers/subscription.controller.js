@@ -952,6 +952,7 @@ export async function createRenewalPaymentOrder(req, res) {
 }
 
 
+
 async function reconcileRenewalIntentForCOD(renewalKey) {
   const { data: intent, error } = await supabaseAdmin
     .from("payment_intents")
@@ -961,12 +962,15 @@ async function reconcileRenewalIntentForCOD(renewalKey) {
 
   if (error) throw error;
 
-  // No online attempt exists: COD can proceed to the SQL validation.
+  // No online payment intent exists. The database must still
+  // validate the renewal link and prevent duplicate renewals.
   if (!intent) return;
 
-  // Never allow COD if the online payment is already successful.
+  const intentStatus = String(intent.status || "").toUpperCase();
+
+  // Never switch to COD if payment is recorded as successful.
   if (
-    String(intent.status || "").toUpperCase() === "PAID" ||
+    intentStatus === "PAID" ||
     intent.razorpay_payment_id
   ) {
     throw new Error(
@@ -974,13 +978,20 @@ async function reconcileRenewalIntentForCOD(renewalKey) {
     );
   }
 
-  if (!intent.razorpay_order_id) {
+  // Only allow intents whose state this function understands.
+  if (!["CREATED", "FAILED", "CANCELLED"].includes(intentStatus)) {
     throw new Error(
-      "Online payment status cannot be verified. Please try again later."
+      "The existing payment intent needs reconciliation. Please try again later."
     );
   }
 
-  // Verify the current order directly with Razorpay.
+  if (!intent.razorpay_order_id) {
+    throw new Error(
+      "The Razorpay order cannot be verified. Please try again later."
+    );
+  }
+
+  // Check Razorpay directly. If either API call fails, fail closed.
   const order = await razorpay.orders.fetch(
     intent.razorpay_order_id
   );
@@ -989,28 +1000,36 @@ async function reconcileRenewalIntentForCOD(renewalKey) {
     intent.razorpay_order_id
   );
 
-  const attempts = payments?.items || [];
+  const attempts = Array.isArray(payments?.items)
+    ? payments.items
+    : [];
 
-  const captured = attempts.some(
-    (p) => p.status === "captured"
-  );
+  const orderStatus = String(order.status || "").toLowerCase();
+  const amountPaid = Number(order.amount_paid ?? 0);
 
-  const unresolved = attempts.some(
+  const paymentCaptured = attempts.some(
     (p) =>
-      ["created", "authorized"].includes(
-        String(p.status || "").toLowerCase()
-      )
+      String(p.status || "").toLowerCase() === "captured" ||
+      p.captured === true
   );
 
+  // Never allow COD if any payment has succeeded.
   if (
-  String(order.status || "").toLowerCase() === "paid" ||
-  captured
-) {
-  throw new Error(
-    "A successful online payment was detected. COD is unavailable."
+    orderStatus === "paid" ||
+    amountPaid > 0 ||
+    paymentCaptured
+  ) {
+    throw new Error(
+      "A successful online payment was detected. COD is unavailable."
+    );
+  }
+
+  // An attempt that is still created or authorized is unresolved.
+  const unresolved = attempts.some((p) =>
+    ["created", "authorized"].includes(
+      String(p.status || "").toLowerCase()
+    )
   );
-}
-   
 
   if (unresolved) {
     throw new Error(
@@ -1018,22 +1037,60 @@ async function reconcileRenewalIntentForCOD(renewalKey) {
     );
   }
 
+  // Safe fallback cases:
+  // 1. No attempts, order is still created, and nothing was paid.
+  // 2. Every recorded payment attempt failed and nothing was paid.
+  const noAttemptsAndUnpaid =
+    attempts.length === 0 &&
+    orderStatus === "created" &&
+    amountPaid === 0;
+
   const allAttemptsFailed =
     attempts.length > 0 &&
     attempts.every(
       (p) =>
         String(p.status || "").toLowerCase() === "failed"
-    );
+    ) &&
+    amountPaid === 0;
 
-  if (!allAttemptsFailed) {
+  if (!noAttemptsAndUnpaid && !allAttemptsFailed) {
     throw new Error(
-      "The online order is not confirmed as failed. COD is temporarily unavailable."
+      "The online payment is not confirmed as safe for COD. Please try again after verification."
     );
   }
 
-  // Do not mark the intent FAILED here yet. First implement the
-  // database/payment-flow safeguards described in Step 2 below.
+  // Record the verified COD-fallback state using a conditional update.
+  // If another request changed the intent concurrently, stop.
+  const { data: updatedIntent, error: updateError } =
+    await supabaseAdmin
+      .from("payment_intents")
+      .update({
+        status: "CANCELLED",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", intent.id)
+      .in("status", ["CREATED", "FAILED", "CANCELLED"])
+      .is("razorpay_payment_id", null)
+      .select("id, status")
+      .maybeSingle();
+
+  if (updateError) throw updateError;
+
+  if (!updatedIntent) {
+    throw new Error(
+      "The payment state changed during verification. Please refresh and check the renewal status."
+    );
+  }
+
+  console.info("Renewal online payment verified for COD fallback", {
+    renewalKey,
+    orderId: intent.razorpay_order_id,
+    razorpayOrderStatus: orderStatus,
+    paymentAttempts: attempts.length,
+    fallbackIntentStatus: updatedIntent.status,
+  });
 }
+
 
 
 /* ==========================================================
