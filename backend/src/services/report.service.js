@@ -91,8 +91,8 @@ const lastDay =
         )
       )
     `)
-    .lte("start_date", lastDay)
-    .or(`end_date.is.null,end_date.gte.${firstDay}`);
+   
+    
 
   if (subscriptionError) {
     throw subscriptionError;
@@ -285,29 +285,21 @@ const lastDay =
 
     let deliveredDays = 0;
     let missedDays = 0;
-    let deliveredQuantity = 0;
-    let billAmount = 0;
-    let extraAmount = 0;
+    let normalQuantity = 0;
+    let normalAmount = 0;
     let extraQuantity = 0;
+    let extraAmount = 0;
 
-    const item =
-      subscription.subscription_items?.[0];
+    const item = subscription.subscription_items?.[0];
 
-    const normalQuantity = Number(
-      item?.quantity || 1
-    );
-
-    const dailyRate = Number(
-      item?.unit_price || 0
-    );
+    const subscriptionItemQuantity = Number(item?.quantity || 1);
+    const dailyRate = Number(item?.unit_price || 0);
 
     const subscriptionDeliveries =
       deliveriesBySubscription.get(subscription.id) || [];
 
     for (const delivery of subscriptionDeliveries) {
-      const deliveryDate = String(
-        delivery.delivery_date || ""
-      ).slice(0, 10);
+      const deliveryDate = String(delivery.delivery_date || "").slice(0, 10);
 
       if (
         deliveryDate < effectiveStartDate ||
@@ -316,65 +308,51 @@ const lastDay =
         continue;
       }
 
-      if (delivery.status === "Delivered") {
-        deliveredDays++;
-      }
+      const status = String(delivery.status || "")
+        .trim()
+        .toLowerCase();
 
-      if (delivery.status === "Missed") {
+      if (status === "delivered") {
+        deliveredDays++;
+      } else if (status === "missed") {
         missedDays++;
       }
 
-      if (delivery.status !== "Delivered") {
+      if (status !== "delivered") {
         continue;
       }
 
-      const deliveryItems =
-        itemsByDelivery.get(delivery.id) || [];
+      const deliveryItems = itemsByDelivery.get(delivery.id) || [];
 
       if (deliveryItems.length > 0) {
         for (const deliveryItem of deliveryItems) {
-          const itemQuantity = Number(
-            deliveryItem.quantity || 0
-          );
-
-          const itemTotal = Number(
-            deliveryItem.total_price || 0
-          );
-
-          deliveredQuantity += itemQuantity;
-          billAmount += itemTotal;
+          const itemQuantity = Number(deliveryItem.quantity || 0);
+          const itemTotal = Number(deliveryItem.total_price || 0);
 
           if (deliveryItem.is_extra === true) {
             extraQuantity += itemQuantity;
             extraAmount += itemTotal;
+          } else {
+            normalQuantity += itemQuantity;
+            normalAmount += itemTotal;
           }
         }
       } else {
-        // Preserve old-record fallback.
-        deliveredQuantity += normalQuantity;
-        billAmount += dailyRate;
+        // Fallback for older delivery records without delivery-item rows.
+        normalQuantity += subscriptionItemQuantity;
+        normalAmount += dailyRate;
       }
     }
 
-    if (
-      deliveredDays > 0 &&
-      billAmount === 0 &&
-      dailyRate > 0
-    ) {
-      billAmount =
-        deliveredDays * dailyRate;
+    // Fallback for older records where quantities/prices were not stored
+    // in subscription_delivery_items.
+    if (deliveredDays > 0 && normalAmount === 0 && dailyRate > 0) {
+      normalQuantity = deliveredDays * subscriptionItemQuantity;
+      normalAmount = deliveredDays * dailyRate;
     }
 
-    // Do not show normal subscription quantity
-    // when there were no delivered days.
-    const finalQuantity =
-      deliveredDays > 0
-        ? (
-            deliveredQuantity > 0
-              ? deliveredQuantity
-              : normalQuantity
-          )
-        : 0;
+    const finalQuantity = normalQuantity + extraQuantity;
+    const billAmount = normalAmount + extraAmount;
 
     report.push({
       customerId:
@@ -416,17 +394,13 @@ ${subscription.addresses?.city || ""}`,
 
       extraAmount,
 
-      billAmount: Number(
-        monthlyBill?.total_amount ?? billAmount
-      ),
+      billAmount,
 
       monthlyAmount: Number(
         monthlyBill?.total_amount ?? billAmount
       ),
 
-      subtotal: Number(
-        monthlyBill?.subtotal ?? billAmount
-      ),
+      subtotal: billAmount,
 
       discount: Number(
         monthlyBill?.discount ?? 0
@@ -447,15 +421,8 @@ ${subscription.addresses?.city || ""}`,
 
       subscriptionStatus:
         subscription.status || "Unknown",
-        normalQuantity: Math.max(
-  0,
-  finalQuantity - extraQuantity
-),
-
-normalAmount: Math.max(
-  0,
-  billAmount - extraAmount
-),
+        normalQuantity,
+        normalAmount,
 
 totalExtraQuantity: extraQuantity,
 
