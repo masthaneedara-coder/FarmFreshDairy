@@ -23,13 +23,14 @@ export async function getMonthlyDeliveryReportService(month, year) {
   const firstDay =
     `${numericYear}-${String(numericMonth).padStart(2, "0")}-01`;
 
-  const lastDay = new Date(
-    numericYear,
-    numericMonth,
-    0
-  )
-    .toISOString()
-    .split("T")[0];
+  const lastDate = new Date(
+  numericYear,
+  numericMonth,
+  0
+);
+
+const lastDay =
+  `${numericYear}-${String(numericMonth).padStart(2, "0")}-${String(lastDate.getDate()).padStart(2, "0")}`;
 
   // =====================================================
   // 1. GET ALL REGISTERED CUSTOMERS
