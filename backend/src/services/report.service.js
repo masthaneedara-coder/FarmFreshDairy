@@ -1,20 +1,9 @@
+
 import { supabaseAdmin } from "../config/supabase.js";
 
 // =====================================================
 // MONTHLY DELIVERY REPORT - OPTIMIZED
-// =====================================================
-// Important performance change:
-// The old implementation performed:
-//   1 subscription query
-//   + 1 delivery query per subscription
-//   + 1 delivery-item query per delivered delivery.
-//
-// This version performs only three database reads:
-//   1) subscriptions
-//   2) all deliveries for those subscriptions
-//   3) all delivery items for those deliveries
-//
-// The report calculations remain the same.
+// Includes ALL registered customers
 // =====================================================
 
 export async function getMonthlyDeliveryReportService(month, year) {
@@ -43,7 +32,32 @@ export async function getMonthlyDeliveryReportService(month, year) {
     .split("T")[0];
 
   // =====================================================
-  // 1. GET SUBSCRIPTIONS
+  // 1. GET ALL REGISTERED CUSTOMERS
+  // Includes active and inactive customers
+  // =====================================================
+
+  const {
+    data: customers,
+    error: customerError,
+  } = await supabaseAdmin
+    .from("customers")
+    .select(`
+      id,
+      full_name,
+      phone,
+      role,
+      is_active
+    `)
+    .eq("role", "customer");
+
+  if (customerError) {
+    throw customerError;
+  }
+
+  const allCustomers = customers || [];
+
+  // =====================================================
+  // 2. GET SUBSCRIPTIONS OVERLAPPING SELECTED MONTH
   // =====================================================
 
   const {
@@ -85,110 +99,119 @@ export async function getMonthlyDeliveryReportService(month, year) {
 
   const activeSubscriptions = subscriptions || [];
 
-  if (activeSubscriptions.length === 0) {
-    return [];
-  }
-
   const subscriptionIds = activeSubscriptions.map(
     (subscription) => subscription.id
   );
 
   // =====================================================
-  // 2. GET ALL DELIVERIES IN ONE QUERY
+  // 3. GET ALL DELIVERIES IN ONE QUERY
   // =====================================================
 
-  const {
-    data: deliveries,
-    error: deliveryError,
-  } = await supabaseAdmin
-    .from("subscription_deliveries")
-    .select(`
-      id,
-      delivery_date,
-      status,
-      subscription_id
-    `)
-    .in("subscription_id", subscriptionIds)
-    .gte("delivery_date", firstDay)
-    .lte("delivery_date", lastDay)
-    .order("delivery_date", {
-      ascending: true,
-    });
+  let allDeliveries = [];
 
-  if (deliveryError) {
-    throw deliveryError;
+  if (subscriptionIds.length > 0) {
+    const {
+      data: deliveries,
+      error: deliveryError,
+    } = await supabaseAdmin
+      .from("subscription_deliveries")
+      .select(`
+        id,
+        delivery_date,
+        status,
+        subscription_id
+      `)
+      .in("subscription_id", subscriptionIds)
+      .gte("delivery_date", firstDay)
+      .lte("delivery_date", lastDay)
+      .order("delivery_date", {
+        ascending: true,
+      });
+
+    if (deliveryError) {
+      throw deliveryError;
+    }
+
+    allDeliveries = deliveries || [];
   }
 
-  const allDeliveries = deliveries || [];
   // =====================================================
-// 3. GET ALL DELIVERY ITEMS IN ONE QUERY
-// =====================================================
+  // 4. GET ALL DELIVERY ITEMS IN ONE QUERY
+  // =====================================================
 
-const deliveryIds = allDeliveries.map(
-  (delivery) => delivery.id
-);
+  const deliveryIds = allDeliveries.map(
+    (delivery) => delivery.id
+  );
 
-let allDeliveryItems = [];
+  let allDeliveryItems = [];
 
-if (deliveryIds.length > 0) {
-  const {
-    data: deliveryItems,
-    error: deliveryItemError,
-  } = await supabaseAdmin
-    .from("subscription_delivery_items")
-    .select(`
-      delivery_id,
-      quantity,
-      total_price,
-      is_extra
-    `)
-    .in("delivery_id", deliveryIds);
+  if (deliveryIds.length > 0) {
+    const {
+      data: deliveryItems,
+      error: deliveryItemError,
+    } = await supabaseAdmin
+      .from("subscription_delivery_items")
+      .select(`
+        delivery_id,
+        quantity,
+        total_price,
+        is_extra
+      `)
+      .in("delivery_id", deliveryIds);
 
-  if (deliveryItemError) {
-    throw deliveryItemError;
+    if (deliveryItemError) {
+      throw deliveryItemError;
+    }
+
+    allDeliveryItems = deliveryItems || [];
   }
 
-  allDeliveryItems = deliveryItems || [];
-}
-
   // =====================================================
-  // 3. GET ALL DELIVERY ITEMS IN ONE QUERY
+  // 5. GET MONTHLY BILLS
   // =====================================================
 
- const {
-  data: monthlyBills,
-  error: monthlyBillError,
-} = await supabaseAdmin
-  .from("monthly_bills")
-  .select(`
-    id,
-    subscription_id,
-    month,
-    year,
-    delivered_days,
-    missed_days,
-    subtotal,
-    discount,
-    gst_amount,
-    total_amount,
-    payment_status,
-    paid_at
-  `)
-  .in("subscription_id", subscriptionIds)
-  .eq("month", numericMonth)
-  .eq("year", numericYear);
+  let monthlyBills = [];
 
-if (monthlyBillError) throw monthlyBillError;
+  if (subscriptionIds.length > 0) {
+    const {
+      data: bills,
+      error: monthlyBillError,
+    } = await supabaseAdmin
+      .from("monthly_bills")
+      .select(`
+        id,
+        subscription_id,
+        month,
+        year,
+        delivered_days,
+        missed_days,
+        subtotal,
+        discount,
+        gst_amount,
+        total_amount,
+        payment_status,
+        paid_at
+      `)
+      .in("subscription_id", subscriptionIds)
+      .eq("month", numericMonth)
+      .eq("year", numericYear);
 
-const monthlyBillsBySubscription = new Map(
-  (monthlyBills || []).map((bill) => [
-    bill.subscription_id,
-    bill,
-  ])
-);
+    if (monthlyBillError) {
+      throw monthlyBillError;
+    }
+
+    monthlyBills = bills || [];
+  }
+
+  const monthlyBillsBySubscription = new Map(
+    monthlyBills.map((bill) => [
+      bill.subscription_id,
+      bill,
+    ])
+  );
 
   // =====================================================
-  // GROUP DATA IN MEMORY
+  // 6. GROUP DATA IN MEMORY
   // =====================================================
 
   const deliveriesBySubscription = new Map();
@@ -222,14 +245,21 @@ const monthlyBillsBySubscription = new Map(
   }
 
   // =====================================================
-  // BUILD REPORT
+  // 7. BUILD SUBSCRIPTION REPORT
   // =====================================================
 
   const report = [];
 
+  const customersWithSubscriptions = new Set();
+
   for (const subscription of activeSubscriptions) {
+    if (subscription.customer_id) {
+      customersWithSubscriptions.add(subscription.customer_id);
+    }
+
     const monthlyBill =
-  monthlyBillsBySubscription.get(subscription.id);
+      monthlyBillsBySubscription.get(subscription.id);
+
     const subscriptionStartDate =
       subscription.start_date
         ? String(subscription.start_date).slice(0, 10)
@@ -278,7 +308,6 @@ const monthlyBillsBySubscription = new Map(
         delivery.delivery_date || ""
       ).slice(0, 10);
 
-      // Keep the same effective date-range behavior.
       if (
         deliveryDate < effectiveStartDate ||
         deliveryDate > effectiveEndDate
@@ -320,7 +349,7 @@ const monthlyBillsBySubscription = new Map(
           }
         }
       } else {
-        // Preserve the old-record fallback.
+        // Preserve old-record fallback.
         deliveredQuantity += normalQuantity;
         billAmount += dailyRate;
       }
@@ -335,10 +364,16 @@ const monthlyBillsBySubscription = new Map(
         deliveredDays * dailyRate;
     }
 
+    // Do not show normal subscription quantity
+    // when there were no delivered days.
     const finalQuantity =
-      deliveredQuantity > 0
-        ? deliveredQuantity
-        : normalQuantity;
+      deliveredDays > 0
+        ? (
+            deliveredQuantity > 0
+              ? deliveredQuantity
+              : normalQuantity
+          )
+        : 0;
 
     report.push({
       customerId:
@@ -362,13 +397,13 @@ ${subscription.addresses?.street || ""}
 ${subscription.addresses?.city || ""}`,
 
       product:
-        item?.products?.name,
+        item?.products?.name || "Product Not Available",
 
       quantity:
         finalQuantity,
 
       size:
-        item?.size,
+        item?.size || null,
 
       deliveredDays,
 
@@ -381,24 +416,106 @@ ${subscription.addresses?.city || ""}`,
       extraAmount,
 
       billAmount: Number(
-  monthlyBill?.total_amount ?? billAmount
-),
+        monthlyBill?.total_amount ?? billAmount
+      ),
 
-monthlyAmount: Number(
-  monthlyBill?.total_amount ?? billAmount
-),
+      monthlyAmount: Number(
+        monthlyBill?.total_amount ?? billAmount
+      ),
 
-subtotal: Number(monthlyBill?.subtotal ?? billAmount),
-discount: Number(monthlyBill?.discount ?? 0),
-gstAmount: Number(monthlyBill?.gst_amount ?? 0),
+      subtotal: Number(
+        monthlyBill?.subtotal ?? billAmount
+      ),
 
-paymentStatus:
-  monthlyBill?.payment_status || "Not Generated",
+      discount: Number(
+        monthlyBill?.discount ?? 0
+      ),
 
-monthlyBillId: monthlyBill?.id || null,
-paidAt: monthlyBill?.paid_at || null,
+      gstAmount: Number(
+        monthlyBill?.gst_amount ?? 0
+      ),
+
+      paymentStatus:
+        monthlyBill?.payment_status || "Not Generated",
+
+      monthlyBillId:
+        monthlyBill?.id || null,
+
+      paidAt:
+        monthlyBill?.paid_at || null,
+
+      subscriptionStatus:
+        subscription.status || "Unknown",
     });
   }
+
+  // =====================================================
+  // 8. ADD CUSTOMERS WITHOUT SUBSCRIPTIONS
+  // =====================================================
+
+  for (const customer of allCustomers) {
+    if (customersWithSubscriptions.has(customer.id)) {
+      continue;
+    }
+
+    report.push({
+      customerId: customer.id,
+
+      subscriptionId: null,
+
+      customerName: customer.full_name,
+
+      phone: customer.phone,
+
+      area: "",
+
+      address: "",
+
+      product: "No Subscription",
+
+      quantity: 0,
+
+      size: null,
+
+      deliveredDays: 0,
+
+      missedDays: 0,
+
+      dailyRate: 0,
+
+      extraQuantity: 0,
+
+      extraAmount: 0,
+
+      billAmount: 0,
+
+      monthlyAmount: 0,
+
+      subtotal: 0,
+
+      discount: 0,
+
+      gstAmount: 0,
+
+      paymentStatus: "No Invoice",
+
+      monthlyBillId: null,
+
+      paidAt: null,
+
+      subscriptionStatus: "No Active Subscription",
+    });
+  }
+
+  // =====================================================
+  // 9. SORT BY CUSTOMER NAME
+  // =====================================================
+
+  report.sort((a, b) =>
+    String(a.customerName || "").localeCompare(
+      String(b.customerName || "")
+    )
+  );
 
   return report;
 }
