@@ -27,6 +27,10 @@ import {
   getSubscriptionRenewalLinkService,
   markSubscriptionRenewalLinkUsedService,
 } from "../services/subscriptionRenewalLink.service.js";
+import {
+  createSubscriptionManageLinkService,
+  getSubscriptionManageLinkService,
+} from "../services/subscriptionManageLink.service.js";
 
 
 
@@ -1199,6 +1203,203 @@ export async function renewUsingLink(req, res) {
       message:
         err.message ||
         "Payment status could not be verified. Please do not retry payment yet.",
+    });
+  }
+}
+
+/* ==========================================================
+   CREATE CUSTOMER MANAGEMENT LINK
+   ADMIN ONLY - protect this route with admin authentication
+========================================================== */
+
+export async function createManageSubscriptionLink(req, res) {
+  try {
+    const { id } = req.params;
+
+    const result =
+      await createSubscriptionManageLinkService(id);
+
+    return res.json({
+      success: true,
+      manageUrl: result.manageUrl,
+      expiresAt: result.expiresAt,
+    });
+  } catch (err) {
+    console.error("Create Management Link Error:", err);
+
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+}
+
+/* ==========================================================
+   GET CUSTOMER SUBSCRIPTION USING MANAGEMENT TOKEN
+========================================================== */
+
+export async function getManageSubscriptionDetails(req, res) {
+  try {
+    const { token } = req.params;
+
+    const result =
+      await getSubscriptionManageLinkService(token);
+
+    const subscription = result.subscription;
+    const item = subscription.subscription_items?.[0];
+
+    return res.json({
+      success: true,
+      expiresAt: result.expiresAt,
+      subscription: {
+        startDate: subscription.start_date,
+        endDate: subscription.end_date,
+        status: subscription.status,
+        isPaused: subscription.is_paused === true,
+        pauseFrom: subscription.pause_from || null,
+        pauseTo: subscription.pause_to || null,
+        deliveryTime: subscription.delivery_time,
+        frequency: subscription.frequency,
+        amount: Number(subscription.total_amount || 0),
+        paymentMethod: subscription.payment_method,
+        paymentStatus: subscription.payment_status,
+        product: item?.products?.name || "Milk",
+        size: item?.size || "",
+        quantity: Number(item?.quantity || 1),
+      },
+    });
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+}
+
+/* ==========================================================
+   PAUSE SUBSCRIPTION USING MANAGEMENT TOKEN
+========================================================== */
+
+export async function pauseSubscriptionUsingManageLink(req, res) {
+  try {
+    const { token } = req.params;
+    const { pause_from, pause_to } = req.body;
+
+    if (!pause_from || !pause_to) {
+      return res.status(400).json({
+        success: false,
+        message: "Pause From and Pause To are required.",
+      });
+    }
+
+    // Validate the secure token first.
+    const result = await getSubscriptionManageLinkService(token);
+    const subscription = result.subscription;
+
+    const from = new Date(`${pause_from}T00:00:00.000Z`);
+    const to = new Date(`${pause_to}T00:00:00.000Z`);
+    const endDate = new Date(`${subscription.end_date}T00:00:00.000Z`);
+
+    const today = new Date(
+      new Date().toLocaleDateString("en-CA", {
+        timeZone: "Asia/Kolkata",
+      }) + "T00:00:00.000Z"
+    );
+
+    if (
+      Number.isNaN(from.getTime()) ||
+      Number.isNaN(to.getTime()) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(pause_from) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(pause_to)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide valid pause dates.",
+      });
+    }
+
+    if (subscription.is_paused) {
+      return res.status(400).json({
+        success: false,
+        message: "This subscription is already paused.",
+      });
+    }
+
+    if (from < today) {
+      return res.status(400).json({
+        success: false,
+        message: "Pause From cannot be before today.",
+      });
+    }
+
+    if (to < from) {
+      return res.status(400).json({
+        success: false,
+        message: "Pause To cannot be earlier than Pause From.",
+      });
+    }
+
+    if (to > endDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Pause period exceeds subscription end date.",
+      });
+    }
+
+    const updatedSubscription = await pauseSubscriptionService(
+      subscription.id,
+      pause_from,
+      pause_to
+    );
+
+    return res.json({
+      success: true,
+      message: "Subscription paused successfully.",
+      subscription: updatedSubscription,
+    });
+  } catch (err) {
+    console.error("Pause Using Management Link Error:", err);
+
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+}
+
+/* ==========================================================
+   RESUME SUBSCRIPTION USING MANAGEMENT TOKEN
+========================================================== */
+
+export async function resumeSubscriptionUsingManageLink(req, res) {
+  try {
+    const { token } = req.params;
+
+    // Validate the secure token first.
+    const result = await getSubscriptionManageLinkService(token);
+    const subscription = result.subscription;
+
+    if (!subscription.is_paused) {
+      return res.status(400).json({
+        success: false,
+        message: "This subscription is not currently paused.",
+      });
+    }
+
+    const updatedSubscription =
+      await resumeSubscriptionService(subscription.id);
+
+    return res.json({
+      success: true,
+      message: "Subscription resumed successfully.",
+      subscription: updatedSubscription,
+    });
+  } catch (err) {
+    console.error("Resume Using Management Link Error:", err);
+
+    return res.status(400).json({
+      success: false,
+      message: err.message,
     });
   }
 }

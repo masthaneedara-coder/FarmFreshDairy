@@ -125,38 +125,37 @@ export async function getMonthlyDeliveryReportService(month, year) {
   // 3. GET ALL DELIVERY ITEMS IN ONE QUERY
   // =====================================================
 
-  const deliveryIds = allDeliveries.map(
-    (delivery) => delivery.id
-  );
+ const {
+  data: monthlyBills,
+  error: monthlyBillError,
+} = await supabaseAdmin
+  .from("monthly_bills")
+  .select(`
+    id,
+    subscription_id,
+    month,
+    year,
+    delivered_days,
+    missed_days,
+    subtotal,
+    discount,
+    gst_amount,
+    total_amount,
+    payment_status,
+    paid_at
+  `)
+  .in("subscription_id", subscriptionIds)
+  .eq("month", numericMonth)
+  .eq("year", numericYear);
 
-  let allDeliveryItems = [];
+if (monthlyBillError) throw monthlyBillError;
 
-  if (deliveryIds.length > 0) {
-    const {
-      data: deliveryItems,
-      error: deliveryItemError,
-    } = await supabaseAdmin
-      .from("subscription_delivery_items")
-      .select(`
-        id,
-        delivery_id,
-        product_id,
-        size,
-        quantity,
-        unit_price,
-        total_price,
-        is_extra,
-        extra_request_id,
-        extra_milk_request_id
-      `)
-      .in("delivery_id", deliveryIds);
-
-    if (deliveryItemError) {
-      throw deliveryItemError;
-    }
-
-    allDeliveryItems = deliveryItems || [];
-  }
+const monthlyBillsBySubscription = new Map(
+  (monthlyBills || []).map((bill) => [
+    bill.subscription_id,
+    bill,
+  ])
+);
 
   // =====================================================
   // GROUP DATA IN MEMORY
@@ -199,6 +198,8 @@ export async function getMonthlyDeliveryReportService(month, year) {
   const report = [];
 
   for (const subscription of activeSubscriptions) {
+    const monthlyBill =
+  monthlyBillsBySubscription.get(subscription.id);
     const subscriptionStartDate =
       subscription.start_date
         ? String(subscription.start_date).slice(0, 10)
@@ -349,16 +350,23 @@ ${subscription.addresses?.city || ""}`,
 
       extraAmount,
 
-      billAmount,
+      billAmount: Number(
+  monthlyBill?.total_amount ?? billAmount
+),
 
-      monthlyAmount:
-        subscription.total_amount,
+monthlyAmount: Number(
+  monthlyBill?.total_amount ?? billAmount
+),
 
-      paymentStatus:
-        subscription.payment_status,
+subtotal: Number(monthlyBill?.subtotal ?? billAmount),
+discount: Number(monthlyBill?.discount ?? 0),
+gstAmount: Number(monthlyBill?.gst_amount ?? 0),
 
-      status:
-        subscription.status,
+paymentStatus:
+  monthlyBill?.payment_status || "Not Generated",
+
+monthlyBillId: monthlyBill?.id || null,
+paidAt: monthlyBill?.paid_at || null,
     });
   }
 

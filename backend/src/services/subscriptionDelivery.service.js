@@ -531,6 +531,8 @@ export async function autoResumePausedSubscriptionsService() {
       is_paused,
       pause_from,
       pause_to,
+      end_date,
+      paused_days,
       subscription_items(
         product_id,
         size,
@@ -538,130 +540,190 @@ export async function autoResumePausedSubscriptionsService() {
       )
     `)
     .eq("is_paused", true)
-    .lt("pause_to", today)
+    .lte("pause_to", today)
     .in("status", ["Active", "Paused"]);
 
-  if (fetchError) {
-    console.error(
-      "Auto Resume Fetch Error:",
-      fetchError
-    );
-
-    throw fetchError;
-  }
+  if (fetchError) throw fetchError;
 
   if (!subscriptions || subscriptions.length === 0) {
-    console.log(
-      "AUTO RESUME: No subscriptions to resume."
-    );
-
+    console.log("AUTO RESUME: No subscriptions to resume.");
     return [];
   }
 
   const resumed = [];
 
   for (const subscription of subscriptions) {
-    const paymentMethod = String(subscription.payment_method || "")
-      .trim()
-      .toLowerCase();
-    const isPrepaid = paymentMethod === "online" || paymentMethod === "prepaid";
+    try {
+      const paymentMethod = String(
+        subscription.payment_method || ""
+      ).trim().toLowerCase();
 
-    // A wallet-exhausted prepaid subscription must not be auto-resumed.
-    // The daily generator will validate the full delivery cost before creating a new delivery.
-    if (isPrepaid) {
-      const { data: wallet, error: walletError } = await supabaseAdmin
-        .from("wallet_accounts")
-        .select("balance, status")
-        .eq("customer_id", subscription.customer_id)
-        .maybeSingle();
+      const isPrepaid =
+        paymentMethod === "online" ||
+        paymentMethod === "prepaid";
 
-      if (walletError) throw walletError;
+      // Preserve the existing prepaid wallet validation.
+      if (isPrepaid) {
+        const { data: wallet, error: walletError } =
+          await supabaseAdmin
+            .from("wallet_accounts")
+            .select("balance, status")
+            .eq("customer_id", subscription.customer_id)
+            .maybeSingle();
 
-      const walletBalance = wallet?.status === "Active"
-        ? Number(wallet.balance)
-        : 0;
+        if (walletError) throw walletError;
 
-      // Validate the wallet against the full next normal delivery cost,
-      // not merely a positive balance.
-      const { data: overrides, error: overridesError } = await supabaseAdmin
-        .from("subscription_delivery_overrides")
-        .select("product_id, size, quantity")
-        .eq("subscription_id", subscription.id)
-        .eq("delivery_date", today)
-        .eq("status", "Scheduled");
+        const walletBalance =
+          wallet?.status === "Active"
+            ? Number(wallet.balance)
+            : 0;
 
-      if (overridesError) throw overridesError;
+        const { data: overrides, error: overridesError } =
+          await supabaseAdmin
+            .from("subscription_delivery_overrides")
+            .select("product_id, size, quantity")
+            .eq("subscription_id", subscription.id)
+            .eq("delivery_date", today)
+            .eq("status", "Scheduled");
 
-      let nextDeliveryAmount = 0;
-      for (const item of subscription.subscription_items || []) {
-        let quantity = Number(item.quantity || 0);
-        let size = item.size;
-        const override = (overrides || []).find(
-          (row) => row.product_id === item.product_id
-        );
-        if (override) {
-          size = override.size;
-          quantity = Number(override.quantity || 0);
+        if (overridesError) throw overridesError;
+
+        let nextDeliveryAmount = 0;
+
+        for (const item of subscription.subscription_items || []) {
+          let quantity = Number(item.quantity || 0);
+          let size = item.size;
+
+          const override = (overrides || []).find(
+            (row) => row.product_id === item.product_id
+          );
+
+          if (override) {
+            size = override.size;
+            quantity = Number(override.quantity || 0);
+          }
+
+          if (quantity <= 0) continue;
+
+          const unitPrice = await getProductSizePrice(
+            item.product_id,
+            size
+          );
+
+          nextDeliveryAmount += quantity * unitPrice;
         }
-        if (quantity <= 0) continue;
-        const unitPrice = await getProductSizePrice(item.product_id, size);
-        nextDeliveryAmount += quantity * unitPrice;
+
+        if (
+          !Number.isFinite(walletBalance) ||
+          walletBalance < nextDeliveryAmount ||
+          nextDeliveryAmount <= 0
+        ) {
+          console.log(
+            "AUTO RESUME SKIPPED: prepaid wallet insufficient",
+            {
+              subscriptionId: subscription.id,
+              walletBalance,
+              nextDeliveryAmount,
+            }
+          );
+
+          continue;
+        }
       }
 
-      if (
-        !Number.isFinite(walletBalance) ||
-        walletBalance < nextDeliveryAmount ||
-        nextDeliveryAmount <= 0
-      ) {
-        console.log("AUTO RESUME SKIPPED: prepaid wallet cannot cover next delivery:", {
-          subscriptionId: subscription.id,
-          walletBalance,
-          nextDeliveryAmount,
-        });
-        continue;
-      }
-    }
-
-    console.log(
-      "AUTO RESUMING SUBSCRIPTION:",
-      subscription.id
-    );
-
-    const {
-      data: updatedSubscription,
-      error: updateError,
-    } = await supabaseAdmin
-      .from("subscriptions")
-      .update({
-        status: "Active",
-        is_paused: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", subscription.id)
-      .select(`
-        id,
-        customer_id,
-        status,
-        is_paused,
-        pause_from,
-        pause_to
-      `)
-      .single();
-
-    if (updateError) {
-      console.error(
-        "Auto Resume Update Error:",
-        updateError
+      // Calculate completed pause days using IST calendar dates.
+      const pauseFrom = new Date(
+        `${subscription.pause_from}T00:00:00+05:30`
       );
 
-      throw updateError;
-    }
+      const resumeDate = new Date(
+        `${today}T00:00:00+05:30`
+      );
 
-    resumed.push(updatedSubscription);
+      const pausedDaysThisPeriod = Math.max(
+  0,
+  Math.floor(
+    (resumeDate.getTime() - pauseFrom.getTime()) /
+      86400000
+  ) + 1
+);
+
+      const previousPausedDays = Number(
+        subscription.paused_days || 0
+      );
+
+      const totalPausedDays =
+        previousPausedDays + pausedDaysThisPeriod;
+
+      const updatePayload = {
+        status: "Active",
+        is_paused: false,
+        pause_from: null,
+        pause_to: null,
+        paused_days: totalPausedDays,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Extend expiry only for prepaid subscriptions.
+      if (isPrepaid && pausedDaysThisPeriod > 0) {
+        if (!subscription.end_date) {
+          throw new Error(
+            "Subscription expiry date is missing."
+          );
+        }
+
+        const newEndDate = new Date(
+          `${subscription.end_date}T00:00:00Z`
+        );
+
+        newEndDate.setUTCDate(
+          newEndDate.getUTCDate() + pausedDaysThisPeriod
+        );
+
+        updatePayload.end_date =
+          newEndDate.toISOString().slice(0, 10);
+      }
+
+      // Conditional update prevents a second resume from extending expiry.
+      const {
+        data: updatedSubscription,
+        error: updateError,
+      } = await supabaseAdmin
+        .from("subscriptions")
+        .update(updatePayload)
+        .eq("id", subscription.id)
+        .eq("is_paused", true)
+        .select()
+        .maybeSingle();
+
+      if (updateError) throw updateError;
+
+      if (!updatedSubscription) {
+        console.log(
+          "AUTO RESUME SKIPPED: already resumed",
+          subscription.id
+        );
+        continue;
+      }
+
+      resumed.push(updatedSubscription);
+
+      console.log("AUTO RESUMED:", {
+        subscriptionId: subscription.id,
+        paymentMethod,
+        pausedDaysThisPeriod,
+        endDate: updatedSubscription.end_date,
+      });
+    } catch (error) {
+      console.error(
+        `AUTO RESUME FAILED for ${subscription.id}:`,
+        error.message
+      );
+    }
   }
 
   console.log(
-    `AUTO RESUME: ${resumed.length} subscription(s) resumed.`
+    `AUTO RESUME COMPLETED: ${resumed.length} subscription(s).`
   );
 
   return resumed;
@@ -1012,8 +1074,6 @@ export async function generateTodayDeliveriesService() {
     skipped,
   };
 }
-
-
 
 function shouldGenerateDelivery(
   subscription,

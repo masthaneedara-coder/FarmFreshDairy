@@ -18,12 +18,9 @@ function hashToken(token) {
    CREATE RENEWAL LINK
 ========================================================== */
 
+
 export async function createSubscriptionRenewalLinkService(subscriptionId) {
-
-  // ========================================================
-  // 1. GET SUBSCRIPTION
-  // ========================================================
-
+  // 1. Load subscription details.
   const { data: subscription, error: subscriptionError } =
     await supabaseAdmin
       .from("subscriptions")
@@ -41,272 +38,175 @@ export async function createSubscriptionRenewalLinkService(subscriptionId) {
       .eq("id", subscriptionId)
       .single();
 
-  if (subscriptionError) {
-    throw subscriptionError;
-  }
+  if (subscriptionError) throw subscriptionError;
 
   if (!subscription) {
     throw new Error("Subscription not found.");
   }
 
-  // ========================================================
-  // 2. PREVENT STOPPED/CANCELLED SUBSCRIPTIONS
-  // ========================================================
+  // 2. Only Active subscriptions can be renewed.
+  const status = String(subscription.status || "")
+    .trim()
+    .toLowerCase();
 
-  const status =
-    String(subscription.status || "")
-      .trim()
-      .toLowerCase();
-
-  if (
-    status === "stopped" ||
-    status === "cancelled" ||
-    status === "canceled"
-  ) {
+  if (status !== "active") {
     throw new Error(
-      "This subscription cannot be renewed."
+      "Only active subscriptions can generate renewal links."
     );
   }
 
- 
-  // ========================================================
-  // 3. CHECK EXISTING RENEWAL LINKS AND PAYMENT INTENTS
-  // ========================================================
+  // 3. Generate a secure random token.
+  const token = crypto.randomBytes(32).toString("hex");
+  const tokenHash = hashToken(token);
 
-  const now = new Date().toISOString();
-
-  const {
-    data: existingLinks,
-    error: existingLinksError,
-  } = await supabaseAdmin
-    .from("subscription_renewal_links")
-    .select("id, expires_at, used_at, created_at")
-    .eq("subscription_id", subscriptionId)
-    .is("used_at", null)
-    .gt("expires_at", now)
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  if (existingLinksError) {
-    throw existingLinksError;
-  }
-
-  if (existingLinks?.length) {
-    const existingLink = existingLinks[0];
-
-    // Check whether a Razorpay payment intent already exists
-    // for this renewal link.
-    const {
-      data: existingIntent,
-      error: intentError,
-    } = await supabaseAdmin
-      .from("payment_intents")
-      .select("id, status, razorpay_order_id, razorpay_payment_id")
-      .eq("renewal_key", existingLink.id)
-      .maybeSingle();
-
-    if (intentError) {
-      throw intentError;
-    }
-
-    if (existingIntent) {
-      // Never invalidate a link that has a payment intent.
-      // Its original token cannot be recovered from token_hash.
-      throw new Error(
-        "An existing renewal link has a payment record. " +
-        "Do not create another link or payment order until " +
-        "the existing renewal is reconciled."
-      );
-    }
-
-    // No payment intent exists. Invalidate the old link so
-    // a fresh token and usable URL can be generated below.
-    const {
-      error: invalidateError,
-    } = await supabaseAdmin
-      .from("subscription_renewal_links")
-      .update({ used_at: now })
-      .eq("id", existingLink.id)
-      .is("used_at", null);
-
-    if (invalidateError) {
-      throw invalidateError;
-    }
-  }
-
-  // ========================================================
-  // 4. GENERATE NEW SECURE TOKEN
-  // ========================================================
-
-  const token =
-    crypto.randomBytes(32).toString("hex");
-
-  const tokenHash =
-    hashToken(token);
-
-  // ========================================================
-  // 5. TOKEN EXPIRY
-  // ========================================================
-
+  // 4. Calculate expiry.
   const expiresAt = new Date();
-
   expiresAt.setDate(
     expiresAt.getDate() + TOKEN_EXPIRY_DAYS
   );
 
-  // ========================================================
-  // 6. SAVE NEW LINK
-  // ========================================================
+  // 5. Create the link atomically through PostgreSQL.
+  const { data: result, error: rpcError } =
+    await supabaseAdmin.rpc(
+      "create_subscription_renewal_link_record",
+      {
+        p_subscription_id: subscriptionId,
+        p_token_hash: tokenHash,
+        p_expires_at: expiresAt.toISOString(),
+      }
+    );
 
-  const { data: renewalLink, error: linkError } =
-    await supabaseAdmin
-      .from("subscription_renewal_links")
-      .insert({
-        subscription_id: subscriptionId,
-        token_hash: tokenHash,
-        expires_at: expiresAt.toISOString(),
-      })
-      .select()
-      .single();
+  if (rpcError) {
+    if (
+      rpcError.message?.includes(
+        "An active renewal link already exists"
+      )
+    ) {
+      throw new Error(
+        "An active renewal link already exists. Use the existing link or explicitly revoke it before generating another."
+      );
+    }
 
-  if (linkError) {
-    throw linkError;
+    if (
+      rpcError.message?.includes(
+        "An expired renewal link must be explicitly revoked"
+      )
+    ) {
+      throw new Error(
+        "The previous renewal link has expired. Revoke it explicitly before generating a replacement."
+      );
+    }
+
+    console.error("Renewal link creation failed:", rpcError);
+
+    throw new Error(
+      "Unable to create the renewal link. Please try again."
+    );
   }
 
-  // ========================================================
-  // 7. CREATE URL
-  // ========================================================
+  if (!result?.success || !result.id) {
+    throw new Error(
+      "Renewal link creation was not confirmed."
+    );
+  }
 
+  // 6. Return the original token only once.
   const renewalUrl =
     `${FRONTEND_URL}/renew/${token}`;
 
   return {
-    id: renewalLink.id,
+    id: result.id,
     subscriptionId,
     renewalUrl,
-    expiresAt: renewalLink.expires_at,
+    expiresAt: result.expires_at,
   };
 }
+
 
 /* ==========================================================
    GET RENEWAL LINK DETAILS
 ========================================================== */
 
+
 export async function getSubscriptionRenewalLinkService(
-  token
+  token,
+  { allowUsed = false } = {}
 ) {
-  if (!token) {
+  if (!token || typeof token !== "string") {
     throw new Error("Renewal token is required.");
   }
 
   const tokenHash = hashToken(token);
 
-  const {
-    data: link,
-    error: linkError,
-  } = await supabaseAdmin
-    .from("subscription_renewal_links")
-    .select(`
-      id,
-      subscription_id,
-      expires_at,
-      used_at
-    `)
-    .eq("token_hash", tokenHash)
-    .maybeSingle();
+  const { data: link, error: linkError } =
+    await supabaseAdmin
+      .from("subscription_renewal_links")
+      .select(`
+        id,
+        subscription_id,
+        expires_at,
+        used_at
+      `)
+      .eq("token_hash", tokenHash)
+      .maybeSingle();
 
-  if (linkError) {
-    throw linkError;
-  }
+  if (linkError) throw linkError;
 
   if (!link) {
-    throw new Error(
-      "This renewal link is invalid."
-    );
+    throw new Error("This renewal link is invalid.");
   }
 
-  if (link.used_at) {
-    throw new Error(
-      "This renewal link has already been used."
-    );
+  if (link.used_at && !allowUsed) {
+    throw new Error("This renewal link has already been used.");
   }
 
   if (
-    new Date(link.expires_at).getTime() <
-    Date.now()
+    !allowUsed &&
+    new Date(link.expires_at).getTime() <= Date.now()
   ) {
-    throw new Error(
-      "This renewal link has expired."
-    );
+    throw new Error("This renewal link has expired.");
   }
 
-  // ----------------------------------------------------------
-  // Get subscription information
-  // ----------------------------------------------------------
-
-  const {
-    data: subscription,
-    error: subscriptionError,
-  } = await supabaseAdmin
-    .from("subscriptions")
-    .select(`
-      id,
-      customer_id,
-      start_date,
-      end_date,
-      status,
-      is_paused,
-      delivery_time,
-      frequency,
-      total_amount,
-      payment_method,
-      payment_status,
-
-      customers(
+  const { data: subscription, error: subscriptionError } =
+    await supabaseAdmin
+      .from("subscriptions")
+      .select(`
         id,
-        full_name,
-        phone,
-        email
-      ),
-
-      addresses(
-        id,
-        house_no,
-        street,
-        area,
-        city,
-        state,
-        pincode
-      ),
-
-      subscription_items(
-        quantity,
-        size,
-        products(
-          id,
-          name,
-          image
+        customer_id,
+        start_date,
+        end_date,
+        status,
+        is_paused,
+        delivery_time,
+        frequency,
+        total_amount,
+        payment_method,
+        payment_status,
+        customers(id, full_name, phone, email),
+        addresses(
+          id, house_no, street, area, city, state, pincode
+        ),
+        subscription_items(
+          quantity,
+          size,
+          products(id, name, image)
         )
-      )
-    `)
-    .eq("id", link.subscription_id)
-    .single();
+      `)
+      .eq("id", link.subscription_id)
+      .single();
 
-  if (subscriptionError) {
-    throw subscriptionError;
-  }
+  if (subscriptionError) throw subscriptionError;
 
   if (!subscription) {
-    throw new Error(
-      "Subscription not found."
-    );
+    throw new Error("Subscription not found.");
   }
 
   return {
-  linkId: link.id,
-  subscription,
-  expiresAt: link.expires_at,
-};
+    linkId: link.id,
+    subscription,
+    expiresAt: link.expires_at,
+    usedAt: link.used_at,
+  };
 }
 
 

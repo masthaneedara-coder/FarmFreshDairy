@@ -299,6 +299,13 @@ export async function generateMonthlyBills(
   // ACTIVE SUBSCRIPTIONS
   // --------------------------------------------------
 
+  
+  // --------------------------------------------------
+  // GET SUBSCRIPTIONS THAT OVERLAP THE SELECTED MONTH
+  // Do not filter by Active status.
+  // Old subscriptions may contain valid deliveries.
+  // --------------------------------------------------
+
   const {
     data: subscriptions,
     error: subscriptionError,
@@ -308,17 +315,21 @@ export async function generateMonthlyBills(
       id,
       customer_id,
       status,
+      start_date,
+      end_date,
       customers(
         id,
         full_name,
         phone
       )
     `)
-    .eq("status", "Active");
+    .lte("start_date", toDate)
+    .or(`end_date.is.null,end_date.gte.${fromDate}`);
 
   if (subscriptionError) {
     throw subscriptionError;
   }
+
 
   let generated = 0;
   let updated = 0;
