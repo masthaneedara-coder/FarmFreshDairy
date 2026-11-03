@@ -7,7 +7,8 @@ import {
   getCustomerBill,
   markBillPaid,
   getBillDetails,
-  applyCouponToMonthlyBill
+  applyCouponToMonthlyBill,
+  getCombinedCustomerBillDetails,
 } from "../controllers/monthlyBilling.controller.js";
 
 const router = express.Router();
@@ -25,5 +26,9 @@ router.get("/:subscriptionId", getCustomerBill);
 // Mark bill paid (admin-only; protect with your auth middleware)
 router.put("/:id/pay", markBillPaid);
 router.post("/:id/apply-coupon", applyCouponToMonthlyBill);
+router.get(
+  "/customer/:customerId/details",
+  getCombinedCustomerBillDetails
+);
 
 export default router;

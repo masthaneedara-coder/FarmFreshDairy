@@ -299,13 +299,6 @@ export async function generateMonthlyBills(
   // ACTIVE SUBSCRIPTIONS
   // --------------------------------------------------
 
-  
-  // --------------------------------------------------
-  // GET SUBSCRIPTIONS THAT OVERLAP THE SELECTED MONTH
-  // Do not filter by Active status.
-  // Old subscriptions may contain valid deliveries.
-  // --------------------------------------------------
-
   const {
     data: subscriptions,
     error: subscriptionError,
@@ -315,21 +308,17 @@ export async function generateMonthlyBills(
       id,
       customer_id,
       status,
-      start_date,
-      end_date,
       customers(
         id,
         full_name,
         phone
       )
     `)
-    .lte("start_date", toDate)
-    .or(`end_date.is.null,end_date.gte.${fromDate}`);
+    .eq("status", "Active");
 
   if (subscriptionError) {
     throw subscriptionError;
   }
-
 
   let generated = 0;
   let updated = 0;
@@ -863,6 +852,182 @@ export async function getMonthlyBillDetails(
       totalAmount: calculated.totalAmount,
       deliveredDays: calculated.deliveredDays,
       missedDays: calculated.missedDays,
+    },
+  };
+}
+// ======================================================
+// GET COMBINED CUSTOMER MONTHLY BILL DETAILS
+// One invoice for all subscriptions of one customer
+// ======================================================
+
+export async function getCustomerCombinedMonthlyBillDetails(
+  customerId,
+  month,
+  year
+) {
+  if (!customerId) {
+    throw new Error("Customer ID is required");
+  }
+
+  const {
+    month: numericMonth,
+    year: numericYear,
+    fromDate,
+    toDate,
+  } = getMonthDateRange(month, year);
+
+  // 1. Get customer
+  const {
+    data: customer,
+    error: customerError,
+  } = await supabaseAdmin
+    .from("customers")
+    .select("*")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (customerError) throw customerError;
+
+  if (!customer) {
+    throw new Error("Customer not found");
+  }
+
+  // 2. Get all subscriptions of this customer
+  const {
+    data: subscriptions,
+    error: subscriptionError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .select("*")
+    .eq("customer_id", customerId);
+
+  if (subscriptionError) throw subscriptionError;
+
+  // 3. Get existing monthly bills for this customer/month
+  const {
+    data: existingBills,
+    error: billsError,
+  } = await supabaseAdmin
+    .from("monthly_bills")
+    .select("*")
+    .eq("customer_id", customerId)
+    .eq("month", numericMonth)
+    .eq("year", numericYear);
+
+  if (billsError) throw billsError;
+
+  const billDetails = [];
+  const allDeliveries = [];
+
+  // 4. Process each subscription
+  for (const subscription of subscriptions || []) {
+    const deliveries = await getSubscriptionDeliveries(
+      subscription.id,
+      fromDate,
+      toDate
+    );
+
+    const calculated = calculateDeliveredBill(deliveries);
+
+    let bill = (existingBills || []).find(
+      (item) => item.subscription_id === subscription.id
+    );
+
+    // Skip subscriptions with no bill and no completed deliveries
+    if (!bill && calculated.deliveredDays === 0) {
+      continue;
+    }
+
+    // 5. Create a missing bill when deliveries exist
+    if (!bill && calculated.deliveredDays > 0) {
+      const {
+        data: newBill,
+        error: createError,
+      } = await supabaseAdmin
+        .from("monthly_bills")
+        .insert({
+          customer_id: customerId,
+          subscription_id: subscription.id,
+          month: numericMonth,
+          year: numericYear,
+          delivered_days: calculated.deliveredDays,
+          missed_days: calculated.missedDays,
+          subtotal: calculated.subtotal,
+          discount: calculated.discount,
+          total_amount: calculated.totalAmount,
+          payment_status: "Pending",
+        })
+        .select("*")
+        .single();
+
+      if (createError) throw createError;
+
+      bill = newBill;
+    }
+
+    if (!bill) continue;
+
+    allDeliveries.push(...deliveries);
+
+    billDetails.push({
+      bill,
+      subscription,
+      deliveries,
+      calculation: calculated,
+    });
+  }
+
+  // 6. Calculate combined delivery summary
+  const combinedCalculation = calculateDeliveredBill(
+    allDeliveries
+  );
+
+  const totalAmount = billDetails.reduce(
+    (sum, item) => sum + Number(item.bill.total_amount || 0),
+    0
+  );
+
+  const totalDiscount = billDetails.reduce(
+    (sum, item) => sum + Number(item.bill.discount || 0),
+    0
+  );
+
+  const allPaid =
+    billDetails.length > 0 &&
+    billDetails.every(
+      (item) =>
+        String(item.bill.payment_status || "").toLowerCase() === "paid"
+    );
+
+  const paymentStatus = allPaid ? "Paid" : "Pending";
+
+  // 7. Return one combined invoice
+  return {
+    customer,
+
+    month: numericMonth,
+    year: numericYear,
+
+    subscriptions: billDetails.map((item) => item.subscription),
+
+    bills: billDetails.map((item) => item.bill),
+
+    deliveries: allDeliveries,
+
+    bill: {
+      customer_id: customerId,
+      month: numericMonth,
+      year: numericYear,
+      total_amount: roundAmount(totalAmount),
+      discount: roundAmount(totalDiscount),
+      payment_status: paymentStatus,
+    },
+
+    calculation: {
+      ...combinedCalculation,
+      discount: roundAmount(totalDiscount),
+      totalAmount: roundAmount(totalAmount),
+      billCount: billDetails.length,
     },
   };
 }

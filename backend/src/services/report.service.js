@@ -447,6 +447,23 @@ ${subscription.addresses?.city || ""}`,
 
       subscriptionStatus:
         subscription.status || "Unknown",
+        normalQuantity: Math.max(
+  0,
+  finalQuantity - extraQuantity
+),
+
+normalAmount: Math.max(
+  0,
+  billAmount - extraAmount
+),
+
+totalExtraQuantity: extraQuantity,
+
+totalExtraAmount: extraAmount,
+
+totalBill: Number(
+  monthlyBill?.total_amount ?? billAmount
+),
     });
   }
 

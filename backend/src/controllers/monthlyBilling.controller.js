@@ -5,6 +5,7 @@ import {
   markMonthlyBillPaid,
   getMonthlyBillDetails,
   applyMonthlyBillCoupon,
+  getCustomerCombinedMonthlyBillDetails
 } from "../services/monthlyBilling.service.js";
 
 // ======================================
@@ -198,6 +199,43 @@ export async function applyCouponToMonthlyBill(req, res) {
     return res.status(400).json({
       success: false,
       message: err.message || "Unable to apply coupon.",
+    });
+  }
+}
+// ======================================
+// Get Combined Customer Monthly Invoice
+// GET /api/monthly-bills/customer/:customerId/details
+// ======================================
+
+export async function getCombinedCustomerBillDetails(req, res) {
+  try {
+    const { customerId } = req.params;
+    const { month, year } = req.query;
+
+    if (!month || !year) {
+      return res.status(400).json({
+        success: false,
+        message: "Month and year are required.",
+      });
+    }
+
+    const result = await getCustomerCombinedMonthlyBillDetails(
+      customerId,
+      month,
+      year
+    );
+
+    return res.json({
+      success: true,
+      ...result,
+    });
+
+  } catch (err) {
+    console.error("Combined Customer Bill Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 }
