@@ -120,6 +120,36 @@ export async function getMonthlyDeliveryReportService(month, year) {
   }
 
   const allDeliveries = deliveries || [];
+  // =====================================================
+// 3. GET ALL DELIVERY ITEMS IN ONE QUERY
+// =====================================================
+
+const deliveryIds = allDeliveries.map(
+  (delivery) => delivery.id
+);
+
+let allDeliveryItems = [];
+
+if (deliveryIds.length > 0) {
+  const {
+    data: deliveryItems,
+    error: deliveryItemError,
+  } = await supabaseAdmin
+    .from("subscription_delivery_items")
+    .select(`
+      delivery_id,
+      quantity,
+      total_price,
+      is_extra
+    `)
+    .in("delivery_id", deliveryIds);
+
+  if (deliveryItemError) {
+    throw deliveryItemError;
+  }
+
+  allDeliveryItems = deliveryItems || [];
+}
 
   // =====================================================
   // 3. GET ALL DELIVERY ITEMS IN ONE QUERY
