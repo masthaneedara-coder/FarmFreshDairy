@@ -1,25 +1,25 @@
-
 import { supabaseAdmin } from "../config/supabase.js";
 
-// =====================================================
-// MONTHLY DELIVERY REPORT - OPTIMIZED
-// Includes ALL registered customers
-// =====================================================
-
-// Keep .in() filters small so Supabase request URLs stay below HTTP limits.
+// Monthly delivery report.
+// ID filters are batched to keep Supabase request URLs below HTTP limits.
 const ID_BATCH_SIZE = 100;
 
 async function fetchInBatches(ids, fetchBatch) {
   const results = [];
-
   for (let index = 0; index < ids.length; index += ID_BATCH_SIZE) {
     const batch = ids.slice(index, index + ID_BATCH_SIZE);
     const rows = await fetchBatch(batch);
     results.push(...(rows || []));
   }
-
   return results;
 }
+
+const asNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const dateOnly = (value) => String(value || "").slice(0, 10);
 
 export async function getMonthlyDeliveryReportService(month, year) {
   const numericMonth = Number(month);
@@ -35,106 +35,57 @@ export async function getMonthlyDeliveryReportService(month, year) {
     throw new Error("Invalid month or year.");
   }
 
-  const firstDay =
-    `${numericYear}-${String(numericMonth).padStart(2, "0")}-01`;
+  const firstDay = `${numericYear}-${String(numericMonth).padStart(2, "0")}-01`;
+  const lastDate = new Date(numericYear, numericMonth, 0);
+  const lastDay = `${numericYear}-${String(numericMonth).padStart(2, "0")}-${String(
+    lastDate.getDate()
+  ).padStart(2, "0")}`;
 
-  const lastDate = new Date(
-  numericYear,
-  numericMonth,
-  0
-);
-
-const lastDay =
-  `${numericYear}-${String(numericMonth).padStart(2, "0")}-${String(lastDate.getDate()).padStart(2, "0")}`;
-
-  // =====================================================
-  // 1. GET ALL REGISTERED CUSTOMERS
-  // Includes active and inactive customers
-  // =====================================================
-
-  const {
-    data: customers,
-    error: customerError,
-  } = await supabaseAdmin
-    .from("customers")
-    .select(`
-      id,
-      full_name,
-      phone,
-      role,
-      is_active
-    `)
-    .eq("role", "customer");
-
-  if (customerError) {
-    throw customerError;
+  if (!supabaseAdmin) {
+    throw new Error("Supabase admin client is not configured.");
   }
 
-  const allCustomers = customers || [];
+  // 1. All registered customers.
+  const { data: customers, error: customerError } = await supabaseAdmin
+    .from("customers")
+    .select("id, full_name, phone, role, is_active")
+    .eq("role", "customer");
 
-  // =====================================================
-  // 2. GET SUBSCRIPTIONS OVERLAPPING SELECTED MONTH
-  // =====================================================
+  if (customerError) throw customerError;
 
-  const {
-    data: subscriptions,
-    error: subscriptionError,
-  } = await supabaseAdmin
+  // 2. All subscriptions. Delivery rows themselves are restricted to the
+  // selected month below; retaining older subscriptions allows historical
+  // deliveries to be reported even if a subscription is now inactive/expired.
+  const { data: subscriptions, error: subscriptionError } = await supabaseAdmin
     .from("subscriptions")
     .select(`
-      *,
-      customers(
-        id,
-        full_name,
-        phone
-      ),
-      addresses(
-        house_no,
-        street,
-        area,
-        city
-      ),
+      id,
+      customer_id,
+      start_date,
+      end_date,
+      status,
+      customers(id, full_name, phone),
+      addresses(house_no, street, area, city),
       subscription_items(
         quantity,
         size,
         unit_price,
-        products(
-          id,
-          name,
-          size,
-          image
-        )
+        products(id, name, size, image)
       )
-    `)
-   
-    
+    `);
 
-  if (subscriptionError) {
-    throw subscriptionError;
-  }
+  if (subscriptionError) throw subscriptionError;
 
-  const activeSubscriptions = subscriptions || [];
+  const allSubscriptions = subscriptions || [];
+  const subscriptionIds = allSubscriptions.map((subscription) => subscription.id);
 
-  const subscriptionIds = activeSubscriptions.map(
-    (subscription) => subscription.id
-  );
-
-  // =====================================================
-  // 3. GET ALL DELIVERIES IN ONE QUERY
-  // =====================================================
-
+  // 3. Deliveries in the selected calendar month.
   let allDeliveries = [];
-
-  if (subscriptionIds.length > 0) {
+  if (subscriptionIds.length) {
     allDeliveries = await fetchInBatches(subscriptionIds, async (batch) => {
       const { data, error } = await supabaseAdmin
         .from("subscription_deliveries")
-        .select(`
-          id,
-          delivery_date,
-          status,
-          subscription_id
-        `)
+        .select("id, delivery_date, status, subscription_id")
         .in("subscription_id", batch)
         .gte("delivery_date", firstDay)
         .lte("delivery_date", lastDay)
@@ -145,26 +96,14 @@ const lastDay =
     });
   }
 
-  // =====================================================
-  // 4. GET ALL DELIVERY ITEMS IN ONE QUERY
-  // =====================================================
-
-  const deliveryIds = allDeliveries.map(
-    (delivery) => delivery.id
-  );
-
+  // 4. Items belonging to those deliveries.
+  const deliveryIds = allDeliveries.map((delivery) => delivery.id);
   let allDeliveryItems = [];
-
-  if (deliveryIds.length > 0) {
+  if (deliveryIds.length) {
     allDeliveryItems = await fetchInBatches(deliveryIds, async (batch) => {
       const { data, error } = await supabaseAdmin
         .from("subscription_delivery_items")
-        .select(`
-          delivery_id,
-          quantity,
-          total_price,
-          is_extra
-        `)
+        .select("delivery_id, quantity, total_price, is_extra")
         .in("delivery_id", batch);
 
       if (error) throw error;
@@ -172,29 +111,15 @@ const lastDay =
     });
   }
 
-  // =====================================================
-  // 5. GET MONTHLY BILLS
-  // =====================================================
-
+  // 5. Monthly bills, fetched in batches too.
   let monthlyBills = [];
-
-  if (subscriptionIds.length > 0) {
+  if (subscriptionIds.length) {
     monthlyBills = await fetchInBatches(subscriptionIds, async (batch) => {
       const { data, error } = await supabaseAdmin
         .from("monthly_bills")
         .select(`
-          id,
-          subscription_id,
-          month,
-          year,
-          delivered_days,
-          missed_days,
-          subtotal,
-          discount,
-          gst_amount,
-          total_amount,
-          payment_status,
-          paid_at
+          id, subscription_id, month, year, delivered_days, missed_days,
+          subtotal, discount, gst_amount, total_amount, payment_status, paid_at
         `)
         .in("subscription_id", batch)
         .eq("month", numericMonth)
@@ -205,308 +130,204 @@ const lastDay =
     });
   }
 
-  const monthlyBillsBySubscription = new Map(
-    monthlyBills.map((bill) => [
-      bill.subscription_id,
-      bill,
-    ])
-  );
-
-  // =====================================================
-  // 6. GROUP DATA IN MEMORY
-  // =====================================================
-
   const deliveriesBySubscription = new Map();
-
   for (const delivery of allDeliveries) {
-    if (!deliveriesBySubscription.has(delivery.subscription_id)) {
-      deliveriesBySubscription.set(
-        delivery.subscription_id,
-        []
-      );
-    }
-
-    deliveriesBySubscription
-      .get(delivery.subscription_id)
-      .push(delivery);
+    const list = deliveriesBySubscription.get(delivery.subscription_id) || [];
+    list.push(delivery);
+    deliveriesBySubscription.set(delivery.subscription_id, list);
   }
 
   const itemsByDelivery = new Map();
-
-  for (const deliveryItem of allDeliveryItems) {
-    if (!itemsByDelivery.has(deliveryItem.delivery_id)) {
-      itemsByDelivery.set(
-        deliveryItem.delivery_id,
-        []
-      );
-    }
-
-    itemsByDelivery
-      .get(deliveryItem.delivery_id)
-      .push(deliveryItem);
+  for (const item of allDeliveryItems) {
+    const list = itemsByDelivery.get(item.delivery_id) || [];
+    list.push(item);
+    itemsByDelivery.set(item.delivery_id, list);
   }
 
-  // =====================================================
-  // 7. BUILD SUBSCRIPTION REPORT
-  // =====================================================
+  const billsBySubscription = new Map();
+  for (const bill of monthlyBills) {
+    const list = billsBySubscription.get(bill.subscription_id) || [];
+    list.push(bill);
+    billsBySubscription.set(bill.subscription_id, list);
+  }
 
-  const report = [];
+  // Aggregate by CUSTOMER, not by subscription. This is important when a
+  // customer has more than one subscription: a calendar date must count once.
+  const customerReports = new Map();
 
-  const customersWithSubscriptions = new Set();
-
-  for (const subscription of activeSubscriptions) {
-    if (subscription.customer_id) {
-      customersWithSubscriptions.add(subscription.customer_id);
+  const ensureCustomer = (customerId, customerData = {}) => {
+    if (!customerReports.has(customerId)) {
+      customerReports.set(customerId, {
+        customerId,
+        customerName: customerData.full_name || "Unknown Customer",
+        phone: customerData.phone || "",
+        area: "",
+        address: "",
+        product: "",
+        quantity: 0,
+        size: null,
+        deliveredDateSet: new Set(),
+        missedDateSet: new Set(),
+        normalQuantity: 0,
+        normalAmount: 0,
+        extraQuantity: 0,
+        extraAmount: 0,
+        dailyRate: 0,
+        billDiscount: 0,
+        gstAmount: 0,
+        monthlyBillTotal: 0,
+        hasMonthlyBill: false,
+        paymentStatuses: [],
+        monthlyBillIds: [],
+        paidAtValues: [],
+        subscriptionStatuses: [],
+        subscriptionIds: [],
+      });
     }
+    return customerReports.get(customerId);
+  };
 
-    const monthlyBill =
-      monthlyBillsBySubscription.get(subscription.id);
+  for (const subscription of allSubscriptions) {
+    if (!subscription.customer_id) continue;
 
-    const subscriptionStartDate =
-      subscription.start_date
-        ? String(subscription.start_date).slice(0, 10)
-        : null;
+    const customer = ensureCustomer(subscription.customer_id, {
+      full_name: subscription.customers?.full_name,
+      phone: subscription.customers?.phone,
+    });
 
-    const subscriptionEndDate =
-      subscription.end_date
-        ? String(subscription.end_date).slice(0, 10)
-        : null;
+    customer.subscriptionIds.push(subscription.id);
+    if (!customer.area) customer.area = subscription.addresses?.area || "";
+    if (!customer.address) {
+      customer.address = [
+        subscription.addresses?.house_no,
+        subscription.addresses?.street,
+        subscription.addresses?.city,
+      ].filter(Boolean).join("\n");
+    }
+    if (!customer.product) {
+      customer.product =
+        subscription.subscription_items?.[0]?.products?.name || "";
+    }
+    if (!customer.size) {
+      customer.size = subscription.subscription_items?.[0]?.size || null;
+    }
+    if (subscription.status) customer.subscriptionStatuses.push(subscription.status);
 
-    const effectiveStartDate =
-      subscriptionStartDate &&
-      subscriptionStartDate > firstDay
-        ? subscriptionStartDate
-        : firstDay;
+    const subscriptionItem = subscription.subscription_items?.[0];
+    const fallbackQuantity = asNumber(subscriptionItem?.quantity) || 1;
+    const fallbackDailyRate = asNumber(subscriptionItem?.unit_price);
+    if (!customer.dailyRate) customer.dailyRate = fallbackDailyRate;
 
-    const effectiveEndDate =
-      subscriptionEndDate &&
-      subscriptionEndDate < lastDay
-        ? subscriptionEndDate
-        : lastDay;
+    const deliveries = deliveriesBySubscription.get(subscription.id) || [];
+    for (const delivery of deliveries) {
+      const deliveryDate = dateOnly(delivery.delivery_date);
+      if (!deliveryDate || deliveryDate < firstDay || deliveryDate > lastDay) continue;
 
-    const deliveredDateSet = new Set();
-    const missedDateSet = new Set();
-    let deliveredDays = 0;
-    let missedDays = 0;
-    let normalQuantity = 0;
-    let normalAmount = 0;
-    let extraQuantity = 0;
-    let extraAmount = 0;
-
-    const item = subscription.subscription_items?.[0];
-
-    const subscriptionItemQuantity = Number(item?.quantity || 1);
-    const dailyRate = Number(item?.unit_price || 0);
-
-    const subscriptionDeliveries =
-      deliveriesBySubscription.get(subscription.id) || [];
-
-    for (const delivery of subscriptionDeliveries) {
-      const deliveryDate = String(delivery.delivery_date || "").slice(0, 10);
-
-      if (
-        deliveryDate < effectiveStartDate ||
-        deliveryDate > effectiveEndDate
-      ) {
-        continue;
-      }
-
-      const status = String(delivery.status || "")
-        .trim()
-        .toLowerCase();
+      const status = String(delivery.status || "").trim().toLowerCase();
 
       if (status === "delivered") {
-        deliveredDateSet.add(deliveryDate);
+        customer.deliveredDateSet.add(deliveryDate);
       } else if (status === "missed") {
-        missedDateSet.add(deliveryDate);
+        customer.missedDateSet.add(deliveryDate);
       }
 
-      if (status !== "delivered") {
-        continue;
-      }
+      if (status !== "delivered") continue;
 
       const deliveryItems = itemsByDelivery.get(delivery.id) || [];
-
-      if (deliveryItems.length > 0) {
+      if (deliveryItems.length) {
         for (const deliveryItem of deliveryItems) {
-          const itemQuantity = Number(deliveryItem.quantity || 0);
-          const itemTotal = Number(deliveryItem.total_price || 0);
-
+          const quantity = asNumber(deliveryItem.quantity);
+          const amount = asNumber(deliveryItem.total_price);
           if (deliveryItem.is_extra === true) {
-            extraQuantity += itemQuantity;
-            extraAmount += itemTotal;
+            customer.extraQuantity += quantity;
+            customer.extraAmount += amount;
           } else {
-            normalQuantity += itemQuantity;
-            normalAmount += itemTotal;
+            customer.normalQuantity += quantity;
+            customer.normalAmount += amount;
           }
         }
       } else {
-        // Fallback for older delivery records without delivery-item rows.
-        normalQuantity += subscriptionItemQuantity;
-        normalAmount += dailyRate;
+        // Legacy delivery without item rows: use the subscription's normal item.
+        customer.normalQuantity += fallbackQuantity;
+        customer.normalAmount += fallbackDailyRate;
       }
     }
 
-    // Count unique calendar dates, not delivery rows.
-    deliveredDays = deliveredDateSet.size;
-    missedDays = missedDateSet.size;
-
-    // Fallback for older records where quantities/prices were not stored
-    // in subscription_delivery_items.
-    if (deliveredDays > 0 && normalAmount === 0 && dailyRate > 0) {
-      normalQuantity = deliveredDays * subscriptionItemQuantity;
-      normalAmount = deliveredDays * dailyRate;
+    for (const bill of billsBySubscription.get(subscription.id) || []) {
+      customer.hasMonthlyBill = true;
+      customer.monthlyBillTotal += asNumber(bill.total_amount);
+      customer.billDiscount += asNumber(bill.discount);
+      customer.gstAmount += asNumber(bill.gst_amount);
+      if (bill.payment_status) customer.paymentStatuses.push(bill.payment_status);
+      if (bill.id) customer.monthlyBillIds.push(bill.id);
+      if (bill.paid_at) customer.paidAtValues.push(bill.paid_at);
     }
-
-    const finalQuantity = normalQuantity + extraQuantity;
-    const billAmount = normalAmount + extraAmount;
-
-    report.push({
-      customerId:
-        subscription.customer_id,
-
-      subscriptionId:
-        subscription.id,
-
-      customerName:
-        subscription.customers?.full_name,
-
-      phone:
-        subscription.customers?.phone,
-
-      area:
-        subscription.addresses?.area,
-
-      address:
-        `${subscription.addresses?.house_no || ""}
-${subscription.addresses?.street || ""}
-${subscription.addresses?.city || ""}`,
-
-      product:
-        item?.products?.name || "Product Not Available",
-
-      quantity:
-        finalQuantity,
-
-      size:
-        item?.size || null,
-
-      deliveredDays,
-
-      missedDays,
-
-      dailyRate,
-
-      extraQuantity,
-
-      extraAmount,
-
-      billAmount,
-
-      monthlyAmount: Number(
-        monthlyBill?.total_amount ?? billAmount
-      ),
-
-      subtotal: billAmount,
-
-      discount: Number(
-        monthlyBill?.discount ?? 0
-      ),
-
-      gstAmount: Number(
-        monthlyBill?.gst_amount ?? 0
-      ),
-
-      paymentStatus:
-        monthlyBill?.payment_status || "Not Generated",
-
-      monthlyBillId:
-        monthlyBill?.id || null,
-
-      paidAt:
-        monthlyBill?.paid_at || null,
-
-      subscriptionStatus:
-        subscription.status || "Unknown",
-        normalQuantity,
-        normalAmount,
-
-totalExtraQuantity: extraQuantity,
-
-totalExtraAmount: extraAmount,
-
-totalBill: Number(
-  monthlyBill?.total_amount ?? billAmount
-),
-    });
   }
 
-  // =====================================================
-  // 8. ADD CUSTOMERS WITHOUT SUBSCRIPTIONS
-  // =====================================================
-
-  for (const customer of allCustomers) {
-    if (customersWithSubscriptions.has(customer.id)) {
-      continue;
-    }
-
-    report.push({
-      customerId: customer.id,
-
-      subscriptionId: null,
-
-      customerName: customer.full_name,
-
+  // Include customers with no subscription for the selected month.
+  for (const customer of customers || []) {
+    ensureCustomer(customer.id, {
+      full_name: customer.full_name,
       phone: customer.phone,
-
-      area: "",
-
-      address: "",
-
-      product: "No Subscription",
-
-      quantity: 0,
-
-      size: null,
-
-      deliveredDays: 0,
-
-      missedDays: 0,
-
-      dailyRate: 0,
-
-      extraQuantity: 0,
-
-      extraAmount: 0,
-
-      billAmount: 0,
-
-      monthlyAmount: 0,
-
-      subtotal: 0,
-
-      discount: 0,
-
-      gstAmount: 0,
-
-      paymentStatus: "No Invoice",
-
-      monthlyBillId: null,
-
-      paidAt: null,
-
-      subscriptionStatus: "No Active Subscription",
     });
   }
 
-  // =====================================================
-  // 9. SORT BY CUSTOMER NAME
-  // =====================================================
+  const report = [];
+  for (const customer of customerReports.values()) {
+    const deliveredDays = customer.deliveredDateSet.size;
+    const missedDays = customer.missedDateSet.size;
+    const deliveryAmount = customer.normalAmount;
+    const totalAmount = deliveryAmount + customer.extraAmount;
+    const totalQuantity = customer.normalQuantity + customer.extraQuantity;
+
+    report.push({
+      customerId: customer.customerId,
+      customerName: customer.customerName,
+      phone: customer.phone,
+      area: customer.area,
+      address: customer.address,
+      product: customer.product || "No Subscription",
+      quantity: totalQuantity,
+      size: customer.size,
+      deliveredDays,
+      missedDays,
+      dailyRate: customer.dailyRate,
+      normalQuantity: customer.normalQuantity,
+      normalAmount: deliveryAmount,
+      deliveryAmount,
+      extraQuantity: customer.extraQuantity,
+      extraAmount: customer.extraAmount,
+      billAmount: totalAmount,
+      monthlyAmount: customer.hasMonthlyBill
+        ? customer.monthlyBillTotal
+        : totalAmount,
+      subtotal: totalAmount,
+      discount: customer.billDiscount,
+      gstAmount: customer.gstAmount,
+      paymentStatus: customer.paymentStatuses.length
+        ? customer.paymentStatuses.join(", ")
+        : customer.subscriptionIds.length
+          ? "Not Generated"
+          : "No Invoice",
+      monthlyBillId: customer.monthlyBillIds.join(", ") || null,
+      paidAt: customer.paidAtValues[0] || null,
+      subscriptionStatus: customer.subscriptionStatuses.join(", ") ||
+        (customer.subscriptionIds.length ? "Unknown" : "No Active Subscription"),
+      subscriptionIds: customer.subscriptionIds,
+      // Explicit snake_case aliases for consumers expecting database-style keys.
+      customer_id: customer.customerId,
+      customer_name: customer.customerName,
+      delivered_days: deliveredDays,
+      missed_days: missedDays,
+      normal_quantity: customer.normalQuantity,
+      extra_quantity: customer.extraQuantity,
+      delivery_amount: deliveryAmount,
+      extra_amount: customer.extraAmount,
+    });
+  }
 
   report.sort((a, b) =>
-    String(a.customerName || "").localeCompare(
-      String(b.customerName || "")
-    )
+    String(a.customerName || "").localeCompare(String(b.customerName || ""))
   );
 
   return report;
