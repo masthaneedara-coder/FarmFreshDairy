@@ -6,6 +6,21 @@ import { supabaseAdmin } from "../config/supabase.js";
 // Includes ALL registered customers
 // =====================================================
 
+// Keep .in() filters small so Supabase request URLs stay below HTTP limits.
+const ID_BATCH_SIZE = 100;
+
+async function fetchInBatches(ids, fetchBatch) {
+  const results = [];
+
+  for (let index = 0; index < ids.length; index += ID_BATCH_SIZE) {
+    const batch = ids.slice(index, index + ID_BATCH_SIZE);
+    const rows = await fetchBatch(batch);
+    results.push(...(rows || []));
+  }
+
+  return results;
+}
+
 export async function getMonthlyDeliveryReportService(month, year) {
   const numericMonth = Number(month);
   const numericYear = Number(year);
@@ -111,29 +126,23 @@ const lastDay =
   let allDeliveries = [];
 
   if (subscriptionIds.length > 0) {
-    const {
-      data: deliveries,
-      error: deliveryError,
-    } = await supabaseAdmin
-      .from("subscription_deliveries")
-      .select(`
-        id,
-        delivery_date,
-        status,
-        subscription_id
-      `)
-      .in("subscription_id", subscriptionIds)
-      .gte("delivery_date", firstDay)
-      .lte("delivery_date", lastDay)
-      .order("delivery_date", {
-        ascending: true,
-      });
+    allDeliveries = await fetchInBatches(subscriptionIds, async (batch) => {
+      const { data, error } = await supabaseAdmin
+        .from("subscription_deliveries")
+        .select(`
+          id,
+          delivery_date,
+          status,
+          subscription_id
+        `)
+        .in("subscription_id", batch)
+        .gte("delivery_date", firstDay)
+        .lte("delivery_date", lastDay)
+        .order("delivery_date", { ascending: true });
 
-    if (deliveryError) {
-      throw deliveryError;
-    }
-
-    allDeliveries = deliveries || [];
+      if (error) throw error;
+      return data || [];
+    });
   }
 
   // =====================================================
@@ -147,24 +156,20 @@ const lastDay =
   let allDeliveryItems = [];
 
   if (deliveryIds.length > 0) {
-    const {
-      data: deliveryItems,
-      error: deliveryItemError,
-    } = await supabaseAdmin
-      .from("subscription_delivery_items")
-      .select(`
-        delivery_id,
-        quantity,
-        total_price,
-        is_extra
-      `)
-      .in("delivery_id", deliveryIds);
+    allDeliveryItems = await fetchInBatches(deliveryIds, async (batch) => {
+      const { data, error } = await supabaseAdmin
+        .from("subscription_delivery_items")
+        .select(`
+          delivery_id,
+          quantity,
+          total_price,
+          is_extra
+        `)
+        .in("delivery_id", batch);
 
-    if (deliveryItemError) {
-      throw deliveryItemError;
-    }
-
-    allDeliveryItems = deliveryItems || [];
+      if (error) throw error;
+      return data || [];
+    });
   }
 
   // =====================================================
@@ -174,34 +179,30 @@ const lastDay =
   let monthlyBills = [];
 
   if (subscriptionIds.length > 0) {
-    const {
-      data: bills,
-      error: monthlyBillError,
-    } = await supabaseAdmin
-      .from("monthly_bills")
-      .select(`
-        id,
-        subscription_id,
-        month,
-        year,
-        delivered_days,
-        missed_days,
-        subtotal,
-        discount,
-        gst_amount,
-        total_amount,
-        payment_status,
-        paid_at
-      `)
-      .in("subscription_id", subscriptionIds)
-      .eq("month", numericMonth)
-      .eq("year", numericYear);
+    monthlyBills = await fetchInBatches(subscriptionIds, async (batch) => {
+      const { data, error } = await supabaseAdmin
+        .from("monthly_bills")
+        .select(`
+          id,
+          subscription_id,
+          month,
+          year,
+          delivered_days,
+          missed_days,
+          subtotal,
+          discount,
+          gst_amount,
+          total_amount,
+          payment_status,
+          paid_at
+        `)
+        .in("subscription_id", batch)
+        .eq("month", numericMonth)
+        .eq("year", numericYear);
 
-    if (monthlyBillError) {
-      throw monthlyBillError;
-    }
-
-    monthlyBills = bills || [];
+      if (error) throw error;
+      return data || [];
+    });
   }
 
   const monthlyBillsBySubscription = new Map(
@@ -283,6 +284,8 @@ const lastDay =
         ? subscriptionEndDate
         : lastDay;
 
+    const deliveredDateSet = new Set();
+    const missedDateSet = new Set();
     let deliveredDays = 0;
     let missedDays = 0;
     let normalQuantity = 0;
@@ -313,9 +316,9 @@ const lastDay =
         .toLowerCase();
 
       if (status === "delivered") {
-        deliveredDays++;
+        deliveredDateSet.add(deliveryDate);
       } else if (status === "missed") {
-        missedDays++;
+        missedDateSet.add(deliveryDate);
       }
 
       if (status !== "delivered") {
@@ -343,6 +346,10 @@ const lastDay =
         normalAmount += dailyRate;
       }
     }
+
+    // Count unique calendar dates, not delivery rows.
+    deliveredDays = deliveredDateSet.size;
+    missedDays = missedDateSet.size;
 
     // Fallback for older records where quantities/prices were not stored
     // in subscription_delivery_items.
