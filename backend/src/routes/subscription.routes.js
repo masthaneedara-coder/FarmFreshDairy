@@ -19,6 +19,10 @@ import {
   getRenewalLinkDetails,
   renewUsingLink,
   createRenewalPaymentOrder,
+  createManageSubscriptionLink,
+getManageSubscriptionDetails,
+pauseSubscriptionUsingManageLink,
+resumeSubscriptionUsingManageLink,
 } from "../controllers/subscription.controller.js";
 
 const router = express.Router();
@@ -78,7 +82,12 @@ router.post(
   "/renew-link/:token/payment-order",
   createRenewalPaymentOrder
 );
-
+/* CUSTOMER SUBSCRIPTION MANAGEMENT - PUBLIC TOKEN ROUTES */
+router.get("/manage/:token", getManageSubscriptionDetails);
+router.post("/manage/:token/pause", pauseSubscriptionUsingManageLink);
+router.post("/manage/:token/resume", resumeSubscriptionUsingManageLink);
+// ADMIN-PROTECTED ROUTE - add after confirming middleware
+router.post("/:id/manage-link", createManageSubscriptionLink);
 
 
 router.post("/renew-link/:token", renewUsingLink);
