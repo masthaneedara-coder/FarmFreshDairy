@@ -1295,6 +1295,16 @@ export async function pauseSubscriptionUsingManageLink(req, res) {
     // Validate the secure token first.
     const result = await getSubscriptionManageLinkService(token);
     const subscription = result.subscription;
+    const currentStatus = String(subscription.status || "")
+        .trim()
+        .toLowerCase();
+
+      if (currentStatus !== "active" || subscription.is_paused === true) {
+        return res.status(400).json({
+          success: false,
+          message: "Only active subscriptions can be paused.",
+        });
+      }
 
     const from = new Date(`${pause_from}T00:00:00.000Z`);
     const to = new Date(`${pause_to}T00:00:00.000Z`);
@@ -1318,12 +1328,12 @@ export async function pauseSubscriptionUsingManageLink(req, res) {
       });
     }
 
-    if (subscription.is_paused) {
-      return res.status(400).json({
-        success: false,
-        message: "This subscription is already paused.",
-      });
-    }
+    // if (subscription.is_paused) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "This subscription is already paused.",
+    //   });
+    // }
 
     if (from < today) {
       return res.status(400).json({
