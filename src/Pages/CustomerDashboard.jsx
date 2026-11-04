@@ -25,6 +25,7 @@ import {
 import { fetchDashboard } from "../services/dashboardService";
 
 import ExtraMilkCard from "../Components/ExtraMilkCard";
+import DeliverySizeOverrides from "../Components/subscription/DeliverySizeOverrides";
 import {
   pauseSubscriptionApi,
   resumeSubscriptionApi,
@@ -98,6 +99,9 @@ export default function CustomerDashboard() {
 const [showResumeDeliveryModal, setShowResumeDeliveryModal] = useState(false);
   const [renewingId, setRenewingId] = useState("");
   const [expandedSubscriptionId, setExpandedSubscriptionId] = useState(null);
+  const [selectedOverrideSubscriptionId, setSelectedOverrideSubscriptionId] = useState(null);
+  const [showDeliveryOverrideModal, setShowDeliveryOverrideModal] = useState(false);
+  const deliveryOverrideModalContentRef = useRef(null);
   const [showOlderOrders, setShowOlderOrders] = useState(false);
   const [expandedOrderId, setExpandedOrderId] = useState(null);
 
@@ -690,6 +694,29 @@ const handleContinueRegularSchedule = async () => {
       : latestRenewableExpiredSubscription
         ? [latestRenewableExpiredSubscription]
         : [];
+
+  // Keep the date-specific milk change control in one place under My Subscriptions.
+  // Only one instance is mounted to avoid duplicate override API requests.
+  const eligibleDeliveryOverrideSubscriptions = activeSubscriptions.filter((sub) => {
+    const currentStatus = String(sub.status || "Active").toLowerCase();
+    return sub.is_paused !== true && currentStatus === "active";
+  });
+
+  const selectedOverrideSubscription =
+    eligibleDeliveryOverrideSubscriptions.find(
+      (sub) => sub.id === selectedOverrideSubscriptionId
+    ) || eligibleDeliveryOverrideSubscriptions[0] || null;
+
+  // The existing DeliverySizeOverrides component contains its own disclosure.
+  // Open that disclosure automatically when the customer opens this modal,
+  // so the form is immediately visible after a single tap.
+  useEffect(() => {
+    if (!showDeliveryOverrideModal) return;
+    const root = deliveryOverrideModalContentRef.current;
+    if (!root) return;
+    const disclosure = root.querySelector("details");
+    if (disclosure) disclosure.open = true;
+  }, [showDeliveryOverrideModal, selectedOverrideSubscription?.id]);
 
   if (loading) {
     return (
@@ -3020,6 +3047,133 @@ const handleContinueRegularSchedule = async () => {
         .wallet-card > p { max-width:400px; line-height:1.6 !important; }
         .wallet-card > button { min-height:42px !important; padding:0 14px !important; border-radius:12px !important; }
         .dashboard-extra { margin:0 0 24px !important; }
+        /* Paired customer actions: compact, balanced cards on desktop. */
+        .dashboard-subscription-tools-row {
+          display:grid;
+          /* Keep Extra Milk and Delivery Preference exactly equal in width. */
+          grid-template-columns:repeat(2,minmax(0,1fr));
+          gap:14px;
+          align-items:stretch;
+          margin:0 0 16px;
+        }
+        .dashboard-extra-inline {
+          width:100%;
+          height:208px;
+          min-width:0 !important;
+          min-height:208px;
+          margin:0 !important;
+          overflow:hidden;
+          border-radius:22px;
+          box-sizing:border-box;
+        }
+        .dashboard-extra-inline > * {
+          width:100% !important;
+          height:208px !important;
+          min-width:0;
+          min-height:208px !important;
+          max-height:208px !important;
+          margin:0 !important;
+          overflow:hidden;
+          border-radius:22px;
+          box-sizing:border-box;
+        }
+        .dashboard-override-action-card {
+          position:relative;
+          overflow:hidden;
+          display:flex;
+          align-items:center;
+          gap:14px;
+          width:100%;
+          height:208px;
+          min-width:0;
+          min-height:208px;
+          padding:20px 22px;
+          border:1px solid #d8eee1;
+          border-radius:22px;
+          background:linear-gradient(135deg,#ffffff 0%,#f3fcf6 55%,#e8faf1 100%);
+          color:#173b2b;
+          text-align:left;
+          cursor:pointer;
+          box-shadow:0 8px 22px rgba(23,61,41,.055);
+          transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
+        }
+        .dashboard-override-action-card::after {
+          content:"";
+          position:absolute;
+          width:150px;
+          height:150px;
+          right:-72px;
+          bottom:-92px;
+          border-radius:50%;
+          background:rgba(16,185,129,.07);
+          pointer-events:none;
+        }
+        .dashboard-override-action-card:hover:not(:disabled) {
+          transform:translateY(-2px);
+          border-color:#83d8a8;
+          box-shadow:0 14px 28px rgba(23,120,76,.095);
+        }
+        .dashboard-override-action-card:disabled { cursor:not-allowed; opacity:.62; }
+        .dashboard-override-action-icon {
+          width:52px;
+          height:52px;
+          flex:0 0 52px;
+          display:grid;
+          place-items:center;
+          border-radius:16px;
+          background:#ddf8e9;
+          color:#07845c;
+          box-shadow:inset 0 0 0 1px rgba(7,132,92,.05);
+        }
+        .dashboard-override-action-copy { min-width:0; display:flex; flex-direction:column; gap:5px; }
+        .dashboard-override-action-copy small { color:#07845c; font-size:9px; line-height:1.2; font-weight:950; letter-spacing:.12em; }
+        .dashboard-override-action-copy strong { color:#173b2b; font-size:clamp(15px,1.35vw,17px); line-height:1.25; font-weight:900; }
+        .dashboard-override-action-copy span { color:#819188; font-size:11px; line-height:1.4; }
+        .dashboard-override-action-chevron { margin-left:auto; flex:0 0 auto; color:#07845c; position:relative; z-index:1; }
+        .dashboard-override-modal-select {
+          margin:0 0 12px;
+          padding:13px 15px;
+          border:1px solid #dcebe2;
+          border-radius:14px;
+          background:#fff;
+        }
+        .dashboard-override-modal-select label { display:block; color:#17633e; font-size:12px; font-weight:850; }
+        .dashboard-override-modal-select select {
+          display:block; width:100%; min-height:44px; margin-top:7px; padding:9px 12px;
+          border:1px solid #d5e5da; border-radius:11px; background:#fbfefc;
+          color:#1f2937; font-size:14px; font-weight:700; outline:none;
+        }
+        .dashboard-override-modal-select select:focus { border-color:#10a36a; box-shadow:0 0 0 3px rgba(16,163,106,.12); }
+        .dashboard-override-modal-select select:disabled { color:#475569; opacity:1; cursor:default; }
+        .dashboard-override-modal-backdrop {
+          position:fixed; inset:0; z-index:10050;
+          display:flex; align-items:center; justify-content:center;
+          padding:18px; background:rgba(10,28,20,.58);
+          backdrop-filter:blur(5px);
+        }
+        .dashboard-override-modal {
+          width:min(760px,100%); max-height:92dvh; overflow-y:auto;
+          border:1px solid #dcebe2; border-radius:22px; background:#f8fcf9;
+          box-shadow:0 24px 80px rgba(0,0,0,.28);
+        }
+        .dashboard-override-modal-header {
+          position:sticky; top:0; z-index:2;
+          display:flex; align-items:flex-start; justify-content:space-between; gap:14px;
+          padding:18px 20px; border-bottom:1px solid #e5eee8;
+          background:rgba(255,255,255,.97); backdrop-filter:blur(12px);
+        }
+        .dashboard-override-modal-header span { color:#07845c; font-size:9px; font-weight:950; letter-spacing:.13em; }
+        .dashboard-override-modal-header h2 { margin:4px 0 0; color:#173b2b; font-size:19px; line-height:1.25; font-weight:900; }
+        .dashboard-override-modal-header p { margin:4px 0 0; color:#819188; font-size:11px; }
+        .dashboard-override-modal-close {
+          width:36px; height:36px; flex:0 0 36px; display:grid; place-items:center;
+          border:1px solid #e1ebe5; border-radius:11px; background:#fff; color:#52665a; cursor:pointer;
+        }
+        .dashboard-override-modal-content { padding:14px; }
+        /* The disclosure is opened by the dashboard when the popup appears. */
+        .dashboard-override-modal-content details > summary { display:none !important; }
+        .dashboard-override-modal-content details[open] > *:not(summary) { display:block; }
+        .dashboard-override-modal-content details > div { margin-top:0 !important; }
         .dashboard-section-header { display:flex !important; align-items:flex-end !important; justify-content:space-between !important; gap:16px !important; margin-bottom:15px !important; }
         .dashboard-eyebrow { color:#07845c !important; font-size:10px !important; font-weight:850 !important; letter-spacing:1.4px !important; text-transform:uppercase; }
         .dashboard-section-title { margin:5px 0 0 !important; color:#193b2d !important; font-size:clamp(21px,2.4vw,27px) !important; letter-spacing:-.8px !important; font-weight:850 !important; }
@@ -3043,6 +3197,7 @@ const handleContinueRegularSchedule = async () => {
         .dashboard-stats > *:nth-child(4) { animation-delay:.12s; }
         @media (min-width:1100px) { .dashboard-section.wallet-billing-section { margin-top:2px !important; } }
         @media (max-width:900px) {
+          .dashboard-subscription-tools-row { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
           .customer-dashboard { padding:16px 16px 100px !important; }
           .dashboard-content,.dashboard-container { width:100% !important; max-width:100% !important; }
           .dashboard-hero-content { padding:25px !important; }
@@ -3050,6 +3205,57 @@ const handleContinueRegularSchedule = async () => {
           .orders-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
         }
         @media (max-width:600px) {
+          /* Keep both customer action cards side by side on mobile. */
+          .dashboard-subscription-tools-row {
+            display:grid !important;
+            grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+            gap:8px !important;
+            margin-bottom:12px !important;
+            align-items:stretch !important;
+          }
+          .dashboard-extra-inline {
+            height:148px !important;
+            min-height:148px !important;
+            border-radius:16px !important;
+          }
+          /* Scale the existing Extra Milk card proportionally so its layout remains intact. */
+          .dashboard-extra-inline > * {
+            width:125% !important;
+            height:185px !important;
+            min-height:185px !important;
+            max-height:185px !important;
+            zoom:.8;
+            border-radius:16px !important;
+          }
+          .dashboard-override-action-card {
+            height:148px !important;
+            min-height:148px !important;
+            max-height:148px !important;
+            padding:10px 7px !important;
+            gap:6px !important;
+            border-radius:16px !important;
+            flex-direction:column !important;
+            justify-content:center !important;
+            align-items:center !important;
+            text-align:center !important;
+          }
+          .dashboard-override-action-icon {
+            width:34px !important;
+            height:34px !important;
+            flex:0 0 34px !important;
+            border-radius:11px !important;
+          }
+          .dashboard-override-action-icon svg { width:19px !important; height:19px !important; }
+          .dashboard-override-action-copy { align-items:center !important; gap:3px !important; width:100% !important; }
+          .dashboard-override-action-copy small { font-size:6px !important; letter-spacing:.08em !important; }
+          .dashboard-override-action-copy strong { font-size:10px !important; line-height:1.2 !important; max-width:100% !important; }
+          .dashboard-override-action-copy span { font-size:8px !important; line-height:1.2 !important; }
+          .dashboard-override-action-chevron { position:absolute !important; right:7px !important; top:7px !important; width:13px !important; height:13px !important; margin:0 !important; }
+          .dashboard-override-modal-backdrop { align-items:flex-end; padding:8px; }
+          .dashboard-override-modal { width:100%; max-height:94dvh; border-radius:20px 20px 14px 14px; }
+          .dashboard-override-modal-header { padding:14px; }
+          .dashboard-override-modal-header h2 { font-size:16px; }
+          .dashboard-override-modal-content { padding:9px; }
           .customer-dashboard { padding:10px 12px calc(92px + env(safe-area-inset-bottom)) !important; }
           .dashboard-mobile-top { padding:8px 2px 16px !important; }
           .dashboard-mobile-brand img { width:40px !important; height:40px !important; }
@@ -3083,6 +3289,13 @@ const handleContinueRegularSchedule = async () => {
           .dashboard-bottom-item svg { width:18px !important; height:18px !important; }
         }
         @media (max-width:360px) {
+          .dashboard-subscription-tools-row { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:6px !important; }
+          .dashboard-extra-inline { height:140px !important; min-height:140px !important; }
+          .dashboard-extra-inline > * { width:131.6% !important; height:184px !important; min-height:184px !important; max-height:184px !important; zoom:.76; }
+          .dashboard-override-action-card { height:140px !important; min-height:140px !important; max-height:140px !important; padding:8px 5px !important; }
+          .dashboard-override-action-icon { width:30px !important; height:30px !important; flex-basis:30px !important; }
+          .dashboard-override-action-copy strong { font-size:9px !important; }
+          .dashboard-override-action-copy span { font-size:7px !important; }
           .dashboard-hero-content { padding:18px 14px !important; }
           .dashboard-action { font-size:9px !important; }
           .dashboard-stat { padding:12px 10px !important; }
@@ -3711,11 +3924,6 @@ const handleContinueRegularSchedule = async () => {
           </div>
         </section>
 
-        {/* Extra Milk */}
-        <section className="dashboard-extra">
-          <ExtraMilkCard navigate={navigate} />
-        </section>
-
         {/* Subscriptions */}
         <section className="dashboard-section">
           <div className="dashboard-section-header">
@@ -3744,6 +3952,107 @@ const handleContinueRegularSchedule = async () => {
               </button>
             </div>
           </div>
+
+          <div className="dashboard-subscription-tools-row">
+            <section className="dashboard-extra dashboard-extra-inline">
+              <ExtraMilkCard navigate={navigate} />
+            </section>
+
+            <button
+              type="button"
+              className="dashboard-override-action-card"
+              onClick={() => {
+                if (selectedOverrideSubscription) setShowDeliveryOverrideModal(true);
+              }}
+              disabled={!selectedOverrideSubscription}
+              aria-haspopup="dialog"
+              aria-expanded={showDeliveryOverrideModal}
+            >
+              <span className="dashboard-override-action-icon">
+                <CalendarDays size={25} />
+              </span>
+              <span className="dashboard-override-action-copy">
+                <small>DELIVERY PREFERENCE</small>
+                <strong>Change milk for a specific date</strong>
+                <span>
+                  {selectedOverrideSubscription
+                    ? "Choose a date, milk size and quantity"
+                    : "Start an active subscription to use this option"}
+                </span>
+              </span>
+              <ChevronRight size={21} className="dashboard-override-action-chevron" />
+            </button>
+          </div>
+
+          {showDeliveryOverrideModal && selectedOverrideSubscription && (
+            <div
+              className="dashboard-override-modal-backdrop"
+              role="presentation"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  setShowDeliveryOverrideModal(false);
+                }
+              }}
+            >
+              <section
+                className="dashboard-override-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="dashboard-override-modal-title"
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <header className="dashboard-override-modal-header">
+                  <div>
+                    <span>DELIVERY PREFERENCE</span>
+                    <h2 id="dashboard-override-modal-title">
+                      Change milk for a specific date
+                    </h2>
+                    <p>
+                      Your regular subscription will remain unchanged.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="dashboard-override-modal-close"
+                    onClick={() => setShowDeliveryOverrideModal(false)}
+                    aria-label="Close delivery size overrides"
+                  >
+                    <XCircle size={22} />
+                  </button>
+                </header>
+
+                <div
+                  className="dashboard-override-modal-content"
+                  ref={deliveryOverrideModalContentRef}
+                >
+                  {/* <div className="dashboard-override-modal-select">
+                    <label htmlFor="dashboard-override-subscription-modal">
+                      Select subscription
+                    </label>
+                    <select
+                      id="dashboard-override-subscription-modal"
+                      value={selectedOverrideSubscription.id}
+                      disabled={eligibleDeliveryOverrideSubscriptions.length <= 1}
+                      onChange={(event) =>
+                        setSelectedOverrideSubscriptionId(event.target.value)
+                      }
+                    >
+                      {eligibleDeliveryOverrideSubscriptions.map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.size || "Milk"} · {sub.quantity || 1} per day
+                        </option>
+                      ))}
+                    </select>
+                  </div> */}
+
+                  <DeliverySizeOverrides
+                    key={selectedOverrideSubscription.id}
+                    subscription={selectedOverrideSubscription}
+                  />
+                </div>
+              </section>
+            </div>
+          )}
 
           {activeSubscriptions.length === 0 ? (
             <div className="empty-card">
