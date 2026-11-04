@@ -5,6 +5,7 @@ import { supabaseAdmin } from "../config/supabase.js";
    Debit Wallet - Delivery
 ========================================================== */
 
+
 export async function debitWalletForDelivery({
   customerId,
   amount,
@@ -23,7 +24,52 @@ export async function debitWalletForDelivery({
 
   if (!Number.isFinite(debitAmount) || debitAmount <= 0) {
     throw new Error("Wallet debit amount must be greater than zero");
-  }}
+  }
+
+  console.log("[WALLET][DELIVERY DEBIT][START]", {
+    customerId,
+    deliveryId,
+    deliveryNumber,
+    amount: debitAmount,
+  });
+
+  const { data, error } = await supabaseAdmin.rpc(
+    "wallet_debit",
+    {
+      p_customer_id: customerId,
+      p_amount: debitAmount,
+      p_remarks: `Milk delivery ${deliveryNumber || deliveryId}`,
+      p_reference_id: deliveryId,
+      p_reference_type: "SubscriptionDelivery",
+    }
+  );
+
+  if (error) {
+    console.error("[WALLET][DELIVERY DEBIT][ERROR]", error);
+    throw new Error(error.message || "Wallet debit failed");
+  }
+
+  const result = Array.isArray(data) ? data[0] : data;
+
+  if (!result) {
+    throw new Error("Wallet debit returned no result");
+  }
+
+  const success = result.result_success === true;
+
+  const walletResult = {
+    success,
+    previousBalance: Number(result.previous_balance || 0),
+    debitedAmount: Number(result.debited_amount || 0),
+    newBalance: Number(result.new_balance || 0),
+    message: result.result_message || "Wallet debit completed",
+  };
+
+  console.log("[WALLET][DELIVERY DEBIT][RESULT]", walletResult);
+
+  return walletResult;
+}
+
 /* ==========================================================
    Credit Wallet - Verified Online Payments Only
 ========================================================== */

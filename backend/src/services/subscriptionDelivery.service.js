@@ -281,9 +281,9 @@ export async function updateDeliveryStatusService(
         deliveryNumber: delivery.delivery_number,
       });
 
-      if (!walletResult.success) {
+      if (!walletResult || walletResult.success !== true) {
         throw new Error(
-          walletResult.message ||
+          walletResult?.message ||
             "Insufficient wallet balance"
         );
       }
