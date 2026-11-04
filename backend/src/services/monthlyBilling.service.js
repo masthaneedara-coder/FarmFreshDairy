@@ -1,4 +1,3 @@
-
 import { supabaseAdmin } from "../config/supabase.js";
 
 // ======================================================
@@ -19,31 +18,33 @@ function getMonthDateRange(month, year) {
     throw new Error("Invalid month or year");
   }
 
-  const fromDate =
-    `${numericYear}-${String(numericMonth).padStart(2, "0")}-01`;
+  const fromDate = `${numericYear}-${String(numericMonth).padStart(2, "0")}-01`;
+  const lastDay = new Date(numericYear, numericMonth, 0).getDate();
+  const toDate = `${numericYear}-${String(numericMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-  const lastDay = new Date(
-    numericYear,
-    numericMonth,
-    0
-  ).getDate();
-
-  const toDate =
-    `${numericYear}-${String(numericMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-
-  return {
-    month: numericMonth,
-    year: numericYear,
-    fromDate,
-    toDate,
-  };
+  return { month: numericMonth, year: numericYear, fromDate, toDate };
 }
 
-// Currency rounding
 function roundAmount(value) {
-  return Math.round(
-    (Number(value) + Number.EPSILON) * 100
-  ) / 100;
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
+function isPaidBill(bill) {
+  return String(bill?.payment_status || "").toLowerCase() === "paid";
+}
+
+// Preserve a coupon's existing fixed discount when the delivery subtotal is refreshed.
+// Coupon metadata is never overwritten by these refresh operations.
+function applyExistingBillDiscount(calculated, existingBill = null) {
+  const rawDiscount = Number(existingBill?.discount || 0);
+  const safeDiscount = Number.isFinite(rawDiscount) ? Math.max(rawDiscount, 0) : 0;
+  const discount = roundAmount(Math.min(safeDiscount, calculated.subtotal));
+
+  return {
+    ...calculated,
+    discount,
+    totalAmount: roundAmount(calculated.subtotal - discount),
+  };
 }
 
 // ======================================================
@@ -54,12 +55,7 @@ function calculateInclusiveGST(grossAmount, gstRate) {
   const gross = Number(grossAmount || 0);
   const rate = Number(gstRate || 0);
 
-  if (
-    !Number.isFinite(gross) ||
-    gross < 0 ||
-    !Number.isFinite(rate) ||
-    rate < 0
-  ) {
+  if (!Number.isFinite(gross) || gross < 0 || !Number.isFinite(rate) || rate < 0) {
     throw new Error("Invalid amount or GST rate");
   }
 
@@ -72,14 +68,8 @@ function calculateInclusiveGST(grossAmount, gstRate) {
     };
   }
 
-  // GST is already included in the selling price.
-  const taxableAmount = roundAmount(
-    gross / (1 + rate / 100)
-  );
-
-  const gstAmount = roundAmount(
-    gross - taxableAmount
-  );
+  const taxableAmount = roundAmount(gross / (1 + rate / 100));
+  const gstAmount = roundAmount(gross - taxableAmount);
 
   return {
     taxableAmount,
@@ -96,71 +86,38 @@ function calculateInclusiveGST(grossAmount, gstRate) {
 function calculateDeliveredBill(deliveries = []) {
   let deliveredDays = 0;
   let missedDays = 0;
-
   let subtotal = 0;
   let taxableSubtotal = 0;
   let totalGST = 0;
-
   const gstBreakdown = {};
 
   for (const delivery of deliveries) {
     if (delivery.status === "Delivered") {
       deliveredDays++;
 
-      const items =
-        delivery.subscription_delivery_items || [];
-
-      for (const item of items) {
+      for (const item of delivery.subscription_delivery_items || []) {
         const quantity = Number(item.quantity || 0);
-
-        const unitPrice = Number(
-          item.unit_price || 0
-        );
-
-        // Prefer the actual historical delivered amount.
-        // Fall back to quantity * historical unit price.
+        const unitPrice = Number(item.unit_price || 0);
         const grossAmount =
-          item.total_price !== null &&
-          item.total_price !== undefined
+          item.total_price !== null && item.total_price !== undefined
             ? Number(item.total_price)
             : quantity * unitPrice;
 
-        if (
-          !Number.isFinite(grossAmount) ||
-          grossAmount < 0
-        ) {
-          throw new Error(
-            `Invalid item amount for delivery ${delivery.id}`
-          );
+        if (!Number.isFinite(grossAmount) || grossAmount < 0) {
+          throw new Error(`Invalid item amount for delivery ${delivery.id}`);
         }
 
-        // Use the GST rate on the related product.
-        // If no product GST is available, default to 0.
-        const gstRate = Number(
-          item.products?.gst ?? 0
-        );
-
-        if (
-          !Number.isFinite(gstRate) ||
-          gstRate < 0
-        ) {
-          throw new Error(
-            `Invalid GST rate for delivery ${delivery.id}`
-          );
+        const gstRate = Number(item.products?.gst ?? 0);
+        if (!Number.isFinite(gstRate) || gstRate < 0) {
+          throw new Error(`Invalid GST rate for delivery ${delivery.id}`);
         }
 
-        const gst = calculateInclusiveGST(
-          grossAmount,
-          gstRate
-        );
-
+        const gst = calculateInclusiveGST(grossAmount, gstRate);
         subtotal += gst.grossAmount;
         taxableSubtotal += gst.taxableAmount;
         totalGST += gst.gstAmount;
 
-        // Group GST by rate for invoice display.
         const rateKey = String(gstRate);
-
         if (!gstBreakdown[rateKey]) {
           gstBreakdown[rateKey] = {
             gstRate,
@@ -170,14 +127,9 @@ function calculateDeliveredBill(deliveries = []) {
           };
         }
 
-        gstBreakdown[rateKey].taxableAmount +=
-          gst.taxableAmount;
-
-        gstBreakdown[rateKey].gstAmount +=
-          gst.gstAmount;
-
-        gstBreakdown[rateKey].grossAmount +=
-          gst.grossAmount;
+        gstBreakdown[rateKey].taxableAmount += gst.taxableAmount;
+        gstBreakdown[rateKey].gstAmount += gst.gstAmount;
+        gstBreakdown[rateKey].grossAmount += gst.grossAmount;
       }
     } else if (delivery.status === "Missed") {
       missedDays++;
@@ -188,49 +140,113 @@ function calculateDeliveredBill(deliveries = []) {
   taxableSubtotal = roundAmount(taxableSubtotal);
   totalGST = roundAmount(totalGST);
 
-  // Discount is zero until coupon/discount rules
-  // are confirmed and implemented.
-  const discount = 0;
-
-  // Since the product price includes GST, do not add
-  // GST again to the customer's payable amount.
-  const totalAmount = roundAmount(
-    subtotal - discount
-  );
-
-  // Round the GST summary for display.
   for (const rateKey of Object.keys(gstBreakdown)) {
-    gstBreakdown[rateKey].taxableAmount =
-      roundAmount(
-        gstBreakdown[rateKey].taxableAmount
-      );
-
-    gstBreakdown[rateKey].gstAmount =
-      roundAmount(
-        gstBreakdown[rateKey].gstAmount
-      );
-
-    gstBreakdown[rateKey].grossAmount =
-      roundAmount(
-        gstBreakdown[rateKey].grossAmount
-      );
+    gstBreakdown[rateKey].taxableAmount = roundAmount(gstBreakdown[rateKey].taxableAmount);
+    gstBreakdown[rateKey].gstAmount = roundAmount(gstBreakdown[rateKey].gstAmount);
+    gstBreakdown[rateKey].grossAmount = roundAmount(gstBreakdown[rateKey].grossAmount);
   }
 
   return {
     deliveredDays,
     missedDays,
-
-    // Gross amount, including GST.
     subtotal,
-
-    // Informational GST breakdown.
     taxableSubtotal,
     gstAmount: totalGST,
     gstBreakdown,
-
-    discount,
-    totalAmount,
+    discount: 0,
+    totalAmount: subtotal,
   };
+}
+
+// ======================================================
+// PRICE SIZE NORMALIZATION AND CURRENT PRICE LOOKUP
+// ======================================================
+
+function normalizeBillingSize(value) {
+  if (value === null || value === undefined) return null;
+
+  const text = String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/,/g, ".")
+    .replace(/\s+/g, "");
+
+  const match = text.match(
+    /^(\d+(?:\.\d+)?)(ml|millilitres?|milliliters?|ltr|litres?|liters?|l)$/
+  );
+
+  if (!match) return null;
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(amount)) return null;
+
+  return ["ml", "millilitre", "millilitres", "milliliter", "milliliters"].includes(unit)
+    ? amount
+    : amount * 1000;
+}
+
+async function applyCurrentBillingPrices(deliveries = []) {
+  const productIds = [
+    ...new Set(
+      deliveries.flatMap((delivery) =>
+        (delivery.subscription_delivery_items || [])
+          .map((item) => item.product_id)
+          .filter(Boolean)
+      )
+    ),
+  ];
+
+  if (!productIds.length) return deliveries;
+
+  const { data: sizeRows, error } = await supabaseAdmin
+    .from("product_sizes")
+    .select("product_id, label, price, is_active")
+    .in("product_id", productIds)
+    .eq("is_active", true);
+
+  if (error) throw error;
+
+  const priceMap = new Map();
+
+  for (const row of sizeRows || []) {
+    const volume = normalizeBillingSize(row.label);
+    const price = Number(row.price);
+
+    if (volume === null || !Number.isFinite(price) || price < 0) continue;
+
+    const key = `${row.product_id}::${volume}`;
+    if (priceMap.has(key) && priceMap.get(key) !== price) {
+      throw new Error(
+        `Conflicting active prices found for product ${row.product_id}, size ${row.label}`
+      );
+    }
+
+    priceMap.set(key, price);
+  }
+
+  return deliveries.map((delivery) => ({
+    ...delivery,
+    subscription_delivery_items: (delivery.subscription_delivery_items || []).map((item) => {
+      const volume = normalizeBillingSize(item.size);
+      const key = volume === null ? null : `${item.product_id}::${volume}`;
+      const currentPrice = key ? priceMap.get(key) : undefined;
+
+      // If no current product-size match exists, retain the saved delivery price.
+      if (currentPrice === undefined) return item;
+
+      const quantity = Number(item.quantity || 0);
+      if (!Number.isFinite(quantity) || quantity < 0) {
+        throw new Error(`Invalid quantity for delivery item ${item.id}`);
+      }
+
+      return {
+        ...item,
+        unit_price: currentPrice,
+        total_price: roundAmount(quantity * currentPrice),
+      };
+    }),
+  }));
 }
 
 // ======================================================
@@ -240,12 +256,10 @@ function calculateDeliveredBill(deliveries = []) {
 async function getSubscriptionDeliveries(
   subscriptionId,
   fromDate,
-  toDate
+  toDate,
+  useCurrentBillingPrices = true
 ) {
-  const {
-    data,
-    error,
-  } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("subscription_deliveries")
     .select(`
       id,
@@ -271,38 +285,53 @@ async function getSubscriptionDeliveries(
     .eq("subscription_id", subscriptionId)
     .gte("delivery_date", fromDate)
     .lte("delivery_date", toDate)
-    .order("delivery_date", {
-      ascending: true,
-    });
+    .order("delivery_date", { ascending: true });
 
   if (error) throw error;
+  if (!useCurrentBillingPrices) return data || [];
 
-  return data || [];
+  return applyCurrentBillingPrices(data || []);
+}
+
+// ======================================================
+// MONTHLY BILL UPDATE HELPER
+// ======================================================
+
+async function refreshPendingBill(bill, calculated, relationsSelect = "*") {
+  if (!bill || isPaidBill(bill) || calculated.deliveredDays === 0) {
+    return bill;
+  }
+
+  const finalCalculation = applyExistingBillDiscount(calculated, bill);
+
+  const { data, error } = await supabaseAdmin
+    .from("monthly_bills")
+    .update({
+      delivered_days: finalCalculation.deliveredDays,
+      missed_days: finalCalculation.missedDays,
+      subtotal: finalCalculation.subtotal,
+      discount: finalCalculation.discount,
+      total_amount: finalCalculation.totalAmount,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", bill.id)
+    .neq("payment_status", "Paid")
+    .select(relationsSelect)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || bill;
 }
 
 // ======================================================
 // GENERATE MONTHLY BILLS
 // ======================================================
 
-export async function generateMonthlyBills(
-  month,
-  year
-) {
-  const {
-    month: numericMonth,
-    year: numericYear,
-    fromDate,
-    toDate,
-  } = getMonthDateRange(month, year);
+export async function generateMonthlyBills(month, year) {
+  const { month: numericMonth, year: numericYear, fromDate, toDate } =
+    getMonthDateRange(month, year);
 
-  // --------------------------------------------------
-  // ACTIVE SUBSCRIPTIONS
-  // --------------------------------------------------
-
-  const {
-    data: subscriptions,
-    error: subscriptionError,
-  } = await supabaseAdmin
+  const { data: subscriptions, error: subscriptionError } = await supabaseAdmin
     .from("subscriptions")
     .select(`
       id,
@@ -316,206 +345,108 @@ export async function generateMonthlyBills(
     `)
     .eq("status", "Active");
 
-  if (subscriptionError) {
-    throw subscriptionError;
-  }
+  if (subscriptionError) throw subscriptionError;
 
   let generated = 0;
   let updated = 0;
   let skippedPaid = 0;
   let skippedNoDeliveries = 0;
-
   let totalRevenue = 0;
   let totalGST = 0;
 
-  // --------------------------------------------------
-  // PROCESS EACH SUBSCRIPTION
-  // --------------------------------------------------
-
   for (const subscription of subscriptions || []) {
-    const deliveries = await getSubscriptionDeliveries(
-      subscription.id,
-      fromDate,
-      toDate
-    );
-
-    const calculated =
-      calculateDeliveredBill(deliveries);
-
-    // No completed delivery means no invoice.
-    if (calculated.deliveredDays === 0) {
-      skippedNoDeliveries++;
-      continue;
-    }
-
-    const {
-      deliveredDays,
-      missedDays,
-      subtotal,
-      discount,
-      totalAmount,
-      gstAmount,
-    } = calculated;
-
-    // ------------------------------------------------
-    // CHECK EXISTING BILL
-    // ------------------------------------------------
-
-    const {
-      data: existingBill,
-      error: existingBillError,
-    } = await supabaseAdmin
+    const { data: existingBill, error: existingBillError } = await supabaseAdmin
       .from("monthly_bills")
-      .select(`
-        id,
-        payment_status,
-        total_amount
-      `)
+      .select("id, payment_status, total_amount, subtotal, discount, coupon_id, coupon_code")
       .eq("customer_id", subscription.customer_id)
       .eq("subscription_id", subscription.id)
       .eq("month", numericMonth)
       .eq("year", numericYear)
       .maybeSingle();
 
-    if (existingBillError) {
-      throw existingBillError;
-    }
+    if (existingBillError) throw existingBillError;
 
-    // ------------------------------------------------
-    // PROTECT PAID BILLS
-    // ------------------------------------------------
-
-    if (
-      existingBill &&
-      String(existingBill.payment_status)
-        .toLowerCase() === "paid"
-    ) {
+    if (isPaidBill(existingBill)) {
       skippedPaid++;
-
-      totalRevenue += Number(
-        existingBill.total_amount || 0
-      );
-
-      totalGST += gstAmount;
-
+      totalRevenue += Number(existingBill.total_amount || 0);
       continue;
     }
 
-    // ------------------------------------------------
-    // BILL DATA
-    // ------------------------------------------------
+    // New and Pending bills use the current configured product-size prices.
+    const deliveries = await getSubscriptionDeliveries(
+      subscription.id,
+      fromDate,
+      toDate,
+      true
+    );
+
+    const calculated = calculateDeliveredBill(deliveries);
+    if (calculated.deliveredDays === 0) {
+      skippedNoDeliveries++;
+      continue;
+    }
+
+    const finalCalculation = applyExistingBillDiscount(calculated, existingBill);
 
     const billData = {
       customer_id: subscription.customer_id,
       subscription_id: subscription.id,
-
       month: numericMonth,
       year: numericYear,
-
-      delivered_days: deliveredDays,
-      missed_days: missedDays,
-
-      // Gross amount including GST.
-      subtotal,
-
-      discount,
-
-      // GST is already included in subtotal.
-      total_amount: totalAmount,
-
+      delivered_days: finalCalculation.deliveredDays,
+      missed_days: finalCalculation.missedDays,
+      subtotal: finalCalculation.subtotal,
+      discount: finalCalculation.discount,
+      total_amount: finalCalculation.totalAmount,
       updated_at: new Date().toISOString(),
     };
 
-    // ------------------------------------------------
-    // UPDATE EXISTING UNPAID BILL
-    // ------------------------------------------------
-
     if (existingBill) {
-      const {
-        error,
-      } = await supabaseAdmin
+      const { error } = await supabaseAdmin
         .from("monthly_bills")
         .update(billData)
-        .eq("id", existingBill.id);
+        .eq("id", existingBill.id)
+        .neq("payment_status", "Paid");
 
       if (error) throw error;
-
       updated++;
-    }
-
-    // ------------------------------------------------
-    // CREATE NEW BILL
-    // ------------------------------------------------
-
-    else {
-      const {
-        error,
-      } = await supabaseAdmin
+    } else {
+      const { error } = await supabaseAdmin
         .from("monthly_bills")
-        .insert({
-          ...billData,
-          payment_status: "Pending",
-        });
+        .insert({ ...billData, payment_status: "Pending" });
 
       if (error) throw error;
-
       generated++;
     }
 
-    totalRevenue += totalAmount;
-    totalGST += gstAmount;
+    totalRevenue += finalCalculation.totalAmount;
+    totalGST += calculated.gstAmount;
   }
-
-  // --------------------------------------------------
-  // SUMMARY
-  // --------------------------------------------------
 
   return {
     success: true,
-
     month: numericMonth,
     year: numericYear,
-
     generated,
     updated,
-
     skippedPaid,
     skippedNoDeliveries,
-
     totalRevenue: roundAmount(totalRevenue),
     totalGST: roundAmount(totalGST),
-
     totalCustomers: subscriptions?.length || 0,
   };
 }
 
 // ======================================================
 // GET ALL MONTHLY BILLS
-// ======================================================
-// IMPORTANT:
-// Refresh unpaid bills from actual delivery items
-// so approved Extra Milk is included immediately.
+// Refresh only Pending bills; never modify Paid bills.
 // ======================================================
 
-export async function getMonthlyBills(
-  month,
-  year
-) {
-  const {
-    month: numericMonth,
-    year: numericYear,
-    fromDate,
-    toDate,
-  } = getMonthDateRange(month, year);
+export async function getMonthlyBills(month, year) {
+  const { month: numericMonth, year: numericYear, fromDate, toDate } =
+    getMonthDateRange(month, year);
 
-
-  // ======================================
-  // 1. Get existing monthly bills
-  // ======================================
-  const {
-    data: bills,
-    error: billsError,
-  } = await supabaseAdmin
+  const { data: bills, error: billsError } = await supabaseAdmin
     .from("monthly_bills")
     .select(`
       *,
@@ -532,140 +463,44 @@ export async function getMonthlyBills(
     `)
     .eq("month", numericMonth)
     .eq("year", numericYear)
-    .order("generated_at", {
-      ascending: false,
-    });
+    .order("generated_at", { ascending: false });
 
-  if (billsError) {
-    throw billsError;
-  }
+  if (billsError) throw billsError;
 
-
-  // ======================================
-  // 2. Refresh unpaid bills
-  // ======================================
   for (const bill of bills || []) {
+    if (isPaidBill(bill) || !bill.subscription_id) continue;
 
-    // Never modify a paid bill automatically
-    if (
-      String(bill.payment_status || "")
-        .toLowerCase() === "paid"
-    ) {
-      continue;
-    }
+    const deliveries = await getSubscriptionDeliveries(
+      bill.subscription_id,
+      fromDate,
+      toDate,
+      true
+    );
+    const calculated = calculateDeliveredBill(deliveries);
+    if (calculated.deliveredDays === 0) continue;
 
+    const updatedBill = await refreshPendingBill(
+      bill,
+      calculated,
+      `*,
+       customers(id, full_name, phone),
+       subscriptions(id, customer_id, status)`
+    );
 
-    if (!bill.subscription_id) {
-      continue;
-    }
-
-
-    // ======================================
-    // Get actual deliveries
-    // ======================================
-    const deliveries =
-      await getSubscriptionDeliveries(
-        bill.subscription_id,
-        fromDate,
-        toDate
-      );
-
-
-    // ======================================
-    // Recalculate from delivery items
-    // ======================================
-    const calculated =
-      calculateDeliveredBill(deliveries);
-
-
-    // No delivered days
-    if (calculated.deliveredDays === 0) {
-      continue;
-    }
-
-
-    // ======================================
-    // Update monthly bill
-    // ======================================
-    const {
-      data: updatedBill,
-      error: updateError,
-    } = await supabaseAdmin
-      .from("monthly_bills")
-      .update({
-        delivered_days:
-          calculated.deliveredDays,
-
-        missed_days:
-          calculated.missedDays,
-
-        subtotal:
-          calculated.subtotal,
-
-        discount:
-          calculated.discount,
-
-        total_amount:
-          calculated.totalAmount,
-
-        updated_at:
-          new Date().toISOString(),
-      })
-      .eq("id", bill.id)
-      .neq("payment_status", "Paid")
-      .select(`
-        *,
-        customers(
-          id,
-          full_name,
-          phone
-        ),
-        subscriptions(
-          id,
-          customer_id,
-          status
-        )
-      `)
-      .maybeSingle();
-
-
-    if (updateError) {
-      console.error(
-        "Monthly Bill Refresh Error:",
-        updateError
-      );
-
-      throw updateError;
-    }
-
-
-    // Replace old bill with refreshed bill
-    if (updatedBill) {
-      Object.assign(bill, updatedBill);
-    }
+    if (updatedBill) Object.assign(bill, updatedBill);
   }
-
 
   return bills || [];
 }
+
 // ======================================================
 // GET CUSTOMER MONTHLY BILL
 // ======================================================
 
-export async function getCustomerMonthlyBill(
-  subscriptionId,
-  month,
-  year
-) {
-  const {
-    month: numericMonth,
-    year: numericYear,
-  } = getMonthDateRange(month, year);
+export async function getCustomerMonthlyBill(subscriptionId, month, year) {
+  const { month: numericMonth, year: numericYear } = getMonthDateRange(month, year);
 
-  const {
-    data,
-    error,
-  } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("monthly_bills")
     .select(`
       *,
@@ -678,7 +513,6 @@ export async function getCustomerMonthlyBill(
     .maybeSingle();
 
   if (error) throw error;
-
   return data;
 }
 
@@ -686,19 +520,11 @@ export async function getCustomerMonthlyBill(
 // MARK MONTHLY BILL AS PAID
 // ======================================================
 
-export async function markMonthlyBillPaid(
-  billId
-) {
-  if (!billId) {
-    throw new Error("Bill ID is required");
-  }
+export async function markMonthlyBillPaid(billId) {
+  if (!billId) throw new Error("Bill ID is required");
 
   const now = new Date().toISOString();
-
-  const {
-    data,
-    error,
-  } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("monthly_bills")
     .update({
       payment_status: "Paid",
@@ -710,7 +536,6 @@ export async function markMonthlyBillPaid(
     .single();
 
   if (error) throw error;
-
   return data;
 }
 
@@ -718,30 +543,13 @@ export async function markMonthlyBillPaid(
 // GET MONTHLY BILL DETAILS
 // ======================================================
 
-export async function getMonthlyBillDetails(
-  subscriptionId,
-  month,
-  year
-) {
-  if (!subscriptionId) {
-    throw new Error("Subscription ID is required");
-  }
+export async function getMonthlyBillDetails(subscriptionId, month, year) {
+  if (!subscriptionId) throw new Error("Subscription ID is required");
 
-  const {
-    month: numericMonth,
-    year: numericYear,
-    fromDate,
-    toDate,
-  } = getMonthDateRange(month, year);
+  const { month: numericMonth, year: numericYear, fromDate, toDate } =
+    getMonthDateRange(month, year);
 
-  // --------------------------------------------------
-  // GET EXISTING BILL
-  // --------------------------------------------------
-
-  const {
-    data: existingBill,
-    error: billError,
-  } = await supabaseAdmin
+  const { data: existingBill, error: billError } = await supabaseAdmin
     .from("monthly_bills")
     .select(`
       *,
@@ -755,62 +563,40 @@ export async function getMonthlyBillDetails(
 
   if (billError) throw billError;
 
-  // --------------------------------------------------
-  // GET DELIVERY DETAILS
-  // --------------------------------------------------
-
+  const paid = isPaidBill(existingBill);
   const deliveries = await getSubscriptionDeliveries(
     subscriptionId,
     fromDate,
-    toDate
+    toDate,
+    !paid
   );
 
-  const calculated =
-    calculateDeliveredBill(deliveries);
-
+  const rawCalculation = calculateDeliveredBill(deliveries);
+  let calculated = applyExistingBillDiscount(rawCalculation, existingBill);
   let bill = existingBill;
-
-  // --------------------------------------------------
-  // CREATE MISSING BILL
-  // --------------------------------------------------
 
   if (!bill) {
     if (calculated.deliveredDays === 0) {
       throw new Error(
-        `No invoice available for subscription ${subscriptionId}. ` +
-        `No completed deliveries for ${numericMonth}/${numericYear}.`
+        `No invoice available for subscription ${subscriptionId}. No completed deliveries for ${numericMonth}/${numericYear}.`
       );
     }
 
-    const customerId = deliveries.find(
-      (delivery) => delivery.customer_id
-    )?.customer_id;
+    const customerId = deliveries.find((delivery) => delivery.customer_id)?.customer_id;
+    if (!customerId) throw new Error("Customer ID not found for this subscription.");
 
-    if (!customerId) {
-      throw new Error(
-        "Customer ID not found for this subscription."
-      );
-    }
-
-    const {
-      data: newBill,
-      error: createBillError,
-    } = await supabaseAdmin
+    const { data: newBill, error: createBillError } = await supabaseAdmin
       .from("monthly_bills")
       .insert({
         customer_id: customerId,
         subscription_id: subscriptionId,
-
         month: numericMonth,
         year: numericYear,
-
         delivered_days: calculated.deliveredDays,
         missed_days: calculated.missedDays,
-
         subtotal: calculated.subtotal,
         discount: calculated.discount,
         total_amount: calculated.totalAmount,
-
         payment_status: "Pending",
       })
       .select(`
@@ -820,29 +606,32 @@ export async function getMonthlyBillDetails(
       `)
       .single();
 
-    if (createBillError) {
-      throw createBillError;
-    }
-
+    if (createBillError) throw createBillError;
     bill = newBill;
+  } else if (!paid && calculated.deliveredDays > 0) {
+    bill = await refreshPendingBill(
+      bill,
+      rawCalculation,
+      `*,
+       customers(*),
+       subscriptions(*)`
+    );
+    calculated = applyExistingBillDiscount(rawCalculation, bill);
+  } else if (paid) {
+    // A paid invoice is historical: return its stored amounts and historical delivery prices.
+    calculated = {
+      ...rawCalculation,
+      subtotal: Number(bill.subtotal ?? rawCalculation.subtotal),
+      discount: Number(bill.discount || 0),
+      totalAmount: Number(bill.total_amount ?? 0),
+    };
   }
-
-  // --------------------------------------------------
-  // RETURN DETAILS WITH GST BREAKDOWN
-  // --------------------------------------------------
 
   return {
     bill,
-
     customer: bill.customers,
-
     subscription: bill.subscriptions,
-
     deliveries,
-
-    // GST breakdown is returned for invoice display.
-    // It is not stored in monthly_bills because the
-    // confirmed table has no GST columns.
     calculation: {
       subtotal: calculated.subtotal,
       taxableSubtotal: calculated.taxableSubtotal,
@@ -855,59 +644,35 @@ export async function getMonthlyBillDetails(
     },
   };
 }
+
 // ======================================================
 // GET COMBINED CUSTOMER MONTHLY BILL DETAILS
 // One invoice for all subscriptions of one customer
 // ======================================================
 
-export async function getCustomerCombinedMonthlyBillDetails(
-  customerId,
-  month,
-  year
-) {
-  if (!customerId) {
-    throw new Error("Customer ID is required");
-  }
+export async function getCustomerCombinedMonthlyBillDetails(customerId, month, year) {
+  if (!customerId) throw new Error("Customer ID is required");
 
-  const {
-    month: numericMonth,
-    year: numericYear,
-    fromDate,
-    toDate,
-  } = getMonthDateRange(month, year);
+  const { month: numericMonth, year: numericYear, fromDate, toDate } =
+    getMonthDateRange(month, year);
 
-  // 1. Get customer
-  const {
-    data: customer,
-    error: customerError,
-  } = await supabaseAdmin
+  const { data: customer, error: customerError } = await supabaseAdmin
     .from("customers")
     .select("*")
     .eq("id", customerId)
     .maybeSingle();
 
   if (customerError) throw customerError;
+  if (!customer) throw new Error("Customer not found");
 
-  if (!customer) {
-    throw new Error("Customer not found");
-  }
-
-  // 2. Get all subscriptions of this customer
-  const {
-    data: subscriptions,
-    error: subscriptionError,
-  } = await supabaseAdmin
+  const { data: subscriptions, error: subscriptionError } = await supabaseAdmin
     .from("subscriptions")
     .select("*")
     .eq("customer_id", customerId);
 
   if (subscriptionError) throw subscriptionError;
 
-  // 3. Get existing monthly bills for this customer/month
-  const {
-    data: existingBills,
-    error: billsError,
-  } = await supabaseAdmin
+  const { data: existingBills, error: billsError } = await supabaseAdmin
     .from("monthly_bills")
     .select("*")
     .eq("customer_id", customerId)
@@ -919,31 +684,26 @@ export async function getCustomerCombinedMonthlyBillDetails(
   const billDetails = [];
   const allDeliveries = [];
 
-  // 4. Process each subscription
   for (const subscription of subscriptions || []) {
+    let bill = (existingBills || []).find(
+      (item) => item.subscription_id === subscription.id
+    ) || null;
+
+    const paid = isPaidBill(bill);
     const deliveries = await getSubscriptionDeliveries(
       subscription.id,
       fromDate,
-      toDate
+      toDate,
+      !paid
     );
 
-    const calculated = calculateDeliveredBill(deliveries);
+    const rawCalculation = calculateDeliveredBill(deliveries);
+    let calculated = applyExistingBillDiscount(rawCalculation, bill);
 
-    let bill = (existingBills || []).find(
-      (item) => item.subscription_id === subscription.id
-    );
+    if (!bill && calculated.deliveredDays === 0) continue;
 
-    // Skip subscriptions with no bill and no completed deliveries
-    if (!bill && calculated.deliveredDays === 0) {
-      continue;
-    }
-
-    // 5. Create a missing bill when deliveries exist
     if (!bill && calculated.deliveredDays > 0) {
-      const {
-        data: newBill,
-        error: createError,
-      } = await supabaseAdmin
+      const { data: newBill, error: createError } = await supabaseAdmin
         .from("monthly_bills")
         .insert({
           customer_id: customerId,
@@ -961,76 +721,69 @@ export async function getCustomerCombinedMonthlyBillDetails(
         .single();
 
       if (createError) throw createError;
-
       bill = newBill;
+    } else if (bill && !paid && calculated.deliveredDays > 0) {
+      bill = await refreshPendingBill(bill, rawCalculation, "*");
+      calculated = applyExistingBillDiscount(rawCalculation, bill);
+    } else if (bill && paid) {
+      calculated = {
+        ...rawCalculation,
+        subtotal: Number(bill.subtotal ?? rawCalculation.subtotal),
+        discount: Number(bill.discount || 0),
+        totalAmount: Number(bill.total_amount ?? 0),
+      };
     }
 
     if (!bill) continue;
 
     allDeliveries.push(...deliveries);
-
-    billDetails.push({
-      bill,
-      subscription,
-      deliveries,
-      calculation: calculated,
-    });
+    billDetails.push({ bill, subscription, deliveries, calculation: calculated });
   }
 
-  // 6. Calculate combined delivery summary
-  const combinedCalculation = calculateDeliveredBill(
-    allDeliveries
+  const combinedCalculation = calculateDeliveredBill(allDeliveries);
+  const totalAmount = roundAmount(
+    billDetails.reduce((sum, item) => sum + Number(item.bill.total_amount || 0), 0)
   );
-
-  const totalAmount = billDetails.reduce(
-    (sum, item) => sum + Number(item.bill.total_amount || 0),
-    0
+  const totalDiscount = roundAmount(
+    billDetails.reduce((sum, item) => sum + Number(item.bill.discount || 0), 0)
   );
-
-  const totalDiscount = billDetails.reduce(
-    (sum, item) => sum + Number(item.bill.discount || 0),
-    0
+  const totalSubtotal = roundAmount(
+    billDetails.reduce(
+      (sum, item) => sum + Number(item.bill.subtotal ?? item.calculation.subtotal ?? 0),
+      0
+    )
   );
 
   const allPaid =
     billDetails.length > 0 &&
-    billDetails.every(
-      (item) =>
-        String(item.bill.payment_status || "").toLowerCase() === "paid"
-    );
+    billDetails.every((item) => isPaidBill(item.bill));
 
-  const paymentStatus = allPaid ? "Paid" : "Pending";
-
-  // 7. Return one combined invoice
   return {
     customer,
-
     month: numericMonth,
     year: numericYear,
-
     subscriptions: billDetails.map((item) => item.subscription),
-
     bills: billDetails.map((item) => item.bill),
-
     deliveries: allDeliveries,
-
     bill: {
       customer_id: customerId,
       month: numericMonth,
       year: numericYear,
-      total_amount: roundAmount(totalAmount),
-      discount: roundAmount(totalDiscount),
-      payment_status: paymentStatus,
+      subtotal: totalSubtotal,
+      total_amount: totalAmount,
+      discount: totalDiscount,
+      payment_status: allPaid ? "Paid" : "Pending",
     },
-
     calculation: {
       ...combinedCalculation,
-      discount: roundAmount(totalDiscount),
-      totalAmount: roundAmount(totalAmount),
+      subtotal: totalSubtotal,
+      discount: totalDiscount,
+      totalAmount,
       billCount: billDetails.length,
     },
   };
 }
+
 // ======================================================
 // APPLY COUPON TO MONTHLY BILL
 // ======================================================
@@ -1318,3 +1071,10 @@ export async function applyMonthlyBillCoupon({
     throw error;
   }
 }
+
+// ======================================================
+// NOTES
+// ======================================================
+// Current product_sizes prices are applied only to New/Pending bills.
+// Paid bills use saved subscription_delivery_items prices and are not updated.
+// No delivery-item, wallet-ledger, or historical records are modified.
