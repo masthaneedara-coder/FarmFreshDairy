@@ -1562,6 +1562,1503 @@ export async function autoResumePausedSubscriptionsService() {
         resumedSubscriptions.push(
           resumedSubscription
         );
+import { supabaseAdmin } from "../config/supabase.js";
+import { generateInvoiceNumber } from "./billing.service.js";
+import {
+  validateCouponService,
+} from "./coupon.service.js";
+
+/* ==========================================================
+   Create Subscription
+========================================================== */
+
+
+
+export async function createSubscriptionService(subscriptionData) {
+  const {
+    customer_id,
+    product_id,
+    address_id,
+    quantity,
+    size,
+    delivery_time,
+    frequency,
+    start_date,
+
+    total_amount,
+
+    // Coupon information
+    coupon_code = null,
+
+    payment_method = "COD",
+    payment_status = "Pending",
+    payment_date = null,
+    payment_reference = null,
+    payment_amount = total_amount,
+
+    subtotal = total_amount,
+    discount = 0,
+    gst = 0,
+    gst_percent = 2,
+  } = subscriptionData;
+
+  // ==========================================
+  // 1. Basic validation
+  // ==========================================
+
+  if (!customer_id || !product_id || !address_id || !start_date) {
+    return {
+      data: null,
+      error: new Error(
+        "Customer, product, address and start date are required."
+      ),
+    };
+  }
+
+  const originalAmount = Number(
+    subscriptionData.original_amount ??
+    subtotal ??
+    total_amount
+  );
+
+  if (!Number.isFinite(originalAmount) || originalAmount <= 0) {
+    return {
+      data: null,
+      error: new Error("Invalid subscription amount."),
+    };
+  }
+
+  // ==========================================
+  // 2. Validate coupon on the backend
+  // ==========================================
+
+  let appliedCouponCode = null;
+  let couponDiscount = 0;
+  let finalAmount = originalAmount;
+
+  if (coupon_code) {
+    const {
+      data: couponResult,
+      error: couponError,
+    } = await validateCouponService({
+      code: coupon_code,
+      amount: originalAmount,
+    });
+
+    if (couponError || !couponResult) {
+      return {
+        data: null,
+        error: new Error(
+          couponError?.message || "Invalid coupon."
+        ),
+      };
+    }
+
+    appliedCouponCode = couponResult.code;
+    couponDiscount = Number(couponResult.discount || 0);
+    finalAmount = Number(couponResult.final_amount);
+  }
+
+  // Preserve any existing non-coupon discount.
+  const existingDiscount = Number(discount || 0);
+
+  const totalDiscount = Number(
+    (existingDiscount + couponDiscount).toFixed(2)
+  );
+
+  // ==========================================
+  // 3. Normalize payment information
+  // ==========================================
+
+  const normalizedPaymentMethod =
+    String(payment_method || "COD").toUpperCase();
+
+  const normalizedPaymentStatus =
+    String(payment_status || "").toUpperCase();
+
+  const isOnlinePayment =
+    normalizedPaymentMethod === "ONLINE";
+
+  // Online subscriptions are created as Pending first.
+  // Razorpay order creation requires a subscription ID, so payment
+  // verification must happen after this service returns. Never trust a
+  // client-supplied "Paid" status here. payment.service.js must mark the
+  // subscription and billing record Paid after verifying Razorpay.
+  // ==========================================
+  // 5. Calculate subscription end date
+  // ==========================================
+
+  const start = new Date(start_date);
+
+  if (Number.isNaN(start.getTime())) {
+    return {
+      data: null,
+      error: new Error("Invalid subscription start date."),
+    };
+  }
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 30);
+
+  const end_date = end.toISOString().split("T")[0];
+
+  // ==========================================
+  // 6. Create subscription
+  // ==========================================
+
+  const {
+    data: subscription,
+    error,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .insert({
+      customer_id,
+      address_id,
+      start_date,
+      end_date,
+      delivery_time,
+      frequency,
+
+      // Discounted subscription amount
+      total_amount: finalAmount,
+
+      // Coupon audit fields
+      original_amount: originalAmount,
+      discount_amount: totalDiscount,
+      coupon_code: appliedCouponCode,
+
+      payment_method: isOnlinePayment ? "ONLINE" : "COD",
+
+      payment_status: "Pending",
+      payment_date: null,
+      payment_reference: null,
+      payment_amount: finalAmount,
+
+      status: isOnlinePayment ? "Pending Payment" : "Active",
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return {
+      data: null,
+      error,
+    };
+  }
+
+  // ==========================================
+  // 7. Calculate daily delivery price
+  // ==========================================
+
+  const PRICE_PER_LITER = 90;
+
+  const sizeMultipliers = {
+    "250ml": 0.25,
+    "500ml": 0.5,
+    "1L": 1,
+    "2L": 2,
+    "3L": 3,
+    "5L": 5,
+  };
+
+  const multiplier = sizeMultipliers[size] || 1;
+
+  const dailyPrice =
+    PRICE_PER_LITER *
+    multiplier *
+    Number(quantity || 1);
+
+  // ==========================================
+  // 8. Create subscription item
+  // ==========================================
+
+  const { error: itemError } = await supabaseAdmin
+    .from("subscription_items")
+    .insert({
+      subscription_id: subscription.id,
+      product_id,
+      quantity,
+      size,
+      unit_price: dailyPrice,
+      price: finalAmount,
+    });
+
+  if (itemError) {
+    await supabaseAdmin
+      .from("subscriptions")
+      .delete()
+      .eq("id", subscription.id);
+
+    return {
+      data: null,
+      error: itemError,
+    };
+  }
+
+  // ==========================================
+  // 9. Generate invoice number
+  // ==========================================
+
+  let invoiceNumber;
+
+  try {
+    invoiceNumber = await generateInvoiceNumber();
+  } catch (invoiceError) {
+    await supabaseAdmin
+      .from("subscription_items")
+      .delete()
+      .eq("subscription_id", subscription.id);
+
+    await supabaseAdmin
+      .from("subscriptions")
+      .delete()
+      .eq("id", subscription.id);
+
+    return {
+      data: null,
+      error: invoiceError,
+    };
+  }
+
+  // ==========================================
+  // 10. Billing values
+  // ==========================================
+
+  const billingSubtotal = originalAmount;
+  const billingDiscount = totalDiscount;
+  const billingGst = Number(gst || 0);
+  const billingTotal = finalAmount;
+
+  const billingDate = new Date(start_date);
+
+  const billingMonth = billingDate.toLocaleString(
+    "en-US",
+    { month: "long" }
+  );
+
+  const billingYear = billingDate.getFullYear();
+
+  // ==========================================
+  // 11. Create billing record
+  // ==========================================
+
+  const {
+    data: billingRecord,
+    error: billingError,
+  } = await supabaseAdmin
+    .from("billing")
+    .insert({
+      invoice_number: invoiceNumber,
+      customer_id,
+      subscription_id: subscription.id,
+
+      billing_month: billingMonth,
+      billing_year: billingYear,
+
+      amount: billingTotal,
+      subtotal: billingSubtotal,
+      discount: billingDiscount,
+
+      gst: billingGst,
+      gst_amount: billingGst,
+      gst_percent: Number(gst_percent || 2),
+
+      total_amount: billingTotal,
+
+      payment_status: "Pending",
+      payment_method: isOnlinePayment ? "ONLINE" : "COD",
+
+      invoice_date: new Date().toISOString(),
+      invoice_type: "Subscription",
+
+      delivered_days: 0,
+      daily_rate: dailyPrice,
+    })
+    .select()
+    .single();
+
+  if (billingError) {
+    await supabaseAdmin
+      .from("subscription_items")
+      .delete()
+      .eq("subscription_id", subscription.id);
+
+    await supabaseAdmin
+      .from("subscriptions")
+      .delete()
+      .eq("id", subscription.id);
+
+    return {
+      data: null,
+      error: billingError,
+    };
+  }
+
+  // ==========================================
+  // 12. Payment finalization happens in payment.service.js
+  // ==========================================
+  // Do not link a payment or credit the wallet during subscription creation.
+  // Both actions happen only after Razorpay signature + captured status are
+  // verified by the payment verification endpoint.
+
+  let wallet = null;
+
+  // ==========================================
+  // 14. Increment coupon usage
+  // ==========================================
+
+  if (appliedCouponCode) {
+    const { data: couponRow, error: couponFetchError } =
+      await supabaseAdmin
+        .from("coupons")
+        .select("id, used_count")
+        .eq("code", appliedCouponCode)
+        .single();
+
+    if (!couponFetchError && couponRow) {
+      await supabaseAdmin
+        .from("coupons")
+        .update({
+          used_count: Number(couponRow.used_count || 0) + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", couponRow.id);
+    }
+  }
+
+  // ==========================================
+  // 15. Return subscription
+  // ==========================================
+
+  return {
+    data: {
+      ...subscription,
+      original_amount: originalAmount,
+      discount_amount: totalDiscount,
+      coupon_code: appliedCouponCode,
+      total_amount: finalAmount,
+    },
+
+    billing: billingRecord,
+
+    payment: null,
+
+    wallet,
+
+    error: null,
+  };
+}
+
+/* ==========================================================
+   Active Subscription
+========================================================== */
+
+export async function getCustomerSubscriptionService(customerId) {
+  return await supabaseAdmin
+    .from("subscriptions")
+    .select(`
+      *,
+      addresses(*),
+      subscription_items(
+        *,
+        products(*)
+      )
+    `)
+    .eq("customer_id", customerId)
+    .eq("status", "Active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+}
+
+/* ==========================================================
+   Subscription History
+========================================================== */
+
+export async function getSubscriptionHistoryService(customerId) {
+  return await supabaseAdmin
+    .from("subscriptions")
+    .select(`
+      *,
+      addresses(*),
+      subscription_items(
+        *,
+        products(*)
+      )
+    `)
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false });
+}
+
+/* ==========================================================
+   Billing Summary
+========================================================== */
+
+export async function getBillingSummaryService(customerId) {
+  return await supabaseAdmin
+    .from("subscriptions")
+    .select(`
+      id,
+      total_amount,
+      start_date,
+      end_date,
+      status
+    `)
+    .eq("customer_id", customerId)
+    .eq("status", "Active")
+    .maybeSingle();
+}
+
+/* ==========================================================
+   Upcoming Delivery
+========================================================== */
+
+export async function getUpcomingDeliveryService(customerId) {
+  return await supabaseAdmin
+    .from("subscriptions")
+    .select(`
+      *,
+      addresses(*),
+      subscription_items(
+        *,
+        products(*)
+      )
+    `)
+    .eq("customer_id", customerId)
+    .eq("status", "Active")
+    .maybeSingle();
+}
+
+/* ==========================================================
+   Get Subscription By ID
+========================================================== */
+
+export async function getSubscriptionByIdService(id) {
+  return await supabaseAdmin
+    .from("subscriptions")
+    .select(`
+      *,
+      addresses(*),
+      subscription_items(
+        *,
+        products(*)
+      )
+    `)
+    .eq("id", id)
+    .single();
+}
+
+/* ==========================================================
+   Update Subscription
+========================================================== */
+
+export async function updateSubscriptionService(id, payload) {
+  return await supabaseAdmin
+    .from("subscriptions")
+    .update({
+      delivery_time: payload.delivery_time,
+      address_id: payload.address_id,
+      total_amount: payload.total_amount,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+}
+
+/* ==========================================================
+   Update Subscription Item
+========================================================== */
+
+export async function updateSubscriptionItemService(
+  subscriptionId,
+  payload
+) {
+  return await supabaseAdmin
+    .from("subscription_items")
+    .update({
+      quantity: payload.quantity,
+      size: payload.size,
+    })
+    .eq("subscription_id", subscriptionId)
+    .select();
+}
+
+/* ==========================================================
+   Update Status
+========================================================== */
+
+export async function updateSubscriptionStatusService(
+  subscriptionId,
+  status
+) {
+  return await supabaseAdmin
+    .from("subscriptions")
+    .update({
+      status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", subscriptionId)
+    .select()
+    .single();
+}
+
+/* ==========================================================
+   Delete Subscription
+========================================================== */
+
+/* ==========================================================
+   Delete Subscription
+========================================================== */
+
+
+export async function deleteSubscriptionService(subscriptionId) {
+  if (!subscriptionId) {
+    const error = new Error("Subscription ID is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { data: subscription, error: fetchError } =
+    await supabaseAdmin
+      .from("subscriptions")
+      .select("id, status, is_deleted")
+      .eq("id", subscriptionId)
+      .maybeSingle();
+
+  if (fetchError) throw fetchError;
+
+  if (!subscription) {
+    const error = new Error("Subscription not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (subscription.is_deleted) {
+    return {
+      success: true,
+      message: "Subscription is already deleted.",
+      subscriptionId,
+    };
+  }
+
+  const allowedStatuses = ["stopped", "expired", "cancelled"];
+  const status = String(subscription.status || "")
+    .trim()
+    .toLowerCase();
+
+  if (!allowedStatuses.includes(status)) {
+    const error = new Error(
+      "Only Stopped, Expired, or Cancelled subscriptions can be deleted."
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const { data: updatedSubscription, error: updateError } =
+    await supabaseAdmin
+      .from("subscriptions")
+      .update({
+        is_deleted: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", subscriptionId)
+      .in("status", ["Stopped", "Expired", "Cancelled"])
+      .eq("is_deleted", false)
+      .select("id")
+      .maybeSingle();
+
+  if (updateError) throw updateError;
+
+  if (!updatedSubscription) {
+    const error = new Error(
+      "Subscription could not be deleted. Please refresh and check its status."
+    );
+    error.statusCode = 409;
+    throw error;
+  }
+
+  return {
+    success: true,
+    message: "Subscription hidden successfully. Delivery and billing history preserved.",
+    subscriptionId,
+  };
+}
+
+
+/* ==========================================================
+   Renew Subscription
+========================================================== */
+
+export async function renewSubscriptionService(
+  subscriptionId,
+  endDate,
+  totalAmount,
+  paymentData = {}
+) {
+  // ==========================================
+  // 1. Get current subscription
+  // ==========================================
+
+  const {
+    data: currentSubscription,
+    error: subscriptionFetchError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .select("*")
+    .eq("id", subscriptionId)
+    .single();
+
+  if (subscriptionFetchError) {
+    return {
+      data: null,
+      error: subscriptionFetchError,
+    };
+  }
+
+  if (!currentSubscription) {
+    return {
+      data: null,
+      error: new Error("Subscription not found."),
+    };
+  }
+
+  // ==========================================
+  // 2. Validate renewal amount
+  // ==========================================
+
+  if (
+    totalAmount === undefined ||
+    totalAmount === null ||
+    totalAmount === ""
+  ) {
+    return {
+      data: null,
+      error: new Error("Renewal total amount is required."),
+    };
+  }
+
+  const renewalAmount = Number(totalAmount);
+
+  if (!Number.isFinite(renewalAmount) || renewalAmount < 0) {
+    return {
+      data: null,
+      error: new Error("Invalid renewal total amount."),
+    };
+  }
+
+  // ==========================================
+  // 3. Calculate renewal dates
+  //
+  // Rules:
+  // - More than 2 days remaining -> backend rejects renewal.
+  // - 2 days remaining -> starts the day after expiry.
+  // - 1 day remaining -> starts the day after expiry.
+  // - Expiry day -> starts the next day.
+  // - Already expired -> starts TODAY.
+  //
+  // Example:
+  // Expiry: 01 Oct
+  // Renew on 01 Oct -> Start: 02 Oct -> End: 01 Nov
+  // Renew on 02 Oct -> Start: 02 Oct -> End: 01 Nov
+  // ==========================================
+
+  const today = new Date();
+
+  const todayIST = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(today);
+
+  const todayDate = new Date(`${todayIST}T00:00:00`);
+
+  const currentEndDate = currentSubscription.end_date
+    ? new Date(`${currentSubscription.end_date}T00:00:00`)
+    : null;
+
+  if (
+    !currentEndDate ||
+    Number.isNaN(currentEndDate.getTime())
+  ) {
+    return {
+      data: null,
+      error: new Error("Current subscription expiry date is invalid."),
+    };
+  }
+
+  // Number of calendar days remaining.
+  const daysRemaining = Math.floor(
+    (
+      currentEndDate.getTime() -
+      todayDate.getTime()
+    ) /
+      (1000 * 60 * 60 * 24)
+  );
+
+  // Renewal is allowed only in the final 2 days
+  // or after the subscription has expired.
+  if (daysRemaining > 2) {
+    return {
+      data: null,
+      error: new Error(
+        `Renewal is available only during the last 2 days of the subscription. ${daysRemaining} days remaining.`
+      ),
+    };
+  }
+
+  let renewalStart;
+
+  if (currentEndDate >= todayDate) {
+    // Active / expiry day:
+    // renewal starts the day after the existing expiry.
+    renewalStart = new Date(currentEndDate);
+    renewalStart.setDate(
+      renewalStart.getDate() + 1
+    );
+  } else {
+    // Already expired:
+    // renewal starts TODAY.
+    renewalStart = new Date(todayDate);
+  }
+
+  const renewalStartDate =
+    renewalStart.toISOString().split("T")[0];
+
+  // Monthly period:
+  // start 01 Oct -> end 31 Oct
+  // start 02 Oct -> end 01 Nov
+  const renewalEnd = new Date(renewalStart);
+  renewalEnd.setDate(
+    renewalEnd.getDate() + 30
+  );
+
+  const renewalEndDate =
+    renewalEnd.toISOString().split("T")[0];
+
+  // ==========================================
+  // 4. Payment information
+  // ==========================================
+
+  const paymentMethod =
+    paymentData.payment_method ||
+    currentSubscription.payment_method ||
+    "COD";
+
+  const paymentStatus =
+    paymentData.payment_status ||
+    "Pending";
+
+  const paymentDate =
+    paymentData.payment_date ||
+    (paymentStatus === "Paid"
+      ? new Date().toISOString()
+      : null);
+
+  const paymentReference =
+    paymentData.payment_reference || null;
+
+  const paymentAmount =
+    paymentData.payment_amount !== undefined &&
+    paymentData.payment_amount !== null
+      ? Number(paymentData.payment_amount)
+      : renewalAmount;
+
+  // ==========================================
+  // 5. Generate invoice number
+  // ==========================================
+
+  let invoiceNumber;
+
+  try {
+    invoiceNumber =
+      await generateInvoiceNumber();
+  } catch (invoiceNumberError) {
+    return {
+      data: null,
+      error: invoiceNumberError,
+    };
+  }
+
+  // ==========================================
+  // 6. Save old subscription values
+  //    for rollback if billing fails
+  // ==========================================
+
+  const previousSubscription = {
+    start_date: currentSubscription.start_date,
+    end_date: currentSubscription.end_date,
+    total_amount: currentSubscription.total_amount,
+    status: currentSubscription.status,
+    payment_method:
+      currentSubscription.payment_method,
+    payment_status:
+      currentSubscription.payment_status,
+    payment_date:
+      currentSubscription.payment_date,
+    payment_reference:
+      currentSubscription.payment_reference,
+    payment_amount:
+      currentSubscription.payment_amount,
+    is_paused:
+      currentSubscription.is_paused,
+    pause_from:
+      currentSubscription.pause_from,
+    pause_to:
+      currentSubscription.pause_to,
+    paused_days:
+      currentSubscription.paused_days,
+    updated_at:
+      currentSubscription.updated_at,
+  };
+
+  // ==========================================
+  // 7. Update subscription
+  // ==========================================
+
+  const {
+    data: renewedSubscription,
+    error: renewalError,
+  } = await supabaseAdmin
+    .from("subscriptions")
+    .update({
+      start_date: renewalStartDate,
+      end_date: renewalEndDate,
+      total_amount: renewalAmount,
+      status: "Active",
+      is_paused: false,
+      pause_from: null,
+      pause_to: null,
+      paused_days: 0,
+      payment_method: paymentMethod,
+      payment_status: paymentStatus,
+      payment_date: paymentDate,
+      payment_reference: paymentReference,
+      payment_amount: paymentAmount,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", subscriptionId)
+    .select()
+    .single();
+
+  if (renewalError) {
+    return {
+      data: null,
+      error: renewalError,
+    };
+  }
+
+  // ==========================================
+  // 8. Billing values
+  // ==========================================
+
+  const billingSubtotal =
+    paymentData.subtotal !== undefined &&
+    paymentData.subtotal !== null
+      ? Number(paymentData.subtotal)
+      : renewalAmount;
+
+  const billingDiscount =
+    paymentData.discount !== undefined &&
+    paymentData.discount !== null
+      ? Number(paymentData.discount)
+      : 0;
+
+  const billingGst =
+    paymentData.gst !== undefined &&
+    paymentData.gst !== null
+      ? Number(paymentData.gst)
+      : 0;
+
+  const billingGstPercent =
+    paymentData.gst_percent !== undefined &&
+    paymentData.gst_percent !== null
+      ? Number(paymentData.gst_percent)
+      : 2;
+
+  const dailyRate =
+    renewalAmount / 30;
+
+  // ==========================================
+  // 9. Billing month / year
+  // ==========================================
+
+  const billingDate = new Date(
+    `${renewalStartDate}T00:00:00`
+  );
+
+  const billingMonth =
+    billingDate.toLocaleString("en-US", {
+      month: "long",
+    });
+
+  const billingYear =
+    billingDate.getFullYear();
+
+  // ==========================================
+  // 10. Create NEW billing record
+  // ==========================================
+
+  const {
+    data: billingRecord,
+    error: billingError,
+  } = await supabaseAdmin
+    .from("billing")
+    .insert({
+      invoice_number: invoiceNumber,
+
+      customer_id:
+        currentSubscription.customer_id,
+
+      subscription_id:
+        currentSubscription.id,
+
+      billing_month:
+        billingMonth,
+
+      billing_year:
+        billingYear,
+
+      amount:
+        renewalAmount,
+
+      subtotal:
+        billingSubtotal,
+
+      discount:
+        billingDiscount,
+
+      gst:
+        billingGst,
+
+      gst_amount:
+        billingGst,
+
+      gst_percent:
+        billingGstPercent,
+
+      total_amount:
+        renewalAmount,
+
+      payment_status:
+        paymentStatus,
+
+      payment_method:
+        paymentMethod,
+
+      invoice_date:
+        new Date().toISOString(),
+
+      invoice_type:
+        "Subscription",
+
+      delivered_days:
+        0,
+
+      daily_rate:
+        dailyRate,
+    })
+    .select()
+    .single();
+
+  // ==========================================
+  // 11. Rollback subscription if billing fails
+  // ==========================================
+
+  if (billingError) {
+    console.error(
+      "Renewal Billing Creation Error:",
+      billingError
+    );
+
+    const {
+      error: rollbackError,
+    } = await supabaseAdmin
+      .from("subscriptions")
+      .update(previousSubscription)
+      .eq("id", subscriptionId);
+
+    if (rollbackError) {
+      console.error(
+        "Renewal Subscription Rollback Error:",
+        rollbackError
+      );
+    }
+
+    return {
+      data: null,
+      error: billingError,
+    };
+  }
+
+  // ==========================================
+  // 12. Return renewed subscription + billing
+  // ==========================================
+
+  return {
+    data: renewedSubscription,
+    billing: billingRecord,
+    error: null,
+  };
+}
+
+export async function getSubscriptionDeliverySummaryService(subscriptionId) {
+
+  // Delivered
+  const { count: delivered, error: deliveredError } =
+    await supabaseAdmin
+      .from("subscription_deliveries")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("subscription_id", subscriptionId)
+      .eq("status", "Delivered");
+
+  if (deliveredError) throw deliveredError;
+
+  // Out for Delivery
+  const { count: outForDelivery, error: outError } =
+    await supabaseAdmin
+      .from("subscription_deliveries")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("subscription_id", subscriptionId)
+      .eq("status", "Out for Delivery");
+
+  if (outError) throw outError;
+
+  // Pending
+  const { count: pending, error: pendingError } =
+    await supabaseAdmin
+      .from("subscription_deliveries")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("subscription_id", subscriptionId)
+      .eq("status", "Pending");
+
+  if (pendingError) throw pendingError;
+
+  // Missed
+  const { count: missed, error: missedError } =
+    await supabaseAdmin
+      .from("subscription_deliveries")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("subscription_id", subscriptionId)
+      .eq("status", "Missed");
+
+  if (missedError) throw missedError;
+
+  // Total
+  const total =
+    delivered +
+    outForDelivery +
+    pending +
+    missed;
+
+  return {
+    delivered,
+    outForDelivery,
+    pending,
+    missed,
+    total,
+  };
+}
+// ==========================================================
+// Pause History Helpers
+// Uses public.subscription_pause_history
+//
+// A pause is written to history when it is completed (manual resume
+// or automatic resume). Rows are split by calendar month so the
+// monthly report can calculate paused days accurately.
+// ==========================================================
+
+function getTodayISTDate() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function getInclusiveDays(fromDate, toDate) {
+  if (!fromDate || !toDate || toDate < fromDate) return 0;
+
+  const from = new Date(`${fromDate}T00:00:00Z`);
+  const to = new Date(`${toDate}T00:00:00Z`);
+
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    throw new Error("Invalid pause history dates.");
+  }
+
+  return Math.floor((to.getTime() - from.getTime()) / 86400000) + 1;
+}
+
+function addUtcDays(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Saves a completed pause period as one row per calendar month.
+ * The schema's pause_from/pause_to represent the portion of the
+ * pause that falls within that month.
+ */
+async function recordPauseHistoryService({
+  subscription,
+  pauseFrom,
+  pauseTo,
+}) {
+  if (!subscription?.id || !subscription?.customer_id) {
+    throw new Error(
+      "Cannot save pause history: subscription/customer information is missing."
+    );
+  }
+
+  const totalDays = getInclusiveDays(pauseFrom, pauseTo);
+  if (totalDays <= 0) return [];
+
+  const rows = [];
+  let segmentStart = pauseFrom;
+
+  while (segmentStart <= pauseTo) {
+    const [year, month] = segmentStart.split("-").map(Number);
+    const monthEndDate = new Date(Date.UTC(year, month, 0));
+    const monthEnd = monthEndDate.toISOString().slice(0, 10);
+    const segmentEnd = monthEnd < pauseTo ? monthEnd : pauseTo;
+
+    rows.push({
+      subscription_id: subscription.id,
+      customer_id: subscription.customer_id,
+      subscription_start_date: subscription.start_date || null,
+      subscription_end_date: subscription.end_date || null,
+      pause_from: segmentStart,
+      pause_to: segmentEnd,
+      paused_days: getInclusiveDays(segmentStart, segmentEnd),
+      pause_month: month,
+      pause_year: year,
+    });
+
+    segmentStart = addUtcDays(segmentEnd, 1);
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("subscription_pause_history")
+    .upsert(rows, {
+      onConflict: "subscription_id,pause_from,pause_to",
+      ignoreDuplicates: true,
+    })
+    .select();
+
+  if (error) {
+    console.error("Pause history insert failed:", error);
+    throw error;
+  }
+
+  console.log("Pause history saved:", data?.length || 0, "monthly row(s)");
+  return data || [];
+}
+
+export async function pauseSubscriptionService(
+  subscriptionId,
+  pauseFrom,
+  pauseTo
+) {
+  if (!subscriptionId || !pauseFrom || !pauseTo) {
+    throw new Error("Subscription ID and pause dates are required.");
+  }
+
+  if (pauseFrom > pauseTo) {
+    throw new Error("Pause To date cannot be before Pause From date.");
+  }
+
+  const { data: subscription, error: fetchError } =
+    await supabaseAdmin
+      .from("subscriptions")
+      .select("id, customer_id, status, is_paused, start_date, end_date")
+      .eq("id", subscriptionId)
+      .single();
+
+  if (fetchError) throw fetchError;
+  if (!subscription) throw new Error("Subscription not found.");
+
+  if (subscription.is_paused === true) {
+    throw new Error("This subscription is already paused.");
+  }
+
+  if (subscription.status !== "Active") {
+    throw new Error("Only active subscriptions can be paused.");
+  }
+
+  const today = getTodayISTDate();
+
+  if (pauseFrom < today) {
+    throw new Error("Pause From date cannot be before today.");
+  }
+
+  if (subscription.end_date && pauseFrom > subscription.end_date) {
+    throw new Error("Pause cannot start after subscription expiry.");
+  }
+
+  if (subscription.end_date && pauseTo > subscription.end_date) {
+    throw new Error(
+      `Pause cannot go beyond subscription expiry date (${subscription.end_date}).`
+    );
+  }
+
+  const { data: updatedSubscription, error: updateError } =
+    await supabaseAdmin
+      .from("subscriptions")
+      .update({
+        status: "Paused",
+        is_paused: true,
+        pause_from: pauseFrom,
+        pause_to: pauseTo,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", subscriptionId)
+      .eq("is_paused", false)
+      .select()
+      .maybeSingle();
+
+  if (updateError) throw updateError;
+
+  if (!updatedSubscription) {
+    throw new Error(
+      "Subscription could not be paused. Please refresh and try again."
+    );
+  }
+
+  // History is intentionally recorded when the pause is completed,
+  // not here, because the customer may resume earlier than pause_to.
+  return updatedSubscription;
+}
+
+export async function resumeSubscriptionService(subscriptionId) {
+  const { data: subscription, error } = await supabaseAdmin
+    .from("subscriptions")
+    .select("*")
+    .eq("id", subscriptionId)
+    .single();
+
+  if (error) throw error;
+  if (!subscription) throw new Error("Subscription not found.");
+
+  if (subscription.is_paused !== true || !subscription.pause_from) {
+    return subscription;
+  }
+
+  const today = getTodayISTDate();
+
+  // Existing billing rule: the manual resume date is included in the
+  // paused-day count. Keep this behavior consistent with paused_days.
+  const pausedDaysThisPeriod = getInclusiveDays(
+    subscription.pause_from,
+    today
+  );
+
+  const previousPausedDays = Number(subscription.paused_days || 0);
+  const totalPausedDays = previousPausedDays + pausedDaysThisPeriod;
+
+  const paymentMethod = String(subscription.payment_method || "")
+    .trim()
+    .toUpperCase();
+
+  const isPrepaid = paymentMethod === "ONLINE" || paymentMethod === "PREPAID";
+  let newEndDate = subscription.end_date;
+
+  // Preserve the existing rule: only prepaid subscriptions receive
+  // an expiry extension when manually resumed.
+  if (isPrepaid && pausedDaysThisPeriod > 0) {
+    if (!subscription.end_date) {
+      throw new Error("Subscription expiry date is missing.");
+    }
+    newEndDate = addUtcDays(subscription.end_date, pausedDaysThisPeriod);
+  }
+
+  const updatePayload = {
+    status: "Active",
+    is_paused: false,
+    pause_from: null,
+    pause_to: null,
+    paused_days: totalPausedDays,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (isPrepaid && pausedDaysThisPeriod > 0) {
+    updatePayload.end_date = newEndDate;
+  }
+
+  const { data: resumedSubscription, error: resumeError } =
+    await supabaseAdmin
+      .from("subscriptions")
+      .update(updatePayload)
+      .eq("id", subscription.id)
+      .eq("is_paused", true)
+      .select()
+      .maybeSingle();
+
+  if (resumeError) throw resumeError;
+
+  if (!resumedSubscription) {
+    const { data: latestSubscription, error: latestError } =
+      await supabaseAdmin
+        .from("subscriptions")
+        .select("*")
+        .eq("id", subscriptionId)
+        .single();
+
+    if (latestError) throw latestError;
+    return latestSubscription;
+  }
+
+  // Record only the days actually counted by the manual resume logic.
+  await recordPauseHistoryService({
+    subscription,
+    pauseFrom: subscription.pause_from,
+    pauseTo: today,
+  });
+
+  console.log("Subscription resumed:", {
+    subscriptionId,
+    paymentMethod,
+    pausedDaysThisPeriod,
+    previousEndDate: subscription.end_date,
+    newEndDate,
+  });
+
+  return resumedSubscription;
+}
+
+// ==========================================
+// Automatically resume subscriptions
+// whose pause period has completed
+// ==========================================
+export async function autoResumePausedSubscriptionsService() {
+  try {
+    const today = getTodayISTDate();
+
+    console.log("=================================");
+    console.log("AUTO RESUME CHECK");
+    console.log("IST Today:", today);
+    console.log("=================================");
+
+    const {
+      data: pausedSubscriptions,
+      error: findError,
+    } = await supabaseAdmin
+      .from("subscriptions")
+      .select(`
+        id,
+        customer_id,
+        status,
+        is_paused,
+        start_date,
+        end_date,
+        pause_from,
+        pause_to,
+        paused_days
+      `)
+      .eq("is_paused", true)
+      .eq("status", "Paused")
+      .not("pause_from", "is", null)
+      .not("pause_to", "is", null)
+      .lte("pause_to", today);
+
+    if (findError) throw findError;
+
+    const resumedSubscriptions = [];
+
+    for (const subscription of pausedSubscriptions || []) {
+      try {
+        // If pause reaches the subscription expiry, leave the
+        // subscription paused so the normal expiry process can handle it.
+        if (
+          subscription.end_date &&
+          subscription.pause_to >= subscription.end_date
+        ) {
+          console.log(
+            "NO AUTO RESUME - pause reaches expiry:",
+            subscription.id
+          );
+          continue;
+        }
+
+        const pausedDaysThisPeriod = getInclusiveDays(
+          subscription.pause_from,
+          subscription.pause_to
+        );
+
+        const totalPausedDays =
+          Number(subscription.paused_days || 0) + pausedDaysThisPeriod;
+
+        const { data: resumedSubscription, error: resumeError } =
+          await supabaseAdmin
+            .from("subscriptions")
+            .update({
+              status: "Active",
+              is_paused: false,
+              pause_from: null,
+              pause_to: null,
+              paused_days: totalPausedDays,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", subscription.id)
+            .eq("is_paused", true)
+            .select()
+            .maybeSingle();
+
+        if (resumeError) throw resumeError;
+
+        // Another request may already have resumed this subscription.
+        if (!resumedSubscription) {
+          console.log("Already resumed by another process:", subscription.id);
+          continue;
+        }
+
+        await recordPauseHistoryService({
+          subscription,
+          pauseFrom: subscription.pause_from,
+          pauseTo: subscription.pause_to,
+        });
+
+        resumedSubscriptions.push(resumedSubscription);
+
+        console.log("AUTO RESUMED:", subscription.id, {
+          pauseFrom: subscription.pause_from,
+          pauseTo: subscription.pause_to,
+          pausedDaysThisPeriod,
+          totalPausedDays,
+        });
+      } catch (error) {
+        console.error(
+          `Failed to auto resume ${subscription.id}:`,
+          error.message
+        );
+      }
+    }
+
+    console.log(
+      `AUTO RESUME COMPLETED: ${resumedSubscriptions.length}`
+    );
+    console.log("=================================");
+
+    return resumedSubscriptions;
+  } catch (error) {
+    console.error("Auto resume service failed:", error);
+    throw error;
+  }
+}
 
         console.log(
           "✅ AUTO RESUMED:",
