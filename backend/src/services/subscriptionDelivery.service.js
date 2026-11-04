@@ -138,6 +138,7 @@ export async function updateDeliveryStatusService(
     .select(`
       id,
       delivery_number,
+      delivery_date,
       customer_id,
       subscription_id,
       status,
@@ -160,40 +161,7 @@ export async function updateDeliveryStatusService(
         .eq("id", deliveryId)
         .single();
 
-        const previousStatus = String(delivery.status || "").trim();
-
-if (previousStatus !== status) {
-  try {
-    const notificationResult = await notifyCustomerDeliveryStatusChange({
-      customerId: delivery.customer_id,
-      deliveryId: delivery.id,
-      deliveryNumber: delivery.delivery_number,
-      deliveryDate: delivery.delivery_date,
-      status,
-    });
-
-    if (notificationResult.sent) {
-      console.log("WhatsApp delivery status notification sent:", {
-        deliveryId: delivery.id,
-        status,
-        messageId: notificationResult.messageId,
-      });
-    } else {
-      console.log("WhatsApp delivery status notification skipped:", {
-        deliveryId: delivery.id,
-        reason: notificationResult.reason,
-      });
-    }
-  } catch (notificationError) {
-    // Do not fail or roll back a successfully saved delivery status
-    // because an external WhatsApp send failed.
-    console.error(
-      "WhatsApp delivery status notification failed:",
-      notificationError?.message || notificationError
-    );
-  }
-}
-
+    // Check the lookup result before reading any delivery fields.
     if (deliveryError) {
       throw deliveryError;
     }
@@ -201,6 +169,8 @@ if (previousStatus !== status) {
     if (!delivery) {
       throw new Error("Subscription delivery not found");
     }
+
+    const previousStatus = String(delivery.status || "").trim();
 
     // --------------------------------------------------------
     // 2. PREVENT DUPLICATE DELIVERY
@@ -375,6 +345,40 @@ if (previousStatus !== status) {
 
     if (updateError) {
       throw updateError;
+    }
+
+    // Send only after the delivery status has been saved successfully.
+    // A repeated request with the same status does not send another message.
+    if (previousStatus !== String(status || "").trim()) {
+      try {
+        const notificationResult = await notifyCustomerDeliveryStatusChange({
+          customerId: delivery.customer_id,
+          deliveryId: delivery.id,
+          deliveryNumber: delivery.delivery_number,
+          deliveryDate: delivery.delivery_date,
+          status,
+        });
+
+        if (notificationResult.sent) {
+          console.log("WhatsApp delivery status notification sent:", {
+            deliveryId: delivery.id,
+            status,
+            messageId: notificationResult.messageId,
+          });
+        } else {
+          console.log("WhatsApp delivery status notification skipped:", {
+            deliveryId: delivery.id,
+            reason: notificationResult.reason,
+          });
+        }
+      } catch (notificationError) {
+        // Do not fail or roll back a successfully saved delivery status
+        // because an external WhatsApp send failed.
+        console.error(
+          "WhatsApp delivery status notification failed:",
+          notificationError?.message || notificationError
+        );
+      }
     }
     // ==========================================================
 // AUTO PAUSE WHEN PREPAID WALLET REACHES ZERO
