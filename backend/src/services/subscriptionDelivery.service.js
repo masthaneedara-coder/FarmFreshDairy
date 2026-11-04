@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../config/supabase.js";
 import { debitWalletForDelivery } from "./wallet.service.js";
+import { notifyCustomerDeliveryStatusChange } from "./whatsappDeliveryNotification.service.js";
 
 function getIndiaToday() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -158,6 +159,40 @@ export async function updateDeliveryStatusService(
     `)
         .eq("id", deliveryId)
         .single();
+
+        const previousStatus = String(delivery.status || "").trim();
+
+if (previousStatus !== status) {
+  try {
+    const notificationResult = await notifyCustomerDeliveryStatusChange({
+      customerId: delivery.customer_id,
+      deliveryId: delivery.id,
+      deliveryNumber: delivery.delivery_number,
+      deliveryDate: delivery.delivery_date,
+      status,
+    });
+
+    if (notificationResult.sent) {
+      console.log("WhatsApp delivery status notification sent:", {
+        deliveryId: delivery.id,
+        status,
+        messageId: notificationResult.messageId,
+      });
+    } else {
+      console.log("WhatsApp delivery status notification skipped:", {
+        deliveryId: delivery.id,
+        reason: notificationResult.reason,
+      });
+    }
+  } catch (notificationError) {
+    // Do not fail or roll back a successfully saved delivery status
+    // because an external WhatsApp send failed.
+    console.error(
+      "WhatsApp delivery status notification failed:",
+      notificationError?.message || notificationError
+    );
+  }
+}
 
     if (deliveryError) {
       throw deliveryError;
