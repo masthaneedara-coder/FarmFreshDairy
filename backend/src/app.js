@@ -36,6 +36,7 @@ import customerDeviceRoutes from "./routes/customerDevice.routes.js";
 import couponRoutes from "./routes/coupon.routes.js";
 import whatsappRoutes from "./routes/whatsapp.routes.js";
 import deliveryCronRoutes from "./routes/deliveryCron.routes.js";
+import subscriptionManagementRoutes from "./routes/subscriptionManagement.routes.js";
 
 
 
@@ -195,6 +196,7 @@ app.use("/api/customer-devices", customerDeviceRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/cron/delivery", deliveryCronRoutes);
+app.use("/api/subscription-management", subscriptionManagementRoutes);
 
 
 // WhatsApp
