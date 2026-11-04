@@ -901,6 +901,21 @@ export async function getMonthlyBillDetails(
     `${API_URL}/monthly-bills/details/${subscriptionId}?month=${month}&year=${year}`
   );
 }
+
+export async function getCombinedCustomerMonthlyBillDetails(
+  customerId,
+  month,
+  year
+) {
+  if (!customerId) {
+    throw new Error("Customer ID is required.");
+  }
+
+  return await getJSON(
+    `${API_URL}/monthly-bills/customer/${customerId}/details?month=${month}&year=${year}`
+  );
+}
+
 export async function markMonthlyBillPaid(billId) {
   return await putJSON(
     `${API_URL}/monthly-bills/${billId}/pay`

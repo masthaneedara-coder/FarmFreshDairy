@@ -1,583 +1,199 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import {
-  fetchSubscription,
-  updateSubscription,
-  fetchCustomerAddresses,
-  updateSubscriptionStatus,
-} from "../config/api";
-import DeliverySizeOverrides from "../Components/subscription/DeliverySizeOverrides";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
+
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+
+function toDateInput(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
 
 export default function ManageSubscription() {
-    const PRICE_MAP = {
-        "500ml": 1350,
-        "1L": 2700,
-        "2L": 5400,
-        "3L": 8100,
-        "5L": 13500,
-    };
+  const { token } = useParams();
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [pauseFrom, setPauseFrom] = useState("");
+  const [pauseTo, setPauseTo] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-   const handlePause = async () => {
-
-    if (!pauseFrom || !pauseTo) {
-        alert("Please select pause dates.");
-        return;
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const from = new Date(pauseFrom);
-    const to = new Date(pauseTo);
-    const endDate = new Date(subscription.end_date);
-
-    if (from < today) {
-        alert("Pause From cannot be before today.");
-        return;
-    }
-
-    if (to < from) {
-        alert("Pause To cannot be before Pause From.");
-        return;
-    }
-
-    if (to > endDate) {
-        alert("Pause To cannot exceed subscription end date.");
-        return;
-    }
-
-    try {
-
-        setSaving(true);
-
-        await updateSubscriptionStatus(
-            id,
-            "Paused",
-            pauseFrom,
-            pauseTo
-        );
-
-        await loadSubscription();
-
-        setShowPauseModal(false);
-
-        alert("Subscription paused successfully.");
-
-    } catch (err) {
-
-        console.error(err);
-
-        alert("Failed to pause subscription.");
-
-    } finally {
-
-        setSaving(false);
-
-    }
-};
-const handleCancel = async () => {
-  const confirmed = window.confirm(
-    "Are you sure you want to cancel this subscription?"
+  const selectedSubscription = useMemo(
+    () => subscriptions.find((item) => item.id === selectedId),
+    [subscriptions, selectedId]
   );
 
-  if (!confirmed) return;
+  useEffect(() => {
+    let cancelled = false;
 
-  try {
-    setSaving(true);
-
-    const updated = await updateSubscriptionStatus(
-      id,
-      "Cancelled"
-    );
-
-    if (!updated) {
-      throw new Error("Failed to cancel subscription.");
+    async function load() {
+      try {
+        setLoading(true);
+        setError("");
+        const response = await fetch(
+          `${API_BASE}/api/subscription-management/${encodeURIComponent(token || "")}`
+        );
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || "This link is invalid or expired.");
+        }
+        if (cancelled) return;
+        const rows = Array.isArray(result.subscriptions) ? result.subscriptions : [];
+        setSubscriptions(rows);
+        setSelectedId(rows[0]?.id || "");
+      } catch (err) {
+        if (!cancelled) setError(err.message || "Unable to load subscriptions.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
-    await loadSubscription();
-
-    alert("Subscription cancelled successfully.");
-
-  } catch (err) {
-    console.error(err);
-    alert("Failed to cancel subscription.");
-  } finally {
-    setSaving(false);
-  }
-};
-  const navigate = useNavigate();
-  const { id } = useParams();
-
-  const [subscription, setSubscription] = useState(null);
-  
-  const [form, setForm] = useState({
-  quantity: "",
-  size: "",
-  delivery_time: "",
-  address_id: "",
-});
-const [addresses, setAddresses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [showPauseModal, setShowPauseModal] = useState(false);
-
-const [pauseFrom, setPauseFrom] = useState("");
-
-const [pauseTo, setPauseTo] = useState("");
-  const monthlyAmount =  (PRICE_MAP[form.size] || 0) * Number(form.quantity || 1);
-
-  useEffect(() => {
-    loadSubscription();
-  }, []);
-
-  const loadSubscription = async () => {
-    try {
-      setLoading(true);
-
-      const res = await fetchSubscription(id);
-
-      console.log("Subscription:", res);
-
-      if (!res.success) {
-        throw new Error(res.message);
-      }
-
-      setSubscription(res.subscription);
-      const customer = JSON.parse(
-        localStorage.getItem("customer")
-        );
-
-        const addressRes =
-        await fetchCustomerAddresses(customer.id);
-
-        setAddresses(addressRes.addresses || []);
-      const sub = res.subscription;
-
-            setForm({
-            quantity:
-                sub.subscription_items?.[0]?.quantity || "",
-
-            size:
-                sub.subscription_items?.[0]?.size || "",
-
-            delivery_time:
-                sub.delivery_time || "",
-
-            address_id:
-                sub.address_id || "",
-            });
-    } catch (err) {
-      console.error(err);
-    } finally {
+    if (token) load();
+    else {
+      setError("The subscription link is missing its security token.");
       setLoading(false);
     }
-  };
- const handleSave = async () => {
-  try {
-    setSaving(true);
 
-    const payload = {
-  quantity: Number(form.quantity),
-  size: form.size,
-  delivery_time: form.delivery_time,
-  address_id: form.address_id,
-  total_amount: monthlyAmount,
-};
+    return () => { cancelled = true; };
+  }, [token]);
 
-    const subscription = await updateSubscription(id, payload);
-    console.log("Subscription ID:", id);
-console.log("Payload:", payload);
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
 
-    if (!subscription) {
-      throw new Error("Update failed.");
+    if (!selectedId || !pauseFrom || !pauseTo) {
+      setError("Please select a subscription and both pause dates.");
+      return;
+    }
+    if (pauseFrom > pauseTo) {
+      setError("Pause end date cannot be before pause start date.");
+      return;
     }
 
-    // Reload latest subscription
-    const latest = await fetchSubscription(id);
-
-    setSubscription(latest);
-
-    const item = latest.subscription_items?.[0];
-
-    setForm({
-        quantity: item?.quantity || 1,
-        size: item?.size || "",
-        delivery_time: subscription.delivery_time,
-        address_id: subscription.address_id,
-        });
-
-    alert("✅ Subscription updated successfully.");
-
-  } catch (err) {
-    console.error(err);
-    alert("Failed to update subscription.");
-  } finally {
-    setSaving(false);
+    try {
+      setSubmitting(true);
+      const response = await fetch(
+        `${API_BASE}/api/subscription-management/${encodeURIComponent(token)}/pause`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subscriptionId: selectedId,
+            pauseFrom,
+            pauseTo,
+          }),
+        }
+      );
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Unable to pause subscription.");
+      }
+      setSuccess("Your subscription has been paused successfully. You can close this page.");
+      setSubscriptions((current) => current.filter((item) => item.id !== selectedId));
+      setSelectedId("");
+    } catch (err) {
+      setError(err.message || "Unable to submit your pause request.");
+    } finally {
+      setSubmitting(false);
+    }
   }
-};
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <h2 className="text-2xl font-bold text-green-700">
-          Loading Subscription...
-        </h2>
-      </div>
-    );
+    return <main style={styles.shell}><section style={styles.card}>Checking your secure link…</section></main>;
   }
 
   return (
-    <div className="manage-subscription-page max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
-      <style>{`
-        .manage-subscription-page { color:#173126; animation: msFadeIn .45s ease both; }
-        @keyframes msFadeIn { from {opacity:0; transform:translateY(12px)} to {opacity:1; transform:translateY(0)} }
-        @keyframes msFloat { 0%,100% {transform:translateY(0)} 50% {transform:translateY(-3px)} }
-        .manage-subscription-page button { -webkit-tap-highlight-color:transparent; touch-action:manipulation; transition:transform .18s ease, box-shadow .18s ease, background-color .18s ease; }
-        .manage-subscription-page button:active { transform:scale(.97); }
-        .manage-subscription-page > button:first-of-type { display:inline-flex; align-items:center; gap:.45rem; border:1px solid #dce9e1; background:#fff; color:#17633c; font-weight:700; box-shadow:0 4px 14px #174a2a0d; }
-        .manage-subscription-page h1 { font-size:clamp(1.65rem,5vw,2.5rem); line-height:1.12; letter-spacing:-.04em; }
-        .manage-subscription-page .mt-8.bg-white { overflow:hidden; border-radius:1.5rem; box-shadow:0 18px 55px rgba(15,75,42,.09); }
-        .manage-subscription-page .mt-8.bg-white > .bg-gradient-to-r { position:relative; overflow:hidden; background:linear-gradient(120deg,#075e3b,#16a36a 58%,#53c58b); padding:clamp(1.25rem,4vw,2rem); }
-        .manage-subscription-page .mt-8.bg-white > .bg-gradient-to-r:after { content:""; position:absolute; width:180px;height:180px;border-radius:50%;right:-55px;top:-90px;background:rgba(255,255,255,.12); }
-        .manage-subscription-page .mt-8.bg-white > .bg-gradient-to-r h2 { font-size:clamp(1.25rem,4vw,1.8rem); }
-        .manage-subscription-page .mt-8.bg-white > .p-8 { padding:clamp(1rem,4vw,2rem); }
-        .manage-subscription-page label { display:block; font-size:.88rem; font-weight:750; color:#294b3b; margin-bottom:.55rem; }
-        .manage-subscription-page input:not([type=checkbox]), .manage-subscription-page select { width:100%; min-height:48px; border:1px solid #d6e4dc; border-radius:14px; background:#fbfdfb; padding:.75rem .9rem; color:#173126; font-size:16px; outline:none; }
-        .manage-subscription-page input:focus, .manage-subscription-page select:focus { border-color:#16a36a; box-shadow:0 0 0 4px rgba(22,163,106,.12); }
-        .manage-subscription-page input:disabled { background:#f1f6f3; color:#52685c; opacity:1; }
-        .manage-subscription-page .grid.grid-cols-3 { gap:.55rem; }
-        .manage-subscription-page .grid.grid-cols-3 button { min-height:48px; border-radius:14px; }
-        .manage-subscription-page .flex.items-center.justify-between.rounded-xl { min-height:60px; border-color:#d6e4dc; background:#fbfdfb; }
-        .manage-subscription-page .flex.items-center.justify-between.rounded-xl button { width:44px;height:44px; flex:0 0 44px; box-shadow:0 4px 12px rgba(0,0,0,.09); }
-        .manage-subscription-page .flex.flex-wrap.gap-4.mt-10 { display:grid; grid-template-columns:1fr; gap:.7rem; margin-top:1.5rem; }
-        .manage-subscription-page .flex.flex-wrap.gap-4.mt-10 button { min-height:52px; border-radius:15px; font-size:1rem; box-shadow:0 7px 18px rgba(13,70,40,.12); }
-        .manage-subscription-page .mt-6:has(> *) { animation:msFadeIn .5s ease both; }
-        .manage-subscription-page .fixed.inset-0 { padding:1rem; backdrop-filter:blur(5px); animation:msFadeIn .2s ease both; }
-        .manage-subscription-page .fixed.inset-0 > div { width:min(100%,440px); max-height:90dvh; overflow-y:auto; border-radius:24px; box-shadow:0 24px 80px rgba(0,0,0,.25); padding:clamp(1.1rem,5vw,1.6rem); }
-        @media (min-width:640px) {
-          .manage-subscription-page .flex.flex-wrap.gap-4.mt-10 { grid-template-columns:repeat(3,minmax(0,1fr)); }
-        }
-        @media (max-width:639px) {
-          .manage-subscription-page { padding-left: .85rem; padding-right:.85rem; padding-top:1rem; }
-          .manage-subscription-page .mb-6 { margin-bottom:1rem; }
-          .manage-subscription-page .mt-8.bg-white { margin-top:1rem; border-radius:1.2rem; }
-          .manage-subscription-page .grid.lg\\:grid-cols-2 { grid-template-columns:minmax(0,1fr); gap:1.1rem; }
-          .manage-subscription-page .grid.grid-cols-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
-          .manage-subscription-page .grid.grid-cols-3 button { padding:.65rem .25rem; font-size:.95rem; }
-          .manage-subscription-page .text-2xl { font-size:1.25rem; }
-          .manage-subscription-page .mt-8.bg-white > .bg-gradient-to-r p { max-width:22rem; font-size:.9rem; }
-          .manage-subscription-page .mt-8.bg-white > .p-8 { padding:1rem; }
-        }
-        @media (prefers-reduced-motion:reduce) {
-          .manage-subscription-page *, .manage-subscription-page *:before, .manage-subscription-page *:after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
-        }
-      `}</style>
+    <main style={styles.shell}>
+      <section style={styles.card}>
+        <div style={styles.brand}>🥛 Farm Fresh Dairy</div>
+        <h1 style={styles.heading}>Manage milk delivery</h1>
+        <p style={styles.subheading}>Choose the subscription and dates you want to pause.</p>
 
-      <button
-        onClick={() => navigate(-1)}
-        className="mb-6 px-5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200"
-      >
-        ← Back
-      </button>
+        {error && <div role="alert" style={styles.error}>{error}</div>}
+        {success && <div role="status" style={styles.success}>{success}</div>}
 
-      <h1 className="text-4xl font-black text-green-700 mb-6">
-        Manage Subscription
-      </h1>
-      <div className="mt-8 bg-white rounded-3xl shadow-xl border border-green-100">
+        {!error && !success && subscriptions.length === 0 && (
+          <div style={styles.notice}>There are no active subscriptions available to pause.</div>
+        )}
 
-  {/* Header */}
-  <div className="bg-gradient-to-r from-green-600 to-emerald-500 text-white p-6">
-    <h2 className="text-3xl font-bold">
-      Manage Subscription
-    </h2>
-
-    <p className="opacity-90 mt-2">
-      Update your delivery preferences
-    </p>
-  </div>
-
-  <div className="p-8">
-
-    <div className="grid lg:grid-cols-2 gap-6">
-
-      {/* Quantity */}
-      <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Quantity
-            </label>
-
-            <div className="flex items-center justify-between rounded-xl border border-gray-300 bg-white px-4 py-3">
-
-                <button
-                type="button"
-                onClick={() =>
-                    setForm({
-                    ...form,
-                    quantity: Math.max(
-                        1,
-                        Number(form.quantity || 1) - 1
-                    ),
-                    })
-                            }
-                className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white text-xl font-bold transition"
-                >
-                −
-                </button>
-
-                <span className="text-2xl font-bold text-gray-800">
-                {form.quantity || 1}
-                </span>
-
-                <button
-                type="button"
-                onClick={() =>
-                    setForm({
-                    ...form,
-                    quantity: Number(form.quantity || 1) + 1,
-                    })
-                }
-                className="w-10 h-10 rounded-full bg-green-600 hover:bg-green-700 text-white text-xl font-bold transition"
-                >
-                +
-                </button>
-
-            </div>
-            </div>
-
-      {/* Size */}
-      <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Product Size
-            </label>
-
-            <div className="grid grid-cols-3 gap-3">
-
-                {[                
-                "500ml",
-                "1L",
-                "2L",
-                "3L",
-                "5L",
-                ].map((size) => {
-
-                const active = form.size === size;
-
-                return (
-
-                    <button
-                    key={size}
-                    type="button"
-                    onClick={() =>
-                        setForm({
-                        ...form,
-                        size,
-                        })
-                    }
-                    className={`rounded-xl border-2 py-3 font-bold transition-all duration-200 ${
-                        active
-                        ? "bg-green-600 border-green-600 text-white shadow-lg scale-105"
-                        : "bg-white border-gray-300 text-gray-700 hover:border-green-500 hover:bg-green-50"
-                    }`}
-                    >
-                    {size}
-                    </button>
-
-                );
-
-                })}
-
-            </div>
-            </div>
-
-      {/* Delivery */}
-        <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Delivery Address
-            </label>
-
+        {!error && !success && subscriptions.length > 0 && (
+          <form onSubmit={handleSubmit}>
+            <label style={styles.label} htmlFor="subscription">Select subscription</label>
             <select
-                value={form.address_id}
-                onChange={(e) =>
-                setForm({
-                    ...form,
-                    address_id: e.target.value,
-                })
-                }
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none"
+              id="subscription"
+              value={selectedId}
+              onChange={(event) => {
+                setSelectedId(event.target.value);
+                setPauseFrom("");
+                setPauseTo("");
+              }}
+              style={styles.input}
+              required
             >
-                <option value="">
-                Select Delivery Address
+              {subscriptions.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {`Subscription • ${item.start_date || "Start date unavailable"} • ${item.frequency || "Regular"}`}
                 </option>
-
-                {addresses.map((address) => (
-                <option
-                    key={address.id}
-                    value={address.id}
-                >
-                    {[
-                    address.house_no,
-                    address.street,
-                    address.area,
-                    address.city,
-                    ]
-                    .filter(Boolean)
-                    .join(", ")}
-                </option>
-                ))}
+              ))}
             </select>
-            </div>
 
-        {/* Monthly Amount */}
-        <div>
-            <label className="block text-sm font-semibold text-gray-600 mb-2">
-            Monthly Amount
-            </label>
+            {selectedSubscription && (
+              <div style={styles.details}>
+                <div><strong>Status:</strong> {selectedSubscription.status}</div>
+                <div><strong>Valid until:</strong> {selectedSubscription.end_date || "Not available"}</div>
+                <div><strong>Delivery time:</strong> {selectedSubscription.delivery_time || "Not specified"}</div>
+              </div>
+            )}
 
+            <label style={styles.label} htmlFor="pauseFrom">Pause from</label>
             <input
-                value={monthlyAmount}
-                disabled
-                className="w-full rounded-xl border bg-slate-100 px-4 py-3"
-                />
-        </div>
-
-        {/* Start Date */}
-        <div>
-            <label className="block text-sm font-semibold text-gray-600 mb-2">
-            Start Date
-            </label>
-
-            <input
-            value={subscription?.start_date || ""}
-            disabled
-            className="w-full rounded-xl border bg-slate-100 px-4 py-3"
+              id="pauseFrom"
+              type="date"
+              value={pauseFrom}
+              min={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })}
+              max={toDateInput(selectedSubscription?.end_date)}
+              onChange={(event) => setPauseFrom(event.target.value)}
+              style={styles.input}
+              required
             />
-        </div>
 
-        {/* Status */}
-        <div>
-            <label className="block text-sm font-semibold text-gray-600 mb-2">
-            Status
-            </label>
-
+            <label style={styles.label} htmlFor="pauseTo">Pause until</label>
             <input
-            value={subscription?.status || ""}
-            disabled
-            className="w-full rounded-xl border bg-slate-100 px-4 py-3"
+              id="pauseTo"
+              type="date"
+              value={pauseTo}
+              min={pauseFrom || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })}
+              max={toDateInput(selectedSubscription?.end_date)}
+              onChange={(event) => setPauseTo(event.target.value)}
+              style={styles.input}
+              required
             />
-        </div>
 
-        </div>
-
-        {/* Buttons */}
-        <div className="flex flex-wrap gap-4 mt-10">
-
-       <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-xl py-4 font-bold"
-            >
-            {saving ? "Saving..." : "💾 Save Changes"}
+            <p style={styles.note}>Your delivery is not paused until you confirm below. The secure link can be used once and expires after 30 minutes.</p>
+            <button type="submit" disabled={submitting} style={styles.button}>
+              {submitting ? "Submitting…" : "Confirm pause"}
             </button>
-
-        <button
-                onClick={() =>{ setShowPauseModal(true); console.log("Pause clicked");}}
-                disabled={saving}
-                className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white rounded-xl py-4 font-bold"
-            >
-                ⏸ Pause
-            </button>
-
-        <button
-            onClick={handleCancel}
-            disabled={saving}
-            className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-xl py-4 font-bold"
-        >
-            ❌ Cancel
-        </button>
-
-        </div>
-
-    </div>
-
-    </div>
-
-    {/* Per-delivery milk size and quantity overrides.
-        This section changes only the selected delivery date and product.
-        It does not update the permanent subscription form or monthly amount. */}
-    <div className="mt-6">
-      <DeliverySizeOverrides subscription={subscription} />
-    </div>
-
-    {showPauseModal && (
-
-<div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[99999]">
-
-    <div className="bg-white rounded-2xl p-6 w-[420px]">
-
-        <h2 className="text-2xl font-bold mb-5">
-            Pause Subscription
-        </h2>
-
-        <div className="space-y-4">
-
-            <div>
-                <label className="font-semibold">
-                    Pause From
-                </label>
-
-                <input
-                    type="date"
-                    value={pauseFrom}
-                    min={new Date().toISOString().split("T")[0]}
-                    max={subscription.end_date}
-                    onChange={(e) => setPauseFrom(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 mt-2"
-                />
-            </div>
-
-            <div>
-                <label className="font-semibold">
-                    Pause To
-                </label>
-
-                <input
-                    type="date"
-                    value={pauseTo}
-                    min={pauseFrom || new Date().toISOString().split("T")[0]}
-                    max={subscription.end_date}
-                    onChange={(e) => setPauseTo(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 mt-2"
-                />
-            </div>
-
-        </div>
-
-        <div className="flex justify-end gap-3 mt-6">
-
-            <button
-                onClick={() => setShowPauseModal(false)}
-                className="px-4 py-2 border rounded-lg"
-            >
-                Cancel
-            </button>
-
-            <button
-                onClick={handlePause}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg"
-            >
-                Pause
-            </button>
-
-        </div>
-
-    </div>
-
-</div>
-
-)}
-
-     
-
-    </div>
+          </form>
+        )}
+      </section>
+    </main>
   );
 }
+
+const styles = {
+  shell: { minHeight: "100vh", display: "grid", placeItems: "center", padding: 20, background: "#f4f7f3", fontFamily: "Arial, sans-serif" },
+  card: { width: "100%", maxWidth: 520, boxSizing: "border-box", background: "#fff", borderRadius: 16, padding: 28, boxShadow: "0 8px 30px rgba(0,0,0,.08)" },
+  brand: { color: "#237447", fontWeight: 700, fontSize: 18, marginBottom: 12 },
+  heading: { margin: "0 0 8px", fontSize: 26, color: "#17251c" },
+  subheading: { color: "#5e6b62", margin: "0 0 22px", lineHeight: 1.5 },
+  label: { display: "block", fontWeight: 600, margin: "16px 0 7px", color: "#26352b" },
+  input: { width: "100%", boxSizing: "border-box", padding: 12, border: "1px solid #cbd5ce", borderRadius: 8, background: "#fff", fontSize: 16 },
+  details: { display: "grid", gap: 7, background: "#f6f8f6", padding: 12, borderRadius: 8, marginTop: 12, color: "#425047", fontSize: 14 },
+  note: { fontSize: 13, lineHeight: 1.5, color: "#66736a", margin: "18px 0" },
+  button: { width: "100%", padding: 14, border: 0, borderRadius: 8, color: "#fff", background: "#237447", fontWeight: 700, fontSize: 16, cursor: "pointer" },
+  error: { background: "#fff0f0", color: "#a11b1b", border: "1px solid #f2c5c5", borderRadius: 8, padding: 12, marginBottom: 16 },
+  success: { background: "#edf8ef", color: "#1f6b35", border: "1px solid #bde2c5", borderRadius: 8, padding: 12, marginBottom: 16 },
+  notice: { background: "#f6f8f6", padding: 14, borderRadius: 8, color: "#425047" },
+};

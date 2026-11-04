@@ -59,6 +59,7 @@ import DeliveryProtectedRoute from "./Components/DeliveryProtectedRoute";
 import Notifications from "./Pages/Notifications";
 import NotificationSettings from "./Pages/NotificationSettings";
 import RenewSubscription from "./Pages/RenewSubscription";
+import WhatsAppPauseManagement from "./Pages/WhatsAppPauseManagement";
 
 
 export default function App() {
@@ -121,6 +122,7 @@ export default function App() {
               </CustomerRoute>
             }
           />
+          
 
         {/* =========================
             CUSTOMER PROTECTED
@@ -340,6 +342,11 @@ export default function App() {
   }
 />
 
+
+<Route
+  path="/manage-subscription/:token"
+  element={<WhatsAppPauseManagement />}
+/>
 
       </Routes>
       
