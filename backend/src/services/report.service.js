@@ -130,6 +130,31 @@ export async function getMonthlyDeliveryReportService(month, year) {
     });
   }
 
+  // 6. Customer-wise pause history for the selected month.
+  // This table is populated by recordPauseHistoryService when a paused
+  // subscription is renewed/closed, with one row per calendar-month segment.
+  const { data: pauseHistoryRows, error: pauseHistoryError } = await supabaseAdmin
+    .from("subscription_pause_history")
+    .select("customer_id, subscription_id, pause_from, pause_to, paused_days")
+    .eq("pause_month", numericMonth)
+    .eq("pause_year", numericYear)
+    .order("pause_from", { ascending: true });
+
+  if (pauseHistoryError) throw pauseHistoryError;
+
+  const pauseHistoryByCustomer = new Map();
+  for (const pauseRow of pauseHistoryRows || []) {
+    if (!pauseRow.customer_id) continue;
+    const list = pauseHistoryByCustomer.get(pauseRow.customer_id) || [];
+    list.push({
+      subscriptionId: pauseRow.subscription_id,
+      pauseFrom: pauseRow.pause_from,
+      pauseTo: pauseRow.pause_to,
+      pausedDays: asNumber(pauseRow.paused_days),
+    });
+    pauseHistoryByCustomer.set(pauseRow.customer_id, list);
+  }
+
   const deliveriesBySubscription = new Map();
   for (const delivery of allDeliveries) {
     const list = deliveriesBySubscription.get(delivery.subscription_id) || [];
@@ -279,6 +304,11 @@ export async function getMonthlyDeliveryReportService(month, year) {
     const deliveryAmount = customer.normalAmount;
     const totalAmount = deliveryAmount + customer.extraAmount;
     const totalQuantity = customer.normalQuantity + customer.extraQuantity;
+    const customerPauseHistory = pauseHistoryByCustomer.get(customer.customerId) || [];
+    const pausedDays = customerPauseHistory.reduce(
+      (sum, pause) => sum + asNumber(pause.pausedDays),
+      0
+    );
 
     report.push({
       customerId: customer.customerId,
@@ -291,6 +321,8 @@ export async function getMonthlyDeliveryReportService(month, year) {
       size: customer.size,
       deliveredDays,
       missedDays,
+      pausedDays,
+      pauseHistory: customerPauseHistory,
       dailyRate: customer.dailyRate,
       normalQuantity: customer.normalQuantity,
       normalAmount: deliveryAmount,
@@ -319,6 +351,7 @@ export async function getMonthlyDeliveryReportService(month, year) {
       customer_name: customer.customerName,
       delivered_days: deliveredDays,
       missed_days: missedDays,
+      paused_days: pausedDays,
       normal_quantity: customer.normalQuantity,
       extra_quantity: customer.extraQuantity,
       delivery_amount: deliveryAmount,
