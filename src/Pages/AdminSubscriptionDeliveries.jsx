@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   getSubscriptionDeliveries,
+  getPreviousUnconfirmedDeliveries,
   generateSubscriptionDeliveries,
   updateSubscriptionDeliveryStatus,
   bulkAssignSubscriptionDeliveries,
@@ -16,6 +17,11 @@ import AssignSubscriptionDeliveryBoyModal
 
 export default function AdminSubscriptionDeliveries() {
   const [deliveries, setDeliveries] = useState([]);
+  const [activeTab, setActiveTab] = useState("today");
+  const [previousDeliveries, setPreviousDeliveries] = useState([]);
+  const [previousLoading, setPreviousLoading] = useState(false);
+  const [previousError, setPreviousError] = useState("");
+  const [updatingPreviousId, setUpdatingPreviousId] = useState(null);
   const [deliveryBoys, setDeliveryBoys] = useState([]);
 
   const [loading, setLoading] = useState(false);
@@ -49,6 +55,7 @@ const [autoAssignLoading, setAutoAssignLoading] = useState(false);
     loadDeliveries();
     loadDeliveryBoys();
     loadAutoAssignSetting();
+    loadPreviousDeliveries();
   }, []);
   async function loadAutoAssignSetting() {
   try {
@@ -110,6 +117,52 @@ async function handleAutoAssignToggle() {
       alert("Unable to load deliveries");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadPreviousDeliveries() {
+    try {
+      setPreviousLoading(true);
+      setPreviousError("");
+
+      const data = await getPreviousUnconfirmedDeliveries();
+      setPreviousDeliveries(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Unable to load previous deliveries:", err);
+      setPreviousError(err.message || "Unable to load previous deliveries.");
+    } finally {
+      setPreviousLoading(false);
+    }
+  }
+
+  async function handlePreviousStatusUpdate(delivery, newStatus) {
+    const deliveryLabel = delivery.delivery_number || "this delivery";
+    const message = newStatus === "Delivered"
+      ? `Confirm that ${deliveryLabel} was actually delivered on ${formatDate(delivery.delivery_date)}?\n\nThis uses the normal Delivered workflow, including any applicable PREPAID / ONLINE wallet debit.`
+      : `Have you confirmed with the delivery boy/customer that ${deliveryLabel} was not delivered on ${formatDate(delivery.delivery_date)}?`;
+
+    if (!window.confirm(message)) return;
+
+    try {
+      setUpdatingPreviousId(delivery.id);
+      const response = await updateSubscriptionDeliveryStatus(
+        delivery.id,
+        newStatus
+      );
+
+      if (response?.success === false) {
+        throw new Error(response.message || "Unable to update delivery status.");
+      }
+
+      await Promise.all([
+        loadPreviousDeliveries(),
+        loadDeliveries(),
+      ]);
+    } catch (err) {
+      console.error("Previous Delivery Status Update Error:", err);
+      alert(err.message || "Failed to update previous delivery.");
+    } finally {
+      setUpdatingPreviousId(null);
     }
   }
 
@@ -270,6 +323,45 @@ async function handleRestoreToday(delivery) {
       );
     });
   }, [deliveries, search, status]);
+
+  const filteredPreviousDeliveries = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+
+    return previousDeliveries.filter((delivery) => {
+      const searchableText = `
+        ${delivery.delivery_number || ""}
+        ${delivery.customers?.full_name || ""}
+        ${delivery.customers?.phone || ""}
+        ${delivery.addresses?.area || ""}
+        ${delivery.delivery_boys?.full_name || ""}
+      `.toLowerCase();
+
+      return searchableText.includes(keyword) &&
+        (status === "" || delivery.status === status);
+    });
+  }, [previousDeliveries, search, status]);
+
+  const previousDeliveryGroups = useMemo(() => {
+    const groups = new Map();
+
+    for (const delivery of filteredPreviousDeliveries) {
+      const date = delivery.delivery_date || "Unknown date";
+      if (!groups.has(date)) groups.set(date, []);
+      groups.get(date).push(delivery);
+    }
+
+    return Array.from(groups.entries()).map(([date, items]) => ({
+      date,
+      items,
+    }));
+  }, [filteredPreviousDeliveries]);
+
+  const previousAssignedCount = previousDeliveries.filter(
+    (delivery) => delivery.status === "Assigned"
+  ).length;
+  const previousOutForDeliveryCount = previousDeliveries.filter(
+    (delivery) => delivery.status === "Out for Delivery"
+  ).length;
 
   // ==========================================
   // STATS
@@ -673,72 +765,105 @@ async function handleRestoreToday(delivery) {
                   Farm Fresh Dairy
                 </p>
                 <h1 className="truncate text-xl font-black sm:text-3xl">
-                  Today&apos;s Deliveries
+                  {activeTab === "today" ? "Today's Deliveries" : "Previous Days – Pending Updates"}
                 </h1>
                 <p className="mt-0.5 text-xs text-emerald-50/85 sm:text-sm">
-                  Manage, assign and update milk deliveries
+                  {activeTab === "today"
+                    ? "Manage, assign and update milk deliveries"
+                    : "Review deliveries that were not confirmed by the delivery boy"}
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+            <div className="flex flex-col gap-3 w-full sm:w-auto sm:flex-row">
+              {activeTab === "today" ? (
+                <>
+                  <button
+                    onClick={handleAutoAssignToggle}
+                    disabled={autoAssignLoading}
+                    className={`rounded-2xl border px-5 py-3.5 font-black transition-all active:scale-95 ${
+                      autoAssignEnabled
+                        ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                        : "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    {autoAssignLoading
+                      ? "⏳ Updating..."
+                      : autoAssignEnabled
+                      ? "🟢 Auto Assign: ON"
+                      : "⚪ Auto Assign: OFF"}
+                  </button>
 
-  <button
-    onClick={handleAutoAssignToggle}
-    disabled={autoAssignLoading}
-    className={`
-      px-5 py-3.5
-      rounded-2xl
-      font-black
-      transition-all
-      active:scale-95
-      border
-      ${
-        autoAssignEnabled
-          ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-          : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
-      }
-    `}
-  >
-    {autoAssignLoading
-      ? "⏳ Updating..."
-      : autoAssignEnabled
-      ? "🟢 Auto Assign: ON"
-      : "⚪ Auto Assign: OFF"}
-  </button>
-
-  <button
-    onClick={handleGenerate}
-    disabled={loading}
-    className="
-      px-5 sm:px-6 py-3.5
-      rounded-2xl
-      bg-green-600
-      hover:bg-green-700
-      active:scale-95
-      text-white
-      font-black
-      shadow-lg shadow-green-600/20
-      transition-all duration-200
-      disabled:bg-gray-400
-      disabled:shadow-none
-    "
-  >
-    {loading
-      ? "⏳ Generating..."
-      : "⚡ Generate Today's Deliveries"}
-  </button>
-
-</div>
+                  <button
+                    onClick={handleGenerate}
+                    disabled={loading}
+                    className="rounded-2xl bg-green-600 px-5 py-3.5 font-black text-white shadow-lg shadow-green-600/20 transition-all hover:bg-green-700 active:scale-95 disabled:bg-gray-400 disabled:shadow-none sm:px-6"
+                  >
+                    {loading ? "⏳ Generating..." : "⚡ Generate Today's Deliveries"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={loadPreviousDeliveries}
+                  disabled={previousLoading}
+                  className="rounded-2xl border border-white/30 bg-white/10 px-5 py-3.5 font-black text-white transition hover:bg-white/20 disabled:opacity-60"
+                >
+                  {previousLoading ? "⏳ Refreshing..." : "↻ Refresh Previous Days"}
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <HeaderStat label="Total" value={stats.total} icon="📦" />
-            <HeaderStat label="Pending" value={stats.pending} icon="🟠" />
-            <HeaderStat label="Assigned" value={stats.assigned} icon="🔵" />
-            <HeaderStat label="Delivered" value={stats.delivered} icon="✅" />
-          </div>
+          {activeTab === "today" ? (
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <HeaderStat label="Total" value={stats.total} icon="📦" />
+              <HeaderStat label="Pending" value={stats.pending} icon="🟠" />
+              <HeaderStat label="Assigned" value={stats.assigned} icon="🔵" />
+              <HeaderStat label="Delivered" value={stats.delivered} icon="✅" />
+            </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <HeaderStat label="Needs Review" value={previousDeliveries.length} icon="⏰" />
+              <HeaderStat label="Assigned" value={previousAssignedCount} icon="🔵" />
+              <HeaderStat label="Out for Delivery" value={previousOutForDeliveryCount} icon="🚚" />
+            </div>
+          )}
         </header>
+
+        {/* TODAY / PREVIOUS DAYS TABS */}
+        <nav className="ff-enter mt-3 grid grid-cols-2 gap-2 rounded-2xl border border-emerald-100 bg-white p-2 shadow-sm sm:mt-4">
+          <button
+            type="button"
+            onClick={() => setActiveTab("today")}
+            className={`min-h-12 rounded-xl px-3 text-sm font-black transition ${
+              activeTab === "today"
+                ? "bg-emerald-700 text-white shadow"
+                : "text-slate-600 hover:bg-emerald-50"
+            }`}
+          >
+            📦 Today's Deliveries
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("previous");
+              loadPreviousDeliveries();
+            }}
+            className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-black transition ${
+              activeTab === "previous"
+                ? "bg-amber-500 text-white shadow"
+                : "text-slate-600 hover:bg-amber-50"
+            }`}
+          >
+            ⏰ Previous Days
+            <span className={`rounded-full px-2 py-0.5 text-[11px] ${
+              activeTab === "previous" ? "bg-white/20" : "bg-amber-100 text-amber-800"
+            }`}>
+              {previousDeliveries.length}
+            </span>
+          </button>
+        </nav>
 
         {/* MOBILE-FRIENDLY FILTER */}
         <section className="ff-enter mt-3 rounded-[24px] border border-emerald-100 bg-white/95 p-3 shadow-[0_10px_30px_rgba(15,23,42,.07)] backdrop-blur-xl sm:mt-5 sm:p-4">
@@ -749,7 +874,9 @@ async function handleRestoreToday(delivery) {
               </span>
               <input
                 className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-semibold outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                placeholder="Search customer, phone, area or delivery no."
+                placeholder={activeTab === "today"
+                  ? "Search customer, phone, area or delivery no."
+                  : "Search previous deliveries, customer or delivery boy"}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -775,7 +902,9 @@ async function handleRestoreToday(delivery) {
           {(search || status) && (
             <div className="mt-2 flex items-center justify-between px-1">
               <span className="text-[11px] font-bold text-slate-400">
-                {filtered.length} result{filtered.length === 1 ? "" : "s"}
+                {activeTab === "today"
+                  ? `${filtered.length} result${filtered.length === 1 ? "" : "s"}`
+                  : `${filteredPreviousDeliveries.length} previous result${filteredPreviousDeliveries.length === 1 ? "" : "s"}`}
               </span>
               <button
                 type="button"
@@ -791,6 +920,8 @@ async function handleRestoreToday(delivery) {
           )}
         </section>
 
+        {activeTab === "today" && (
+          <>
         {/* MOBILE BULK CONTROLS */}
         {selectableDeliveries.length > 0 && (
           <section className="ff-enter mt-3 md:hidden">
@@ -1220,6 +1351,133 @@ async function handleRestoreToday(delivery) {
             </div>
           )}
         </section>
+          </>
+        )}
+
+        {activeTab === "previous" && (
+          <section className="ff-enter mt-4 space-y-4">
+            <div className="flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-black text-amber-950">Previous days needing review</h2>
+                <p className="mt-1 text-xs font-semibold text-amber-800">
+                  These deliveries are still Assigned or Out for Delivery after their scheduled date. Confirm with the delivery boy or customer before updating.
+                </p>
+              </div>
+              <span className="whitespace-nowrap rounded-full bg-white px-3 py-2 text-xs font-black text-amber-800">
+                {filteredPreviousDeliveries.length} to review
+              </span>
+            </div>
+
+            {previousLoading && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm font-bold text-slate-500">
+                Loading previous deliveries...
+              </div>
+            )}
+
+            {!previousLoading && previousError && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+                {previousError}
+                <button
+                  type="button"
+                  onClick={loadPreviousDeliveries}
+                  className="ml-3 underline"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!previousLoading && !previousError && filteredPreviousDeliveries.length === 0 && (
+              <div className="rounded-[26px] border border-slate-200 bg-white px-5 py-12 text-center shadow-sm">
+                <div className="text-4xl">✅</div>
+                <h3 className="mt-3 text-lg font-black text-slate-800">No previous deliveries need review</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {previousDeliveries.length === 0
+                    ? "All earlier assigned deliveries have a final status."
+                    : "No previous deliveries match the current search or status filter."}
+                </p>
+              </div>
+            )}
+
+            {!previousLoading && !previousError && previousDeliveryGroups.map((group) => (
+              <div key={group.date} className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+                  <h3 className="font-black text-slate-800">{formatDate(group.date)}</h3>
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">
+                    {group.items.length} pending update{group.items.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-100">
+                  {group.items.map((delivery) => {
+                    const style = getStatusStyle(delivery.status);
+                    const isUpdating = updatingPreviousId === delivery.id;
+
+                    return (
+                      <article key={delivery.id} className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-black uppercase tracking-wide text-slate-500">
+                              {delivery.delivery_number || "Delivery"}
+                            </span>
+                            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black ${style.badge}`}>
+                              {delivery.status}
+                            </span>
+                            <span className="text-[11px] font-semibold text-slate-400">
+                              {delivery.delivery_shift || "Shift not set"}
+                            </span>
+                          </div>
+
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Customer</p>
+                              <p className="text-sm font-black text-slate-800">{delivery.customers?.full_name || "-"}</p>
+                              <p className="text-xs text-slate-500">{delivery.customers?.phone || "-"}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Delivery boy</p>
+                              <p className="text-sm font-bold text-slate-800">{delivery.delivery_boys?.full_name || "Not assigned"}</p>
+                              <p className="text-xs text-slate-500">{delivery.delivery_boys?.phone || ""}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Area</p>
+                              <p className="text-sm font-bold text-slate-800">{delivery.addresses?.area || "-"}</p>
+                              <p className="text-xs text-slate-500">{delivery.addresses?.street || ""}</p>
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl bg-emerald-50 p-3">
+                            <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-emerald-800">Delivery items</p>
+                            <ProductItems delivery={delivery} mobile />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 sm:flex-row lg:min-w-[190px] lg:flex-col">
+                          <button
+                            type="button"
+                            onClick={() => handlePreviousStatusUpdate(delivery, "Delivered")}
+                            disabled={isUpdating}
+                            className="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isUpdating ? "Updating..." : "✓ Confirm Delivered"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePreviousStatusUpdate(delivery, "Missed")}
+                            disabled={isUpdating}
+                            className="min-h-11 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-black text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Mark as Missed
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
       </div>
 
       <AssignSubscriptionDeliveryBoyModal

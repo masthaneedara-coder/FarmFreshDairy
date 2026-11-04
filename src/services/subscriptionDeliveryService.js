@@ -19,6 +19,18 @@ export async function getSubscriptionDeliveries() {
 }
 
 /**
+ * Previous scheduled deliveries that still need an admin review.
+ * Only earlier dates with Assigned / Out for Delivery status are returned.
+ */
+export async function getPreviousUnconfirmedDeliveries() {
+  const response = await getJSON(
+    `${API_URL}/subscription-deliveries/previous-pending`
+  );
+
+  return response.deliveries || [];
+}
+
+/**
  * Get Single Delivery
  */
 export async function getSubscriptionDelivery(id) {
