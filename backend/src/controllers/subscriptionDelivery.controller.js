@@ -558,3 +558,26 @@ export async function deleteSubscriptionDeliveryOverride(
     });
   }
 }
+// Get previous days' unconfirmed deliveries
+export async function getPreviousPendingDeliveries(req, res) {
+  try {
+    const { data, error } =
+      await getPreviousUnconfirmedDeliveriesService();
+
+    if (error) throw error;
+
+    return res.json({
+      success: true,
+      deliveries: data || [],
+      count: data?.length || 0,
+    });
+  } catch (err) {
+    console.error("Get Previous Pending Deliveries Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message:
+        err?.message || "Failed to load previous pending deliveries",
+    });
+  }
+}

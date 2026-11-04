@@ -3,6 +3,7 @@ import express from "express";
 import {
   generateTodayDeliveries,
   getTodayDeliveries,
+  getPreviousPendingDeliveries,
   getDeliveryById,
   assignSubscriptionDelivery,
   deleteDelivery,
@@ -21,6 +22,10 @@ router.post("/generate", generateTodayDeliveries);
 
 // Today's deliveries
 router.get("/", getTodayDeliveries);
+
+// Previous scheduled days that still need admin review.
+// Keep this route before the generic /:id route below.
+router.get("/previous-pending", getPreviousPendingDeliveries);
 
 // Customer summary
 router.get(

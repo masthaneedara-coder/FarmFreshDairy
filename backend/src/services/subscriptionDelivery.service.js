@@ -1783,3 +1783,44 @@ export async function deleteSubscriptionDeliveryOverrideService(
 
   return data || [];
 }
+export async function getPreviousUnconfirmedDeliveriesService() {
+  const today = getIndiaToday();
+
+  return await supabaseAdmin
+    .from("subscription_deliveries")
+    .select(`
+      *,
+      customers(
+        id,
+        full_name,
+        phone
+      ),
+      addresses(
+        house_no,
+        street,
+        area,
+        city,
+        state,
+        pincode
+      ),
+      delivery_boys(
+        id,
+        full_name,
+        phone
+      ),
+      subscription_delivery_items(
+        *,
+        products(
+          id,
+          size,
+          name,
+          image
+        )
+      )
+    `)
+    .lt("delivery_date", today)
+    .in("status", ["Assigned", "Out for Delivery"])
+    .not("delivery_boy_id", "is", null)
+    .order("delivery_date", { ascending: false })
+    .order("created_at", { ascending: false });
+}
