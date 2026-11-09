@@ -727,6 +727,78 @@ const getRemainingDays = (expireDate) => {
           }
         }
 
+        .subscription-compact-details {
+          overflow: hidden;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          background: rgba(255,255,255,.96);
+        }
+        .subscription-compact-details > summary {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          min-height: 38px;
+          padding: 8px 10px;
+          color: #334155;
+          cursor: pointer;
+          list-style: none;
+          font-size: 11px;
+          line-height: 1.25;
+          font-weight: 850;
+        }
+        .subscription-compact-details > summary::-webkit-details-marker { display: none; }
+        .subscription-compact-details > summary::after {
+          content: "+";
+          flex: 0 0 auto;
+          display: grid;
+          place-items: center;
+          width: 19px;
+          height: 19px;
+          border-radius: 7px;
+          background: #f1f5f9;
+          color: #047857;
+          font-size: 14px;
+          font-weight: 900;
+        }
+        .subscription-compact-details[open] > summary {
+          border-bottom: 1px solid #eef2f7;
+          background: #fbfefd;
+        }
+        .subscription-compact-details[open] > summary::after { content: "−"; }
+        .subscription-compact-content { padding: 8px; }
+        .subscription-mini-tag {
+          display: inline-flex;
+          align-items: center;
+          max-width: 48%;
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          border: 1px solid #e2e8f0;
+          border-radius: 999px;
+          background: #f8fafc;
+          padding: 3px 7px;
+          color: #475569;
+          font-size: 9px;
+          line-height: 1.2;
+          font-weight: 800;
+        }
+        .subscription-detail-shell { padding: 8px !important; gap: 7px !important; }
+        .subscription-detail-card { border-radius: 12px; }
+        .subscription-detail-shell .subscription-mobile-grid { gap: 6px; }
+        .subscription-detail-shell .subscription-mobile-grid > div { padding: 8px !important; border-radius: 10px; }
+        .subscription-detail-shell .subscription-detail-card { padding: 9px !important; }
+        .subscription-detail-shell .subscription-action { min-height: 36px; }
+        .subscription-detail-shell button { min-height: 36px; }
+        @media (max-width: 640px) {
+          .subscription-compact-details > summary { min-height: 36px; padding: 7px 9px; font-size: 10px; }
+          .subscription-compact-content { padding: 7px; }
+          .subscription-mini-tag { max-width: 55%; font-size: 8px; padding: 2px 6px; }
+          .subscription-detail-shell { padding: 7px !important; gap: 6px !important; }
+          .subscription-detail-shell .subscription-mobile-grid > div { padding: 7px !important; }
+          .subscription-detail-shell button { min-height: 34px; padding-top: 7px !important; padding-bottom: 7px !important; font-size: 10px !important; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .subscription-admin-card,
           .subscription-admin-card .grid-rows-\[1fr\] > div {
@@ -933,6 +1005,69 @@ const getRemainingDays = (expireDate) => {
                 sub.totalAmount ??
                 monthlyAmount;
 
+              // Normalize once in this subscription's map scope.
+              const normalizedPaymentStatus = paymentStatus.trim().toLowerCase();
+              const normalizedPaymentMethod = String(paymentMethod || "N/A")
+                .trim()
+                .toUpperCase();
+
+              // Customer wallet balance is returned by the admin subscriptions API.
+              // Inactive or missing wallets are displayed as zero.
+              const rawWalletBalance = Number(
+                sub.wallet_balance ?? sub.walletBalance ?? 0
+              );
+              const walletStatus = String(
+                sub.wallet_status ?? sub.walletStatus ?? "Inactive"
+              );
+              const walletBalance =
+                walletStatus === "Active" && Number.isFinite(rawWalletBalance)
+                  ? rawWalletBalance
+                  : 0;
+
+              // The subscription creation flow initializes payment_amount to
+              // the total even while payment_status is Pending. Therefore do
+              // not treat payment_amount as money received unless payment is
+              // verified as Paid. Explicit paid-amount fields take priority
+              // when the API provides them (for genuine partial payments).
+              const subscriptionTotalAmount = Math.max(
+                0,
+                Number(
+                  sub.total_amount ??
+                  sub.totalAmount ??
+                  sub.monthlyAmount ??
+                  sub.monthly_amount ??
+                  sub.price ??
+                  sub.amount ??
+                  0
+                ) || 0
+              );
+
+              const explicitPaidAmount =
+                sub.paid_amount ??
+                sub.paidAmount ??
+                sub.amount_paid ??
+                sub.amountPaid ??
+                sub.received_amount ??
+                sub.receivedAmount ??
+                null;
+
+              const paidAmountCandidate =
+                explicitPaidAmount !== null && explicitPaidAmount !== undefined && explicitPaidAmount !== ""
+                  ? Number(explicitPaidAmount)
+                  : normalizedPaymentStatus === "paid"
+                    ? Number(paymentAmount ?? subscriptionTotalAmount)
+                    : 0;
+
+              const paidAmount = Math.min(
+                subscriptionTotalAmount,
+                Math.max(0, Number.isFinite(paidAmountCandidate) ? paidAmountCandidate : 0)
+              );
+
+              const remainingAmount = Math.max(
+                0,
+                subscriptionTotalAmount - paidAmount
+              );
+
               const paymentDate =
                 sub.payment_date ||
                 sub.paymentDate ||
@@ -951,63 +1086,37 @@ const getRemainingDays = (expireDate) => {
                   className="subscription-admin-card bg-white rounded-[22px] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all duration-300"
                 >
                   {/* CARD HEADER */}
-                  <div className="p-3 sm:p-4 bg-gradient-to-r from-green-50 via-white to-emerald-50 border-b border-slate-100">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                  <div className="p-2.5 sm:p-3 bg-gradient-to-r from-green-50 via-white to-emerald-50 border-b border-slate-100">
+                    <div className="flex flex-row items-center justify-between gap-2.5">
                       <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-lg sm:text-xl font-black text-green-700 break-words">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <h2 className="text-sm sm:text-lg font-black text-green-700 break-words">
                             {sub.customerName || sub.name || "Customer"}
                           </h2>
 
                           <span
-                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black ${statusStyle.badge}`}
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black ${statusStyle.badge}`}
                           >
                             <span
-                              className={`w-2 h-2 rounded-full ${statusStyle.dot}`}
+                              className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`}
                             />
                             {displayStatus}
                           </span>
                         </div>
 
-                        <p className="text-[10px] sm:text-xs text-slate-500 mt-1.5 break-all">
+                        <p className="hidden sm:block text-[8px] sm:text-[9px] text-slate-500 mt-0.5 break-all">
                           Subscription ID: {subscriptionId}
                         </p>
 
-                        {(
-                          sub.is_paused === true ||
-                          displayStatus === "Paused"
-                        ) && (
-                          <div className="mt-2 inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-yellow-200 bg-yellow-50 px-2.5 py-1.5 text-[10px] sm:text-xs font-bold text-yellow-800">
-                            <span className="text-base">⏸️</span>
-                            <span>Paused:</span>
-                            <span className="font-black">
-                              {formatDate(
-                                sub.pause_from ||
-                                sub.pauseFrom ||
-                                sub.pauseStart ||
-                                sub.pausedFrom
-                              )}
-                            </span>
-                            <span>→</span>
-                            <span className="font-black">
-                              {formatDate(
-                                sub.pause_to ||
-                                sub.pauseTo ||
-                                sub.pauseEnd ||
-                                sub.pausedTo
-                              )}
-                            </span>
-                          </div>
-                        )}
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        <div className="rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white px-3.5 py-2.5 shadow-md">
+                        <div className="rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white px-2.5 py-1.5 shadow-sm">
 
-                        <p className="text-[11px] font-bold text-white/75 uppercase tracking-wide">
+                        <p className="text-[8px] font-bold text-white/75 uppercase tracking-wide">
                           Monthly Amount
                         </p>
-                          <p className="text-lg sm:text-xl font-black mt-0.5">
+                          <p className="text-sm sm:text-base font-black mt-0.5">
                             {formatMoney(monthlyAmount)}
                           </p>
                         </div>
@@ -1021,7 +1130,7 @@ const getRemainingDays = (expireDate) => {
                                 : subscriptionId
                             )
                           }
-                          className="group inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-green-300 hover:bg-green-50 hover:text-green-700 active:scale-95"
+                          className="group inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-all duration-300 hover:border-green-300 hover:bg-green-50 hover:text-green-700 active:scale-95"
                           aria-expanded={
                             expandedSubscriptionId === subscriptionId
                           }
@@ -1046,42 +1155,19 @@ const getRemainingDays = (expireDate) => {
                   </div>
 
                   <div
-                    className={`flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-4 py-2.5 sm:px-5 ${
+                    className={`flex items-center justify-between gap-2 border-t border-slate-100 bg-white px-3 py-1.5 sm:px-4 ${
                       expandedSubscriptionId === subscriptionId
                         ? "border-b"
                         : ""
                     }`}
                   >
-                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-xs text-slate-500">
-                      <span className="font-bold">
-                        {sub.product || "Milk Subscription"}
-                      </span>
-                      <span>•</span>
-                      <span>{sub.phone || sub.mobile || "No phone"}</span>
-                      {(sub.is_paused === true ||
-                        displayStatus === "Paused") && (
-                        <>
-                          <span>•</span>
-                          <span className="font-black text-yellow-700">
-                            ⏸ Paused
-                          </span>
-                          <span>•</span>
-                          <span className="font-bold text-yellow-700">
-                            {formatDate(
-                              sub.pause_from ||
-                              sub.pauseFrom ||
-                              sub.pauseStart ||
-                              sub.pausedFrom
-                            )}
-                            {" → "}
-                            {formatDate(
-                              sub.pause_to ||
-                              sub.pauseTo ||
-                              sub.pauseEnd ||
-                              sub.pausedTo
-                            )}
-                          </span>
-                        </>
+                    <div className="flex min-w-0 flex-wrap items-center gap-1 text-[9px] sm:text-[10px] text-slate-500">
+                      <span className="subscription-mini-tag">{sub.product || "Milk Subscription"}</span>
+                      <span className="subscription-mini-tag">{sub.phone || sub.mobile || "No phone"}</span>
+                      <span className="subscription-mini-tag">{normalizedPaymentMethod}</span>
+                      <span className={`subscription-mini-tag ${normalizedPaymentStatus === "paid" ? "border-green-200 bg-green-50 text-green-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>{paymentStatus}</span>
+                      {(sub.is_paused === true || displayStatus === "Paused") && (
+                        <span className="subscription-mini-tag border-yellow-200 bg-yellow-50 text-yellow-700">⏸ Paused</span>
                       )}
                     </div>
 
@@ -1099,8 +1185,11 @@ const getRemainingDays = (expireDate) => {
                         : "grid-rows-[0fr] opacity-0"
                     }`}
                   >
-                    <div className="subscription-detail-shell min-h-0 overflow-hidden p-2.5 sm:p-3 space-y-2.5">
+                    <div className="subscription-detail-shell min-h-0 overflow-hidden p-2 sm:p-2.5 space-y-2">
 
+<details className="subscription-compact-details">
+                      <summary><span>👤 Customer & delivery</span><span className="text-[9px] font-semibold text-slate-400">{sub.area || "View details"}</span></summary>
+                      <div className="subscription-compact-content space-y-2">
                     {/* CUSTOMER / PLAN */}
                     <div className="subscription-mobile-grid lg:grid-cols-4">
                       <MiniInfo label="Phone" value={sub.phone || sub.mobile || "-"} />
@@ -1132,6 +1221,12 @@ const getRemainingDays = (expireDate) => {
                       <MiniInfo label="Area" value={sub.area || "-"} />
                     </div>
 
+                      </div>
+                    </details>
+
+<details className="subscription-compact-details">
+                      <summary><span>📅 Validity & renewal</span><span className={`text-[9px] font-bold ${expired ? "text-red-600" : remainingDays !== null && remainingDays <= 7 ? "text-orange-600" : "text-green-700"}`}>{validity.text}</span></summary>
+                      <div className="subscription-compact-content space-y-2">
                     {/* VALIDITY */}
                     <div
                       className={`rounded-xl border p-3 ${
@@ -1145,7 +1240,7 @@ const getRemainingDays = (expireDate) => {
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <div
-                            className={`w-11 h-11 rounded-xl bg-white flex items-center justify-center shadow-sm text-xl ${
+                            className={`w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm text-base ${
                               expired ? "text-red-600" : "text-green-700"
                             }`}
                           >
@@ -1158,7 +1253,7 @@ const getRemainingDays = (expireDate) => {
                             </p>
 
                             <p
-                              className={`text-xl sm:text-2xl font-black mt-1 ${
+                              className={`text-base sm:text-lg font-black mt-0.5 ${
                                 expired
                                   ? "text-red-700"
                                   : remainingDays !== null && remainingDays <= 7
@@ -1187,7 +1282,7 @@ const getRemainingDays = (expireDate) => {
                       {!expired &&
                         remainingDays !== null &&
                         remainingDays <= 7 && (
-                          <p className="text-sm font-bold text-orange-700 mt-3">
+                          <p className="text-[10px] font-bold text-orange-700 mt-2">
                             🟠 Renewal required soon.
                           </p>
                         )}
@@ -1196,7 +1291,7 @@ const getRemainingDays = (expireDate) => {
                         <button
                           type="button"
                           onClick={() => openWhatsAppReminder(sub, true)}
-                          className="mt-4 w-full sm:w-auto rounded-2xl bg-red-600 hover:bg-red-700 text-white px-5 py-3 font-black shadow-md active:scale-95 transition"
+                          className="mt-2 w-full sm:w-auto rounded-xl bg-red-600 hover:bg-red-700 text-white px-3 py-2 text-xs font-bold shadow-sm active:scale-95 transition"
                         >
                           💬 Send Expired Message on WhatsApp
                         </button>
@@ -1205,7 +1300,7 @@ const getRemainingDays = (expireDate) => {
                         <button
                           type="button"
                           onClick={() => openWhatsAppReminder(sub, false)}
-                          className="mt-4 w-full sm:w-auto rounded-2xl bg-green-600 hover:bg-green-700 text-white px-5 py-3 font-black shadow-md active:scale-95 transition"
+                          className="mt-2 w-full sm:w-auto rounded-xl bg-green-600 hover:bg-green-700 text-white px-3 py-2 text-xs font-bold shadow-sm active:scale-95 transition"
                         >
                           💬 Send 5-Day Renewal Reminder
                         </button>
@@ -1216,14 +1311,15 @@ const getRemainingDays = (expireDate) => {
                             handleSendRenewalLink(sub)
                           }
                           className="
-                            mt-3
+                            mt-2
                             w-full
                             sm:w-auto
-                            rounded-2xl
+                            rounded-xl
                             bg-green-600
-                            px-5
-                            py-3
-                            font-black
+                            px-3
+                            py-2
+                            text-xs
+                            font-bold
                             text-white
                             shadow-md
                             transition
@@ -1235,21 +1331,27 @@ const getRemainingDays = (expireDate) => {
                         </button>
                     </div>
 
+                      </div>
+                    </details>
+
+<details className="subscription-compact-details">
+                      <summary><span>💳 Payment</span><span className="flex flex-wrap items-center justify-end gap-1"><span className="subscription-mini-tag">{normalizedPaymentMethod}</span><span className={`subscription-mini-tag ${normalizedPaymentStatus === "paid" ? "border-green-200 bg-green-50 text-green-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>{paymentStatus}</span>{normalizedPaymentMethod === "ONLINE" && <span className={`subscription-mini-tag ${remainingAmount > 0 ? "border-orange-200 bg-orange-50 text-orange-700" : "border-green-200 bg-green-50 text-green-700"}`}>Due {formatMoney(remainingAmount)}</span>}<span className="subscription-mini-tag border-emerald-200 bg-emerald-50 text-emerald-700">Wallet {formatMoney(walletBalance)}</span></span></summary>
+                      <div className="subscription-compact-content space-y-2">
                     {/* PAYMENT */}
-                    <div className="subscription-detail-card rounded-2xl border border-blue-100 bg-blue-50 p-3 sm:p-3.5">
-                      <div className="flex items-center justify-between gap-3 mb-4">
+                    <div className="subscription-detail-card rounded-xl border border-blue-100 bg-blue-50 p-2">
+                      <div className="flex items-center justify-between gap-2 mb-2">
                         <div>
                           <p className="text-[11px] font-black uppercase tracking-wide text-blue-500">
                             Billing
                           </p>
-                          <h3 className="text-base sm:text-lg font-black text-blue-700">
+                          <h3 className="text-sm sm:text-base font-black text-blue-700">
                             💳 Payment Information
                           </h3>
                         </div>
 
                         <span
-                          className={`px-3 py-1 rounded-full text-xs font-black ${
-                            paymentStatus.toLowerCase() === "paid"
+                          className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                            normalizedPaymentStatus === "paid"
                               ? "bg-green-100 text-green-700"
                               : "bg-orange-100 text-orange-700"
                           }`}
@@ -1258,51 +1360,80 @@ const getRemainingDays = (expireDate) => {
                         </span>
                       </div>
 
-                      <div className="subscription-mobile-grid lg:grid-cols-4">
-                        <MiniInfo label="Payment Method" value={paymentMethod} />
-                        <MiniInfo
-                          label="Amount"
-                          value={formatMoney(paymentAmount)}
-                        />
-                        <MiniInfo
-                          label="Payment Date"
-                          value={
-                            paymentDate ? formatDate(paymentDate) : "Not Paid Yet"
-                          }
-                        />
-                        <MiniInfo
-                          label="Reference"
-                          value={paymentReference}
-                          breakAll
-                        />
+                      <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-2">
+                        <span className="text-[10px] font-bold text-emerald-800">Available wallet balance</span>
+                        <strong className="text-xs font-black text-emerald-700">{formatMoney(walletBalance)}</strong>
                       </div>
+
+                      {normalizedPaymentMethod === "ONLINE" ? (
+                        <>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <div className="min-w-0 rounded-lg border border-blue-100 bg-white p-2">
+                              <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-400">Total</p>
+                              <p className="mt-1 break-words text-xs sm:text-sm font-black text-slate-800">{formatMoney(subscriptionTotalAmount)}</p>
+                            </div>
+                            <div className="min-w-0 rounded-lg border border-green-100 bg-white p-2">
+                              <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-400">Paid</p>
+                              <p className="mt-1 break-words text-xs sm:text-sm font-black text-green-700">{formatMoney(paidAmount)}</p>
+                            </div>
+                            <div className={`min-w-0 rounded-lg border p-2 ${remainingAmount > 0 ? "border-orange-100 bg-white" : "border-green-100 bg-green-50"}`}>
+                              <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-400">Remaining</p>
+                              <p className={`mt-1 break-words text-xs sm:text-sm font-black ${remainingAmount > 0 ? "text-orange-700" : "text-green-700"}`}>{formatMoney(remainingAmount)}</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] sm:text-xs text-slate-500">
+                            <span>Method: <strong className="text-slate-700">Online</strong></span>
+                            <span>Payment date: <strong className="text-slate-700">{paymentDate ? formatDate(paymentDate) : "Not paid yet"}</strong></span>
+                            {paymentReference !== "N/A" && (
+                              <span className="min-w-0 break-all">Ref: <strong className="text-slate-700">{paymentReference}</strong></span>
+                            )}
+                          </div>
+                          {remainingAmount > 0 && (
+                            <p className="mt-2 rounded-lg bg-orange-50 px-2 py-1.5 text-[10px] font-bold text-orange-700">
+                              Payment pending: {formatMoney(remainingAmount)} remaining.
+                            </p>
+                          )}
+                          {remainingAmount === 0 && normalizedPaymentStatus === "paid" && (
+                            <p className="mt-2 rounded-lg bg-green-50 px-2 py-1.5 text-[10px] font-bold text-green-700">
+                              Payment completed — no balance due.
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <div className="subscription-mobile-grid lg:grid-cols-4">
+                          <MiniInfo label="Payment Method" value={paymentMethod} />
+                          <MiniInfo label="Amount" value={formatMoney(paymentAmount)} />
+                          <MiniInfo
+                            label="Payment Date"
+                            value={paymentDate ? formatDate(paymentDate) : "Not Paid Yet"}
+                          />
+                          <MiniInfo label="Reference" value={paymentReference} breakAll />
+                        </div>
+                      )}
                     </div>
 
-                    {/* PAUSE INFORMATION */}
-                    {(sub.is_paused === true ||
-                      displayStatus === "Paused") && (
-                      <div className="subscription-detail-card rounded-xl border border-yellow-200 bg-yellow-50 p-3">
-                        <div className="flex items-start gap-3">
-                          <span className="text-xl">⏸️</span>
-                          <div>
-                            <p className="font-black text-yellow-800">
-                              Subscription Paused
-                            </p>
-                            <p className="text-sm text-yellow-700 mt-1">
-                              Pause period:{" "}
-                              <span className="font-bold">
-                                {formatDate(sub.pause_from || sub.pauseFrom)}
-                              </span>
-                              {" → "}
-                              <span className="font-bold">
-                                {formatDate(sub.pause_to || sub.pauseTo)}
-                              </span>
-                            </p>
-                          </div>
-                        </div>
+                    
+
                       </div>
+                    </details>
+
+                    {/* PAUSE INFORMATION */}
+                    {(sub.is_paused === true || displayStatus === "Paused") && (
+                      <details className="subscription-compact-details">
+                        <summary>
+                          <span>⏸ Pause information</span>
+                          <span className="text-[9px] font-semibold text-yellow-700">{formatDate(sub.pause_from || sub.pauseFrom)} → {formatDate(sub.pause_to || sub.pauseTo)}</span>
+                        </summary>
+                        <div className="subscription-compact-content text-[10px] font-semibold text-yellow-800">
+                          Subscription paused from {formatDate(sub.pause_from || sub.pauseFrom)} to {formatDate(sub.pause_to || sub.pauseTo)}.
+                        </div>
+                      </details>
                     )}
 
+<details className="subscription-compact-details">
+                      <summary><span>🚚 Delivery summary</span><span className="text-[9px] font-semibold text-slate-400">Done {summary.delivered || 0} · Pending {summary.pending || 0}</span></summary>
+                      <div className="subscription-compact-content space-y-2">
                     {/* DELIVERY SUMMARY */}
                     <div className="subscription-detail-card rounded-2xl border border-indigo-100 bg-indigo-50 p-3 sm:p-3.5">
                       <div className="flex items-center justify-between mb-4">
@@ -1324,6 +1455,12 @@ const getRemainingDays = (expireDate) => {
                       </div>
                     </div>
 
+                      </div>
+                    </details>
+
+                    <details className="subscription-compact-details">
+                      <summary><span>⚙️ Admin controls</span><span className="text-[9px] font-semibold text-slate-400">{displayStatus}</span></summary>
+                      <div className="subscription-compact-content">
                     {/* ADMIN ACTIONS */}
                     <div className="subscription-detail-card rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-3.5">
                       <div className="flex items-center justify-between gap-3">
@@ -1341,13 +1478,13 @@ const getRemainingDays = (expireDate) => {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
                         <button
                           onClick={() =>
                             updateStatusLocal(subscriptionId, "Active")
                           }
                           disabled={updating}
-                          className="w-full rounded-2xl bg-green-600 hover:bg-green-700 text-white py-3.5 font-black shadow active:scale-95 transition disabled:opacity-60"
+                          className="w-full rounded-xl bg-green-600 hover:bg-green-700 text-white py-2.5 text-xs font-bold shadow-sm active:scale-95 transition disabled:opacity-60"
                         >
                           {updating ? "Updating..." : "✅ Activate"}
                         </button>
@@ -1357,7 +1494,7 @@ const getRemainingDays = (expireDate) => {
                             updateStatusLocal(subscriptionId, "Paused")
                           }
                           disabled={updating}
-                          className="w-full rounded-2xl bg-yellow-500 hover:bg-yellow-600 text-white py-3.5 font-black shadow active:scale-95 transition disabled:opacity-60"
+                          className="w-full rounded-xl bg-yellow-500 hover:bg-yellow-600 text-white py-2.5 text-xs font-bold shadow-sm active:scale-95 transition disabled:opacity-60"
                         >
                           ⏸️ Pause
                         </button>
@@ -1367,7 +1504,7 @@ const getRemainingDays = (expireDate) => {
                             updateStatusLocal(subscriptionId, "Stopped")
                           }
                           disabled={updating}
-                          className="w-full rounded-2xl bg-red-500 hover:bg-red-600 text-white py-3.5 font-black shadow active:scale-95 transition disabled:opacity-60"
+                          className="w-full rounded-xl bg-red-500 hover:bg-red-600 text-white py-2.5 text-xs font-bold shadow-sm active:scale-95 transition disabled:opacity-60"
                         >
                           ⛔ Stop
                         </button>
@@ -1387,6 +1524,8 @@ const getRemainingDays = (expireDate) => {
 )}
                       </div>
                     </div>
+                  </div>
+                    </details>
                   </div>
                   </div>
                 </div>
@@ -1455,7 +1594,7 @@ const getRemainingDays = (expireDate) => {
 
 function MiniInfo({ label, value, breakAll = false }) {
   return (
-    <div className="rounded-xl bg-white border border-slate-200 p-2.5 sm:p-3 min-w-0 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
+    <div className="rounded-lg bg-white border border-slate-200 p-2 sm:p-2.5 min-w-0 shadow-sm">
       <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-slate-400 truncate">
         {label}
       </p>
@@ -1472,7 +1611,7 @@ function MiniInfo({ label, value, breakAll = false }) {
 
 function SummaryBox({ label, value, icon }) {
   return (
-    <div className="rounded-xl bg-white border border-indigo-100 p-2.5 sm:p-3 text-center shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md">
+    <div className="rounded-lg bg-white border border-indigo-100 p-2 sm:p-2.5 text-center shadow-sm">
       <div className="text-base sm:text-lg">{icon}</div>
       <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-0.5 truncate">
         {label}
