@@ -53,6 +53,40 @@ export async function getAllSubscriptionsService() {
     console.error("Get All Subscriptions Error:", error);
     throw error;
   }
+   // ======================================
+  // Get wallet balances for these customers in one query
+  // ======================================
+  const customerIds = [
+    ...new Set(
+      (subscriptions || [])
+        .map((sub) => sub.customer_id)
+        .filter(Boolean)
+    ),
+  ];
+
+  const walletByCustomer = new Map();
+
+  if (customerIds.length > 0) {
+    const { data: walletAccounts, error: walletError } =
+      await supabaseAdmin
+        .from("wallet_accounts")
+        .select("customer_id, balance, status")
+        .in("customer_id", customerIds);
+
+    if (walletError) {
+      console.error("Get Subscription Wallet Balances Error:", walletError);
+      throw walletError;
+    }
+
+    for (const wallet of walletAccounts || []) {
+      const balance = Number(wallet.balance ?? 0);
+
+      walletByCustomer.set(wallet.customer_id, {
+        balance: Number.isFinite(balance) ? balance : 0,
+        status: wallet.status || "Inactive",
+      });
+    }
+  }
 
   const cleanAddressPart = (value) =>
     String(value ?? "").trim().replace(/,\s*$/, "");
@@ -69,6 +103,11 @@ export async function getAllSubscriptionsService() {
       : sub.subscription_items;
 
     const product = item?.products;
+    const wallet = walletByCustomer.get(sub.customer_id);
+    const walletBalance =
+      wallet?.status === "Active" && Number.isFinite(Number(wallet.balance))
+        ? Number(wallet.balance)
+        : 0;
 
     const houseNo = cleanAddressPart(address?.house_no);
     const street = cleanAddressPart(address?.street);
