@@ -143,6 +143,9 @@ export async function getAllSubscriptionsService() {
       monthlyAmount: sub.total_amount ?? 0,
       totalAmount: sub.total_amount ?? 0,
       paymentAmount: sub.payment_amount ?? sub.total_amount ?? 0,
+	// Wallet information
+wallet_balance: walletBalance,
+wallet_status: wallet?.status || "No Wallet",
 
       // Payment information
       payment_method: sub.payment_method || "N/A",
