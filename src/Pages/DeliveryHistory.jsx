@@ -18,7 +18,9 @@ import {
   Milk,
   IndianRupee,
   Clock3,
-  ChevronRight,
+  ChevronDown,
+  CheckCircle2,
+  RefreshCw,
   History as HistoryIcon,
   X,
   Truck,
@@ -30,6 +32,8 @@ import {
 export default function DeliveryHistory() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -105,6 +109,23 @@ export default function DeliveryHistory() {
       );
     });
   }, [history, search, fromDate, toDate]);
+
+  // Reset to the first page whenever search or date filters change.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, fromDate, toDate]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredHistory.length / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedHistory = useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
+    return filteredHistory.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredHistory, safeCurrentPage]);
+
+  const firstRecord = filteredHistory.length
+    ? (safeCurrentPage - 1) * PAGE_SIZE + 1
+    : 0;
+  const lastRecord = Math.min(safeCurrentPage * PAGE_SIZE, filteredHistory.length);
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
@@ -1288,44 +1309,25 @@ export default function DeliveryHistory() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-[#f4f8f5] px-3 py-4 sm:px-6">
         <style>{`
-          @keyframes historyPulse {
-            0%, 100% { opacity: .45; }
-            50% { opacity: 1; }
-          }
-
-          @keyframes historyFloat {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
-          }
-
-          .history-skeleton {
-            animation: historyPulse 1.4s ease-in-out infinite;
-          }
+          @keyframes historyPulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
+          .history-skeleton { animation:historyPulse 1.35s ease-in-out infinite }
         `}</style>
-
-        <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
-          <div className="h-44 rounded-[30px] bg-slate-200 history-skeleton" />
-
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
-            {[1, 2, 3].map((item) => (
-              <div
-                key={item}
-                className="h-24 rounded-3xl bg-white shadow-sm history-skeleton"
-              />
-            ))}
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-5 flex items-center gap-3 rounded-3xl bg-white p-4 shadow-sm">
+            <div className="history-skeleton h-12 w-12 rounded-2xl bg-emerald-100" />
+            <div className="flex-1 space-y-2">
+              <div className="history-skeleton h-4 w-40 rounded bg-slate-200" />
+              <div className="history-skeleton h-3 w-56 max-w-full rounded bg-slate-100" />
+            </div>
           </div>
-
-          <div className="mt-5 h-28 rounded-3xl bg-white shadow-sm history-skeleton" />
-
-          <div className="mt-5 space-y-4">
-            {[1, 2, 3].map((item) => (
-              <div
-                key={item}
-                className="h-72 rounded-[28px] bg-white shadow-sm history-skeleton"
-              />
-            ))}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {[1, 2, 3].map((item) => <div key={item} className="history-skeleton h-20 rounded-2xl bg-white" />)}
+          </div>
+          <div className="history-skeleton mt-4 h-28 rounded-3xl bg-white" />
+          <div className="mt-4 space-y-3">
+            {[1, 2, 3].map((item) => <div key={item} className="history-skeleton h-32 rounded-3xl bg-white" />)}
           </div>
         </div>
       </div>
@@ -1333,431 +1335,224 @@ export default function DeliveryHistory() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-50">
+    <div className="delivery-history-page min-h-screen overflow-x-hidden bg-[#f4f8f5] text-slate-900 pb-8">
       <style>{`
-        @keyframes historyFadeUp {
-          from {
-            opacity: 0;
-            transform: translateY(18px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes historyHero {
-          from {
-            opacity: 0;
-            transform: translateY(-14px) scale(.98);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-
-        @keyframes historyFloat {
-          0%, 100% { transform: translateY(0) rotate(0deg); }
-          50% { transform: translateY(-5px) rotate(2deg); }
-        }
-
-        .history-fade-up {
-          animation: historyFadeUp .45s ease-out both;
-        }
-
-        .history-hero {
-          animation: historyHero .55s ease-out both;
-        }
-
-        .history-float {
-          animation: historyFloat 3s ease-in-out infinite;
-        }
-
-        .history-scrollbar::-webkit-scrollbar {
-          height: 5px;
-        }
-
-        .history-scrollbar::-webkit-scrollbar-thumb {
-          border-radius: 999px;
-          background: #cbd5e1;
+        @keyframes historyEnter { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }
+        @keyframes historyGlow { 0%,100% { transform:translate3d(0,0,0) scale(1) } 50% { transform:translate3d(-9px,7px,0) scale(1.06) } }
+        @keyframes historyShine { 0% { transform:translateX(-150%) skewX(-18deg) } 100% { transform:translateX(420%) skewX(-18deg) } }
+        .history-enter { animation:historyEnter .42s cubic-bezier(.22,1,.36,1) both }
+        .history-glow { animation:historyGlow 7s ease-in-out infinite }
+        .history-scroll::-webkit-scrollbar { height:4px }
+        .history-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:99px }
+        .history-button-shine { position:relative; overflow:hidden }
+        .history-button-shine::after { content:""; position:absolute; inset:0 auto 0 -35%; width:25%; background:rgba(255,255,255,.24); transform:skewX(-18deg) }
+        .history-button-shine:hover::after { animation:historyShine .75s ease }
+        .delivery-history-page button:focus-visible,
+        .delivery-history-page a:focus-visible,
+        .delivery-history-page input:focus-visible,
+        .delivery-history-page select:focus-visible { outline:3px solid rgba(16,185,129,.28); outline-offset:2px }
+        @media (prefers-reduced-motion:reduce) {
+          .history-enter,.history-glow,.history-skeleton { animation:none !important }
+          .delivery-history-page * { scroll-behavior:auto !important; transition:none !important }
         }
       `}</style>
 
-      <main className="mx-auto max-w-6xl px-2.5 pb-24 pt-3 sm:px-6 sm:pb-10 sm:pt-6 lg:px-8">
-        {/* HERO */}
-        <section className="history-hero relative overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-4 py-5 text-white shadow-xl shadow-emerald-900/10 sm:rounded-[30px] sm:px-7 sm:py-8">
-          <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
-          <div className="absolute -bottom-24 left-1/3 h-52 w-52 rounded-full bg-emerald-300/10 blur-3xl" />
-
-          <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div className="max-w-2xl">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold text-emerald-50 backdrop-blur">
-                <HistoryIcon size={14} />
-                DELIVERY ACTIVITY
-              </div>
-
-              <h1 className="text-[27px] font-black leading-tight tracking-tight sm:text-4xl">
-                Delivery History
-              </h1>
-
-              <p className="mt-2 max-w-xl text-sm leading-6 text-emerald-50/80 sm:text-base">
-                Review your completed deliveries, customer details,
-                delivered items and payment information.
-              </p>
+      <main className="mx-auto w-full max-w-6xl px-3 pt-3 sm:px-6 sm:pt-6 lg:px-8">
+        {/* BRAND HEADER */}
+        <header className="history-enter mb-4 flex items-center justify-between gap-3 rounded-[22px] border border-white bg-white px-3 py-3 shadow-[0_8px_28px_rgba(15,23,42,.05)] sm:mb-5 sm:rounded-[26px] sm:px-5 sm:py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-emerald-100 bg-emerald-50 p-1.5 sm:h-12 sm:w-12">
+              <img src="/logo.png" alt="FarmFreshDairy logo" className="h-full w-full object-contain" onError={(e) => { e.currentTarget.style.display = "none"; }} />
             </div>
-
-            <button
-              type="button"
-              onClick={() => openPdfModal("")}
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 text-sm font-black text-white shadow-lg backdrop-blur transition hover:bg-white/15 active:scale-[.98] md:w-auto"
-            >
-              <FileDown size={18} />
-              Monthly PDF
-            </button>
-
-            <div className="history-float hidden h-24 w-24 shrink-0 items-center justify-center rounded-[28px] border border-white/15 bg-white/10 backdrop-blur md:flex">
-              <Truck size={42} strokeWidth={1.7} />
-            </div>
-          </div>
-        </section>
-
-        {/* STATS */}
-        <section className="mt-3 grid grid-cols-2 gap-2.5 sm:mt-4 sm:gap-3 md:grid-cols-3">
-          <StatCard
-            icon={<PackageCheck size={20} />}
-            label="Completed"
-            value={stats.total}
-            helper="All deliveries"
-            delay="60ms"
-          />
-
-          <StatCard
-            icon={<Clock3 size={20} />}
-            label="Today"
-            value={stats.today}
-            helper="Completed today"
-            delay="120ms"
-          />
-
-          <StatCard
-            icon={<IndianRupee size={20} />}
-            label="Total Value"
-            value={`₹${stats.amount.toFixed(0)}`}
-            helper="Delivered orders"
-            delay="180ms"
-            fullWidth
-          />
-        </section>
-
-        {/* FILTERS */}
-        <section className="history-fade-up mt-4 rounded-[24px] border border-slate-200/80 bg-white p-2.5 shadow-sm sm:mt-5 sm:rounded-[28px] sm:p-4">
-          <div className="mb-2.5 flex items-center justify-between px-1 sm:hidden">
-            <div>
-              <p className="text-sm font-black text-slate-900">Find deliveries</p>
-              <p className="text-[10px] font-semibold text-slate-400">
-                Search or choose a date range
-              </p>
-            </div>
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-black text-slate-600 active:scale-95"
-              >
-                Reset
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-2.5 lg:flex-row">
-            <div className="relative flex-1">
-              <Search
-                size={19}
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-
-              <input
-                type="text"
-                placeholder="Search customer, phone or delivery number..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-11 text-[13px] font-medium text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 sm:text-base"
-              />
-
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-slate-500 transition hover:bg-slate-300"
-                  aria-label="Clear search"
-                >
-                  <X size={15} />
-                </button>
-              )}
-            </div>
-
-            <div className="lg:w-[430px]">
-              <div className="mb-2 flex gap-2 overflow-x-auto pb-0.5 history-scrollbar">
-                <button
-                  type="button"
-                  onClick={() => setQuickRange("today")}
-                  className="min-h-9 shrink-0 rounded-xl border border-emerald-100 bg-emerald-50 px-3 text-[10px] font-black text-emerald-700 active:scale-95"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQuickRange("7days")}
-                  className="min-h-9 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-[10px] font-black text-slate-600 active:scale-95"
-                >
-                  Last 7 Days
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQuickRange("month")}
-                  className="min-h-9 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-[10px] font-black text-slate-600 active:scale-95"
-                >
-                  This Month
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-              <label className="relative block">
-                <CalendarDays
-                  size={18}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-                <span className="pointer-events-none absolute left-11 top-1.5 text-[9px] font-black uppercase tracking-wider text-slate-400">
-                  From Date
-                </span>
-                <input
-                  type="date"
-                  value={fromDate}
-                  max={toDate || undefined}
-                  onChange={(e) => handleFromDateChange(e.target.value)}
-                  className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-3 pt-3 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                />
-              </label>
-
-              <label className="relative block">
-                <CalendarDays
-                  size={18}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-                <span className="pointer-events-none absolute left-11 top-1.5 text-[9px] font-black uppercase tracking-wider text-slate-400">
-                  To Date
-                </span>
-                <input
-                  type="date"
-                  value={toDate}
-                  min={fromDate || undefined}
-                  onChange={(e) => handleToDateChange(e.target.value)}
-                  className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-3 pt-3 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                />
-              </label>
-              </div>
-            </div>
-
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="hidden min-h-12 rounded-2xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-600 transition hover:bg-slate-50 active:scale-95 lg:block"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          <div className="mt-2.5 flex items-center justify-between gap-2 px-1 sm:mt-3 sm:gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-400 sm:text-sm">
-                Showing{" "}
-                <span className="font-black text-slate-800">
-                  {filteredHistory.length}
-                </span>{" "}
-                deliveries
-              </p>
-              {(fromDate || toDate) && (
-                <p className="mt-1 truncate text-[10px] font-black uppercase tracking-wide text-emerald-600 sm:text-xs">
-                  {dateRangeLabel}
-                </p>
-              )}
+              <p className="truncate text-sm font-black tracking-tight text-slate-900 sm:text-base">FarmFresh<span className="text-emerald-600">Dairy</span></p>
+              <p className="mt-0.5 text-[10px] font-bold text-slate-400 sm:text-xs">Delivery partner workspace</p>
             </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" onClick={loadHistory} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95" aria-label="Refresh delivery history" title="Refresh">
+              <RefreshCw size={16} />
+            </button>
+            <button type="button" onClick={() => openPdfModal("")} className="history-button-shine flex min-h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-700 to-teal-600 px-3.5 text-xs font-black text-white shadow-md shadow-emerald-200 transition hover:-translate-y-0.5 active:scale-95 sm:px-4 sm:text-sm">
+              <FileDown size={16} /> <span>Monthly PDF</span>
+            </button>
+          </div>
+        </header>
 
-            {hasFilters && (
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                Filter Active
-              </span>
-            )}
+        {/* PAGE INTRO */}
+        <section className="history-enter relative mb-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-[#064e3b] via-[#047857] to-[#0f9f82] px-4 py-4 text-white shadow-lg shadow-emerald-900/10 sm:mb-5 sm:rounded-[30px] sm:px-6 sm:py-5" style={{ animationDelay: "50ms" }}>
+          <div className="history-glow pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-emerald-200/15 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-20 left-1/3 h-40 w-40 rounded-full bg-teal-200/10 blur-3xl" />
+          <div className="relative flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[.16em] text-emerald-50 sm:text-[10px]">
+                <HistoryIcon size={12} /> Delivery activity
+              </div>
+              <h1 className="text-[24px] font-black leading-tight tracking-tight sm:text-3xl">Delivery History</h1>
+              <p className="mt-1 max-w-xl text-[11px] font-medium leading-5 text-emerald-50/80 sm:text-sm">Review completed drops, customer details, delivered items and monthly totals.</p>
+            </div>
+            <div className="hidden h-[66px] w-[66px] shrink-0 items-center justify-center rounded-[22px] border border-white/15 bg-white/10 text-emerald-50 sm:flex">
+              <Truck size={31} strokeWidth={1.6} />
+            </div>
+          </div>
+          <div className="relative mt-3 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/10 px-3 py-2.5 backdrop-blur sm:mt-4">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-100/70">Records in view</p>
+              <p className="mt-0.5 text-base font-black sm:text-lg">{stats.total} deliveries</p>
+            </div>
+            <span className="h-7 w-px bg-white/15" />
+            <div className="text-right">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-100/70">Delivery value</p>
+              <p className="mt-0.5 text-base font-black sm:text-lg">₹{stats.amount.toFixed(0)}</p>
+            </div>
           </div>
         </section>
 
-        {/* EMPTY */}
-        {filteredHistory.length === 0 ? (
-          <section className="history-fade-up mt-5 rounded-[30px] border border-slate-200 bg-white px-5 py-16 text-center shadow-sm">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[26px] bg-emerald-50 text-emerald-600">
-              <PackageCheck size={38} strokeWidth={1.7} />
+        {/* COMPACT KPI TAGS */}
+        <section className="mb-4 grid grid-cols-3 gap-2 sm:mb-5 sm:gap-3">
+          <StatCard icon={<PackageCheck size={17} />} label="Completed" value={stats.total} helper="Filtered records" tone="green" delay="90ms" />
+          <StatCard icon={<Clock3 size={17} />} label="Today" value={stats.today} helper="Completed today" tone="blue" delay="140ms" />
+          <StatCard icon={<IndianRupee size={17} />} label="Total value" value={`₹${stats.amount.toFixed(0)}`} helper="Delivered orders" tone="amber" delay="190ms" />
+        </section>
+
+        {/* SEARCH + FILTERS */}
+        <section className="history-enter mb-4 rounded-[22px] border border-slate-200/80 bg-white p-3 shadow-sm sm:mb-5 sm:rounded-[26px] sm:p-4" style={{ animationDelay: "120ms" }}>
+          <div className="mb-2.5 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-black text-slate-900 sm:text-base">Find deliveries</h2>
+              <p className="mt-0.5 text-[10px] font-semibold text-slate-400 sm:text-xs">Search a customer or choose a date range</p>
             </div>
+            {hasFilters && <button type="button" onClick={clearFilters} className="rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-black text-slate-600 transition hover:bg-emerald-50 hover:text-emerald-700 active:scale-95">Clear filters</button>}
+          </div>
+          <div className="relative">
+            <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input type="text" placeholder="Search customer, phone or delivery number..." value={search} onChange={(e) => setSearch(e.target.value)} className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-xs font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-50 sm:min-h-12 sm:rounded-2xl sm:text-sm" />
+            {search && <button type="button" onClick={() => setSearch("")} className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200" aria-label="Clear search"><X size={15} /></button>}
+          </div>
+          <div className="history-scroll mt-2.5 flex gap-1.5 overflow-x-auto pb-1">
+            <button type="button" onClick={() => setQuickRange("today")} className="min-h-8 shrink-0 rounded-full border border-emerald-100 bg-emerald-50 px-3 text-[10px] font-black text-emerald-700 transition hover:bg-emerald-100 active:scale-95">Today</button>
+            <button type="button" onClick={() => setQuickRange("7days")} className="min-h-8 shrink-0 rounded-full border border-blue-100 bg-blue-50 px-3 text-[10px] font-black text-blue-700 transition hover:bg-blue-100 active:scale-95">Last 7 days</button>
+            <button type="button" onClick={() => setQuickRange("month")} className="min-h-8 shrink-0 rounded-full border border-violet-100 bg-violet-50 px-3 text-[10px] font-black text-violet-700 transition hover:bg-violet-100 active:scale-95">This month</button>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <label className="block min-w-0">
+              <span className="mb-1 block text-[9px] font-black uppercase tracking-wider text-slate-400">From date</span>
+              <span className="relative block"><CalendarDays size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => handleFromDateChange(e.target.value)} className="min-h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-2 text-[11px] font-bold text-slate-700 outline-none focus:border-emerald-400 focus:bg-white sm:min-h-11 sm:text-xs" /></span>
+            </label>
+            <label className="block min-w-0">
+              <span className="mb-1 block text-[9px] font-black uppercase tracking-wider text-slate-400">To date</span>
+              <span className="relative block"><CalendarDays size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => handleToDateChange(e.target.value)} className="min-h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-2 text-[11px] font-bold text-slate-700 outline-none focus:border-emerald-400 focus:bg-white sm:min-h-11 sm:text-xs" /></span>
+            </label>
+          </div>
+          <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5">
+            <p className="text-[10px] font-semibold text-slate-500 sm:text-xs">Showing <strong className="text-slate-900">{filteredHistory.length}</strong> of {history.length} deliveries</p>
+            <span className="max-w-[48%] truncate rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black text-slate-500">{dateRangeLabel}</span>
+          </div>
+        </section>
 
-            <h2 className="mt-5 text-xl font-black text-slate-900 sm:text-2xl">
-              No delivery history
-            </h2>
+        {/* DELIVERY HISTORY LIST */}
+        <section>
+          <div className="mb-2.5 flex items-center justify-between gap-2 px-1">
+            <div>
+              <h2 className="text-base font-black text-slate-900 sm:text-lg">Completed deliveries</h2>
+              <p className="text-[10px] font-semibold text-slate-400">Tap a record to view full details</p>
+            </div>
+            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">{filteredHistory.length} records</span>
+          </div>
 
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-              {hasFilters
-                ? "No completed deliveries match your current search or selected date range."
-                : "Completed deliveries will appear here."}
-            </p>
+          {filteredHistory.length === 0 ? (
+            <div className="history-enter rounded-[24px] border border-slate-200 bg-white px-5 py-12 text-center shadow-sm">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><PackageCheck size={31} /></div>
+              <h3 className="mt-4 text-base font-black text-slate-900">No delivery history found</h3>
+              <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-slate-500">{hasFilters ? "No completed deliveries match your search or selected dates." : "Completed deliveries will appear here."}</p>
+              {hasFilters && <button type="button" onClick={clearFilters} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-100 active:scale-95">Clear filters</button>}
+            </div>
+          ) : (
+            <div className="space-y-2.5 sm:space-y-3">
+              {paginatedHistory.map((delivery, index) => (
+                <DeliveryHistoryCard
+                  key={`${delivery.type}-${delivery.id}`}
+                  delivery={delivery}
+                  index={index}
+                  formatDate={formatDate}
+                  formatTime={formatTime}
+                  onDownloadCustomerPdf={() => {
+                    const customer = delivery.customer;
+                    const id = customer?.id || customer?.phone || customer?.full_name || "";
+                    openPdfModal(id);
+                  }}
+                />
+              ))}
+            </div>
+          )}
 
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="mt-5 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700 active:scale-95"
-              >
-                Clear Filters
-              </button>
-            )}
-          </section>
-        ) : (
-          <section className="mt-5 space-y-4">
-            {filteredHistory.map((delivery, index) => (
-              <DeliveryHistoryCard
-                key={`${delivery.type}-${delivery.id}`}
-                delivery={delivery}
-                index={index}
-                formatDate={formatDate}
-                formatTime={formatTime}
-                onDownloadCustomerPdf={() => {
-                  const customer = delivery.customer;
-                  const id =
-                    customer?.id ||
-                    customer?.phone ||
-                    customer?.full_name ||
-                    "";
-                  openPdfModal(id);
-                }}
-              />
-            ))}
-          </section>
-        )}
+          {/* PAGINATION */}
+          {filteredHistory.length > 0 && (
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-4">
+              <p className="text-center text-[10px] font-semibold text-slate-500 sm:text-left sm:text-xs">
+                Showing <strong className="text-slate-900">{firstRecord}-{lastRecord}</strong> of{" "}
+                <strong className="text-slate-900">{filteredHistory.length}</strong> records
+                <span className="mx-1.5 text-slate-300">·</span>
+                Page {safeCurrentPage} of {totalPages}
+              </p>
 
-        {pdfOpen && (
-          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/50 p-2 backdrop-blur-sm sm:items-center sm:p-4">
-            <div className="history-fade-up w-full max-w-md overflow-hidden rounded-[28px] bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-5">
-                <div>
-                  <p className="text-base font-black text-slate-900">
-                    Monthly Delivery PDF
-                  </p>
-                  <p className="mt-0.5 text-[11px] font-semibold text-slate-400">
-                    Customer-wise report for a selected month
-                  </p>
-                </div>
-
+              <div className="flex items-center justify-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setPdfOpen(false)}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-500 active:scale-95"
-                  aria-label="Close PDF dialog"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={safeCurrentPage === 1}
+                  className="min-h-9 rounded-lg border border-slate-200 px-2.5 text-[10px] font-black text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="First page"
                 >
-                  <X size={18} />
+                  First
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="min-h-9 rounded-lg border border-slate-200 px-3 text-[10px] font-black text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">
+                  {safeCurrentPage}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={safeCurrentPage === totalPages}
+                  className="min-h-9 rounded-lg border border-slate-200 px-3 text-[10px] font-black text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={safeCurrentPage === totalPages}
+                  className="min-h-9 rounded-lg border border-slate-200 px-2.5 text-[10px] font-black text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Last page"
+                >
+                  Last
                 </button>
               </div>
+            </div>
+          )}
+        </section>
 
+        {/* MONTHLY PDF DIALOG */}
+        {pdfOpen && (
+          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 p-2 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setPdfOpen(false); }}>
+            <div className="history-enter max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[26px] bg-white shadow-2xl sm:rounded-[28px]">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-3.5 backdrop-blur sm:px-5">
+                <div><p className="text-sm font-black text-slate-900 sm:text-base">Monthly delivery PDF</p><p className="mt-0.5 text-[10px] font-semibold text-slate-400">Customer-wise report for a selected month</p></div>
+                <button type="button" onClick={() => setPdfOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition hover:bg-slate-200 active:scale-95" aria-label="Close PDF dialog"><X size={17} /></button>
+              </div>
               <div className="space-y-3 p-4 sm:p-5">
-                <label className="block">
-                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">
-                    Customer
-                  </span>
-
-                  <div className="relative">
-                    <UserRound
-                      size={17}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
-
-                    <select
-                      value={pdfCustomerId}
-                      onChange={(e) =>
-                        setPdfCustomerId(e.target.value)
-                      }
-                      className="min-h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                    >
-                      <option value="">
-                        All Customers
-                      </option>
-
-                      {pdfCustomers.map((customer) => (
-                        <option
-                          key={customer.id}
-                          value={customer.id}
-                        >
-                          {customer.name}
-                          {customer.phone
-                            ? ` • ${customer.phone}`
-                            : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="block">
-                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">
-                    Month
-                  </span>
-
-                  <div className="relative">
-                    <CalendarDays
-                      size={17}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
-
-                    <input
-                      type="month"
-                      value={pdfMonth}
-                      onChange={(e) =>
-                        setPdfMonth(e.target.value)
-                      }
-                      className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                    />
-                  </div>
-                </label>
-
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
-                  <p className="text-xs font-black text-emerald-900">
-                    {selectedPdfCustomer?.name ||
-                      "All Customers"}
-                  </p>
-                  <p className="mt-1 text-[11px] font-semibold text-emerald-700">
-                    {formatPdfMonth(pdfMonth)}
-                    {" • "}
-                    {getPdfDeliveries().length} deliveries
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={downloadCustomerMonthlyPdf}
-                  disabled={
-                    pdfGenerating || !pdfMonth
-                  }
-                  className="flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 text-sm font-black text-white shadow-lg shadow-emerald-200 transition active:scale-[.98] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
-                >
-                  {pdfGenerating ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                      Creating PDF...
-                    </>
-                  ) : (
-                    <>
-                      <Download size={18} />
-                      Download PDF
-                    </>
-                  )}
+                <label className="block"><span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-slate-400">Customer</span><div className="relative"><UserRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><select value={pdfCustomerId} onChange={(e) => setPdfCustomerId(e.target.value)} className="min-h-11 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:bg-white sm:text-sm"><option value="">All customers</option>{pdfCustomers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.phone ? ` • ${customer.phone}` : ""}</option>)}</select></div></label>
+                <label className="block"><span className="mb-1.5 block text-[9px] font-black uppercase tracking-wider text-slate-400">Month</span><div className="relative"><CalendarDays size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="month" value={pdfMonth} onChange={(e) => setPdfMonth(e.target.value)} className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs font-bold text-slate-700 outline-none focus:border-emerald-400 focus:bg-white sm:text-sm" /></div></label>
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3"><p className="text-xs font-black text-emerald-900">{selectedPdfCustomer?.name || "All customers"}</p><p className="mt-1 text-[10px] font-semibold text-emerald-700">{formatPdfMonth(pdfMonth)} · {getPdfDeliveries().length} deliveries</p></div>
+                <button type="button" onClick={downloadCustomerMonthlyPdf} disabled={pdfGenerating || !pdfMonth} className="history-button-shine flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-700 to-teal-600 px-4 text-xs font-black text-white shadow-md shadow-emerald-100 transition active:scale-[.98] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none sm:text-sm">
+                  {pdfGenerating ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />Generating PDF...</> : <><Download size={16} />Download PDF</>}
                 </button>
               </div>
             </div>
@@ -1768,286 +1563,105 @@ export default function DeliveryHistory() {
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  helper,
-  delay,
-  fullWidth = false,
-}) {
+function StatCard({ icon, label, value, helper, delay = "0ms", tone = "green" }) {
+  const tones = {
+    green: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    blue: "bg-blue-50 text-blue-700 border-blue-100",
+    amber: "bg-amber-50 text-amber-700 border-amber-100",
+  };
   return (
-    <div
-      className={`history-fade-up rounded-[22px] border border-slate-200/80 bg-white p-3 shadow-sm sm:rounded-[26px] sm:p-4 ${
-        fullWidth ? "col-span-2 md:col-span-1" : ""
-      }`}
-      style={{ animationDelay: delay }}
-    >
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-          {icon}
-        </div>
-
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-            {label}
-          </p>
-
-          <p className="mt-0.5 truncate text-xl font-black text-slate-900 sm:text-2xl">
-            {value}
-          </p>
-
-          <p className="mt-0.5 text-[10px] font-semibold text-slate-400">
-            {helper}
-          </p>
-        </div>
+    <div className="history-enter min-w-0 rounded-2xl border border-white bg-white p-2.5 shadow-[0_5px_18px_rgba(15,23,42,.045)] transition duration-300 hover:-translate-y-0.5 hover:shadow-md sm:rounded-[22px] sm:p-3.5" style={{ animationDelay: delay }}>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${tones[tone]}`}>{icon}</span>
+        <div className="min-w-0"><p className="truncate text-[8px] font-black uppercase tracking-wider text-slate-400 sm:text-[10px]">{label}</p><p className="mt-0.5 truncate text-base font-black leading-tight text-slate-900 sm:text-xl">{value}</p><p className="mt-0.5 hidden truncate text-[9px] font-semibold text-slate-400 sm:block">{helper}</p></div>
       </div>
     </div>
   );
 }
 
-function DeliveryHistoryCard({
-  delivery,
-  index,
-  formatDate,
-  formatTime,
-  onDownloadCustomerPdf,
-}) {
-  const customerName =
-    delivery.customer?.full_name || "-";
-
-  const phone =
-    delivery.customer?.phone || "";
-
-  const addressParts = [
-    delivery.address?.house_no,
-    delivery.address?.street,
-    delivery.address?.area,
-    delivery.address?.city,
-  ].filter(Boolean);
-
-  const address = addressParts.join(", ");
-
+function DeliveryHistoryCard({ delivery, index, formatDate, formatTime, onDownloadCustomerPdf }) {
+  const [expanded, setExpanded] = useState(false);
+  const customerName = delivery.customer?.full_name || "Customer";
+  const phone = delivery.customer?.phone || "";
+  const address = [delivery.address?.house_no, delivery.address?.street, delivery.address?.area, delivery.address?.city].filter(Boolean).join(", ");
   const pincode = delivery.address?.pincode;
+  const items = Array.isArray(delivery.items) ? delivery.items : [];
+  const amount = Number(delivery.total_amount || items.reduce((sum, item) => sum + Number(item.total_price || 0), 0));
+  const itemSummary = items.map((item) => `${item.quantity || 0} × ${item.size || "item"}`).slice(0, 2).join(" · ");
 
   return (
-    <article
-      className="history-fade-up overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-lg sm:rounded-[30px]"
-      style={{
-        animationDelay: `${Math.min(index * 45, 450)}ms`,
-      }}
-    >
-      {/* CARD HEADER */}
-      <div className="relative overflow-hidden border-b border-slate-100 bg-gradient-to-br from-slate-50 to-white px-3.5 py-3.5 sm:px-6 sm:py-4">
-        <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-emerald-100/60 blur-2xl" />
-
-        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                <PackageCheck size={21} />
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Delivery
-                </p>
-
-                <h2 className="truncate text-lg font-black text-slate-900 sm:text-xl">
-                  {delivery.number || "-"}
-                </h2>
-              </div>
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 pl-14 text-xs font-semibold text-slate-400">
-              <span>{formatDate(delivery.date)}</span>
-              <span>•</span>
-              <span className="inline-flex items-center gap-1">
-                <Clock3 size={12} />
-                {formatTime(delivery.date)}
-              </span>
-            </div>
+    <article className="history-enter overflow-hidden rounded-[21px] border border-slate-200/80 bg-white shadow-[0_5px_18px_rgba(15,23,42,.045)] transition duration-300 hover:-translate-y-0.5 hover:shadow-lg sm:rounded-[25px]" style={{ animationDelay: `${Math.min(index * 35, 350)}ms` }}>
+      <div className="p-3 sm:p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><PackageCheck size={17} /></div>
+            <div className="min-w-0"><p className="truncate text-[9px] font-black uppercase tracking-wider text-slate-400">Delivery record</p><h3 className="truncate text-sm font-black text-slate-900 sm:text-base">{delivery.number || "—"}</h3></div>
           </div>
-
-          <div className="flex items-center gap-2 sm:justify-end">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Delivered
-            </span>
-
-            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">
-              {delivery.type || "Delivery"}
-            </span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2 py-1 text-[8px] font-black text-emerald-700 sm:text-[9px]"><CheckCircle2 size={10} />Delivered</span>
+            <span className="hidden rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-[9px] font-black text-blue-700 sm:inline-flex">{delivery.type || "Delivery"}</span>
           </div>
         </div>
-      </div>
 
-      {/* CUSTOMER + ADDRESS */}
-      <div className="grid grid-cols-1 gap-2.5 p-3 sm:gap-3 sm:p-6 lg:grid-cols-2">
-        <InfoPanel
-          icon={<User size={18} />}
-          title="Customer"
-          iconClass="bg-emerald-50 text-emerald-600"
-        >
-          <p className="text-base font-black text-slate-900">
-            {customerName}
-          </p>
-
-          {phone ? (
-            <a
-              href={`tel:${phone}`}
-              className="mt-2 inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100 active:scale-95"
-            >
-              <Phone size={15} />
-              {phone}
-            </a>
-          ) : (
-            <p className="mt-2 text-sm text-slate-400">
-              Phone number unavailable
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={onDownloadCustomerPdf}
-            className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700 transition hover:bg-emerald-100 active:scale-[.98] sm:w-auto"
-          >
-            <Download size={15} />
-            Customer Monthly PDF
-          </button>
-        </InfoPanel>
-
-        <InfoPanel
-          icon={<MapPin size={18} />}
-          title="Delivery Address"
-          iconClass="bg-blue-50 text-blue-600"
-        >
-          <p className="text-sm font-semibold leading-6 text-slate-700">
-            {address || "Address unavailable"}
-            {pincode ? ` - ${pincode}` : ""}
-          </p>
-        </InfoPanel>
-      </div>
-
-      {/* ITEMS */}
-      <div className="px-3 pb-3 sm:px-6 sm:pb-5">
-        <div className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400">
-          <Milk size={16} className="text-emerald-600" />
-          Delivered Items
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-100 to-teal-50 text-xs font-black text-emerald-700">{customerName.charAt(0).toUpperCase()}</div>
+            <div className="min-w-0"><p className="truncate text-xs font-black text-slate-800">{customerName}</p><p className="mt-0.5 truncate text-[9px] font-semibold text-slate-400">{formatDate(delivery.date)}{formatTime(delivery.date) ? ` · ${formatTime(delivery.date)}` : ""}</p></div>
+          </div>
+          {phone ? <a href={`tel:${phone}`} className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 text-[10px] font-black text-emerald-700 shadow-sm transition hover:bg-emerald-50 active:scale-95"><Phone size={12} />Call</a> : <span className="text-[9px] font-semibold text-slate-400">No phone</span>}
         </div>
 
-        <div className="history-scrollbar flex gap-3 overflow-x-auto pb-1">
-          {(delivery.items || []).map((item) => (
-            <div
-              key={item.id}
-              className={`flex min-w-[270px] flex-1 items-center justify-between gap-3 rounded-2xl border p-3 ${
-                item.is_extra
-                  ? "border-orange-200 bg-orange-50/70"
-                  : "border-slate-200 bg-slate-50/60"
-              }`}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                {item.products?.image ? (
-                  <img
-                    src={item.products.image}
-                    alt={item.products?.name || "Product"}
-                    className="h-12 w-12 shrink-0 rounded-xl border border-white object-cover shadow-sm"
-                  />
-                ) : (
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-                    <Milk size={22} />
-                  </div>
-                )}
+        <div className="mt-2.5 grid grid-cols-[1fr_auto] items-center gap-2">
+          <div className="min-w-0"><p className="truncate text-[10px] font-semibold text-slate-500">{itemSummary || `${items.length} delivered items`}</p><p className="mt-0.5 truncate text-[9px] font-medium text-slate-400">{address || "Address not available"}{pincode ? ` · ${pincode}` : ""}</p></div>
+          <div className="text-right"><p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Total</p><p className="text-sm font-black text-emerald-700">₹{amount.toFixed(0)}</p></div>
+        </div>
 
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-slate-900">
-                    {item.products?.name || "-"}
-                  </p>
+        <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} className="mt-3 flex min-h-9 w-full items-center justify-between rounded-xl border border-slate-100 bg-white px-3 text-[10px] font-black text-slate-500 transition hover:border-emerald-100 hover:bg-emerald-50/60 hover:text-emerald-700 active:scale-[.99]">
+          <span>{expanded ? "Hide delivery details" : "View delivery details"}</span><ChevronDown size={15} className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+        </button>
+      </div>
 
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    {item.quantity} × {item.size}
-                  </p>
+      {expanded && (
+        <div className="history-enter border-t border-slate-100 bg-[#fbfdfb] p-3 sm:p-4">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <InfoPanel icon={<User size={15} />} title="Customer" iconClass="bg-emerald-50 text-emerald-600">
+              <p className="text-xs font-black text-slate-800">{customerName}</p>
+              {phone ? <a href={`tel:${phone}`} className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 text-[10px] font-black text-emerald-700"><Phone size={12} />{phone}</a> : <p className="mt-1 text-[10px] text-slate-400">Phone unavailable</p>}
+              <button type="button" onClick={onDownloadCustomerPdf} className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 text-[10px] font-black text-emerald-700 transition hover:bg-emerald-50 active:scale-95"><Download size={12} />Customer monthly PDF</button>
+            </InfoPanel>
+            <InfoPanel icon={<MapPin size={15} />} title="Delivery address" iconClass="bg-blue-50 text-blue-600">
+              <p className="text-[11px] font-semibold leading-5 text-slate-700">{address || "Address unavailable"}{pincode ? ` - ${pincode}` : ""}</p>
+            </InfoPanel>
+          </div>
 
-                  {item.is_extra && (
-                    <span className="mt-1 inline-flex rounded-full bg-orange-500 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">
-                      Extra
-                    </span>
-                  )}
+          <div className="mt-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-slate-400"><Milk size={13} className="text-emerald-600" />Delivered items <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-700">{items.length}</span></div>
+            {items.length ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {items.map((item, itemIndex) => <div key={item.id || `${delivery.id}-item-${itemIndex}`} className={`flex min-w-0 items-center justify-between gap-2 rounded-xl border p-2.5 ${item.is_extra ? "border-orange-200 bg-orange-50/70" : "border-slate-200 bg-white"}`}>
+                <div className="flex min-w-0 items-center gap-2">
+                  {item.products?.image ? <img src={item.products.image} alt={item.products?.name || "Product"} className="h-9 w-9 shrink-0 rounded-lg border border-white object-cover" /> : <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><Milk size={17} /></div>}
+                  <div className="min-w-0"><p className="truncate text-[11px] font-black text-slate-800">{item.products?.name || "Milk"}</p><p className="mt-0.5 text-[9px] font-semibold text-slate-500">{item.quantity} × {item.size}</p></div>
                 </div>
-              </div>
+                <div className="shrink-0 text-right"><p className="text-[11px] font-black text-emerald-700">₹{Number(item.total_price || 0).toFixed(0)}</p>{item.is_extra && <span className="text-[8px] font-black uppercase text-orange-600">Extra</span>}</div>
+              </div>)}
+            </div> : <p className="rounded-xl bg-white p-3 text-[10px] text-slate-400">No item details available.</p>}
+          </div>
 
-              <div className="shrink-0 text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                  Amount
-                </p>
-                <p className="mt-0.5 text-sm font-black text-emerald-600">
-                  ₹{Number(item.total_price || 0).toFixed(0)}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* TOTAL */}
-      <div className="mx-3 mb-3 flex flex-col gap-3 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50 p-3.5 sm:mx-6 sm:mb-6 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">
-            Total Amount
-          </p>
-
-          <div className="mt-1 flex items-center gap-1 text-2xl font-black text-emerald-700">
-            <IndianRupee size={20} strokeWidth={2.5} />
-            {Number(delivery.total_amount || 0).toFixed(0)}
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2.5">
+            <div><p className="text-[8px] font-black uppercase tracking-wider text-emerald-700/70">Payment method</p><p className="mt-0.5 text-[11px] font-black text-slate-800">{delivery.payment_method || "Monthly Billing"}</p></div>
+            <div className="text-right"><p className="text-[8px] font-black uppercase tracking-wider text-emerald-700/70">Delivery total</p><p className="mt-0.5 text-base font-black text-emerald-700">₹{amount.toFixed(2)}</p></div>
           </div>
         </div>
-
-        <div className="sm:text-right">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-            Payment
-          </p>
-
-          <p className="mt-1 text-sm font-black text-slate-800">
-            {delivery.payment_method || "Monthly Billing"}
-          </p>
-        </div>
-
-        {phone && (
-          <a
-            href={`tel:${phone}`}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700 active:scale-95 sm:hidden"
-          >
-            <Phone size={16} />
-            Call Customer
-            <ChevronRight size={15} />
-          </a>
-        )}
-      </div>
+      )}
     </article>
   );
 }
 
-function InfoPanel({
-  icon,
-  title,
-  iconClass,
-  children,
-}) {
+function InfoPanel({ icon, title, iconClass, children }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 sm:p-4">
-      <div className="flex items-center gap-2">
-        <span
-          className={`flex h-9 w-9 items-center justify-center rounded-xl ${iconClass}`}
-        >
-          {icon}
-        </span>
-
-        <span className="text-xs font-black uppercase tracking-widest text-slate-400">
-          {title}
-        </span>
-      </div>
-
-      <div className="mt-3">{children}</div>
+    <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
+      <div className="flex items-center gap-2"><span className={`flex h-7 w-7 items-center justify-center rounded-lg ${iconClass}`}>{icon}</span><span className="text-[9px] font-black uppercase tracking-wider text-slate-400">{title}</span></div>
+      <div className="mt-2">{children}</div>
     </div>
   );
 }

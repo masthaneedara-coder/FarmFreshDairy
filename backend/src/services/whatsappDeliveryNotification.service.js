@@ -44,6 +44,8 @@ async function sendDeliveryStatusTemplate({
   const phone = normalizeIndianPhone(recipientPhone);
   if (!phone) throw new Error("Customer WhatsApp number is invalid.");
 
+  // Utility template body parameters: {{1}} name, {{2}} delivery number,
+  // {{3}} delivery date, {{4}} delivery status. No catalogue button is sent.
   const response = await fetch(
     `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
     {
@@ -64,10 +66,10 @@ async function sendDeliveryStatusTemplate({
             {
               type: "body",
               parameters: [
-                { type: "text", text: customerName || "Customer" },
+                { type: "text", text: String(customerName || "Customer") },
                 { type: "text", text: String(deliveryNumber || "N/A") },
                 { type: "text", text: formatDeliveryDate(deliveryDate) },
-                { type: "text", text: status },
+                { type: "text", text: String(status) },
               ],
             },
           ],
@@ -85,7 +87,16 @@ async function sendDeliveryStatusTemplate({
   }
 
   if (!response.ok) {
-    const providerMessage = result?.error?.message || `WhatsApp API request failed (${response.status}).`;
+    const providerMessage =
+      result?.error?.message || `WhatsApp API request failed (${response.status}).`;
+
+    console.error("WhatsApp delivery template send failed:", {
+      status: response.status,
+      code: result?.error?.code,
+      subcode: result?.error?.error_subcode,
+      message: providerMessage,
+    });
+
     throw new Error(providerMessage);
   }
 
@@ -140,12 +151,14 @@ export async function notifyCustomerDeliveryStatusChange({
     .maybeSingle();
 
   if (customerError) throw customerError;
-  if (!customer?.phone) return { sent: false, reason: "customer_phone_missing" };
+  if (!customer?.phone) {
+    return { sent: false, reason: "customer_phone_missing" };
+  }
 
   const providerResponse = await sendDeliveryStatusTemplate({
     recipientPhone: customer.phone,
     customerName: customer.full_name,
-    deliveryNumber: deliveryNumber || deliveryId.slice(0, 8),
+    deliveryNumber: deliveryNumber || String(deliveryId).slice(0, 8),
     deliveryDate,
     status,
   });
