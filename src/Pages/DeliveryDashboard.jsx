@@ -493,7 +493,7 @@ export default function DeliveryDashboard() {
       `}</style>
 
       <div className="delivery-shell">
-        <header className="delivery-topbar">
+        {/* <header className="delivery-topbar">
           <div className="delivery-brand">
             <img
               src={LOGO_SRC}
@@ -523,7 +523,7 @@ export default function DeliveryDashboard() {
               Sign out
             </button>
           </div>
-        </header>
+        </header> */}
 
         <section className="delivery-hero">
           <div className="delivery-hero-copy">
