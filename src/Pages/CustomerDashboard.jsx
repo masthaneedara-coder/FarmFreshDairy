@@ -3751,7 +3751,336 @@ const handleContinueRegularSchedule = async () => {
           .subscription-card, .subscription-card-top, .subscription-logo, .subscription-card-top::before { animation: none !important; }
           .subscription-card, .subscription-card button, .subscription-progress span { transition: none !important; }
         }
-      `}</style>
+
+        /* Wallet, Billing, Extra Milk and Delivery Preference: four cards in one mobile row. */
+        .dashboard-four-card-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          align-items: stretch;
+        }
+
+        @media (max-width: 600px) {
+          .dashboard-four-card-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 6px !important;
+            width: 100%;
+            min-width: 0;
+          }
+
+          /* Flatten the two existing layout wrappers so all four cards share one grid row. */
+          .dashboard-four-card-grid > .wallet-billing-section,
+          .dashboard-four-card-grid .wallet-billing-grid,
+          .dashboard-four-card-grid > .dashboard-subscription-tools-row {
+            display: contents !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card,
+          .dashboard-four-card-grid .dashboard-extra-inline,
+          .dashboard-four-card-grid .dashboard-override-action-card {
+            width: 100% !important;
+            min-width: 0 !important;
+            height: 154px !important;
+            min-height: 154px !important;
+            max-height: 154px !important;
+            box-sizing: border-box !important;
+            padding: 8px 6px !important;
+            border-radius: 13px !important;
+            overflow: hidden !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head {
+            align-items: flex-start !important;
+            gap: 3px !important;
+            flex-direction: column !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head span {
+            gap: 3px !important;
+            font-size: 8px !important;
+            line-height: 1.1 !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head span svg {
+            width: 12px !important;
+            height: 12px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head b {
+            padding: 3px 4px !important;
+            font-size: 5px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > small {
+            margin-top: 7px !important;
+            font-size: 6px !important;
+            line-height: 1.2 !important;
+            letter-spacing: .04em !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > strong {
+            margin-top: 4px !important;
+            font-size: 17px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > p {
+            min-height: 28px !important;
+            margin: 5px 0 !important;
+            font-size: 6px !important;
+            line-height: 1.25 !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > button {
+            min-height: 25px !important;
+            width: 100% !important;
+            justify-content: center !important;
+            gap: 3px !important;
+            padding: 0 3px !important;
+            border-radius: 7px !important;
+            font-size: 6px !important;
+            line-height: 1.1 !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > button svg {
+            width: 9px !important;
+            height: 9px !important;
+            flex: 0 0 auto !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-extra-inline {
+            position: relative !important;
+            display: block !important;
+            padding: 0 !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-extra-inline > * {
+            width: 100% !important;
+            height: 154px !important;
+            min-height: 154px !important;
+            max-height: 154px !important;
+            zoom: 1 !important;
+            transform: none !important;
+            border-radius: 13px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-card {
+            position: relative !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: center !important;
+            gap: 6px !important;
+            padding: 8px 5px !important;
+            text-align: center !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-icon {
+            width: 29px !important;
+            height: 29px !important;
+            min-width: 29px !important;
+            flex: 0 0 29px !important;
+            border-radius: 9px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-icon svg {
+            width: 16px !important;
+            height: 16px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy {
+            width: 100% !important;
+            min-width: 0 !important;
+            align-items: center !important;
+            gap: 3px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy small {
+            font-size: 5px !important;
+            line-height: 1.15 !important;
+            letter-spacing: .04em !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy strong {
+            font-size: 8px !important;
+            line-height: 1.15 !important;
+            overflow-wrap: anywhere !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy span {
+            font-size: 6px !important;
+            line-height: 1.2 !important;
+            overflow-wrap: anywhere !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-chevron {
+            position: absolute !important;
+            top: 5px !important;
+            right: 5px !important;
+            width: 11px !important;
+            height: 11px !important;
+            margin: 0 !important;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .dashboard-four-card-grid { gap: 4px !important; }
+          .dashboard-four-card-grid .wallet-card,
+          .dashboard-four-card-grid .dashboard-extra-inline,
+          .dashboard-four-card-grid .dashboard-override-action-card {
+            height: 145px !important;
+            min-height: 145px !important;
+            max-height: 145px !important;
+            padding-left: 4px !important;
+            padding-right: 4px !important;
+          }
+          .dashboard-four-card-grid .dashboard-extra-inline > * {
+            height: 145px !important;
+            min-height: 145px !important;
+            max-height: 145px !important;
+          }
+        }
+
+        /* Final compact mobile tiles: keep all four cards in one neat row. */
+        @media (max-width: 600px) {
+          .dashboard-four-card-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 5px !important;
+            align-items: stretch !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card,
+          .dashboard-four-card-grid .dashboard-extra-inline,
+          .dashboard-four-card-grid .dashboard-override-action-card {
+            height: 112px !important;
+            min-height: 112px !important;
+            max-height: 112px !important;
+            padding: 6px 5px !important;
+            border-radius: 11px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head {
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            gap: 3px !important;
+            margin: 0 !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head span {
+            gap: 3px !important;
+            font-size: 7px !important;
+            white-space: nowrap !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head span svg {
+            width: 11px !important;
+            height: 11px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head b {
+            display: none !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > small {
+            margin-top: 8px !important;
+            font-size: 5px !important;
+            line-height: 1.15 !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > strong {
+            margin-top: 4px !important;
+            font-size: 14px !important;
+            line-height: 1 !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > p {
+            display: none !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > button {
+            min-height: 21px !important;
+            width: 100% !important;
+            margin-top: 8px !important;
+            padding: 0 2px !important;
+            gap: 2px !important;
+            border-radius: 6px !important;
+            font-size: 5px !important;
+            white-space: nowrap !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > button svg {
+            width: 8px !important;
+            height: 8px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-extra-inline {
+            padding: 0 !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-extra-inline > * {
+            width: 100% !important;
+            height: 112px !important;
+            min-height: 112px !important;
+            max-height: 112px !important;
+            padding: 6px !important;
+            border-radius: 11px !important;
+            zoom: .72 !important;
+            transform: none !important;
+            transform-origin: top left !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-card {
+            gap: 4px !important;
+            padding: 6px 4px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-icon {
+            width: 23px !important;
+            height: 23px !important;
+            min-width: 23px !important;
+            flex-basis: 23px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-icon svg {
+            width: 13px !important;
+            height: 13px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy small {
+            font-size: 4.5px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy strong {
+            font-size: 7px !important;
+            line-height: 1.15 !important;
+            overflow-wrap: anywhere !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy span {
+            display: none !important;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .dashboard-four-card-grid { gap: 3px !important; }
+          .dashboard-four-card-grid .wallet-card,
+          .dashboard-four-card-grid .dashboard-extra-inline,
+          .dashboard-four-card-grid .dashboard-override-action-card {
+            height: 104px !important;
+            min-height: 104px !important;
+            max-height: 104px !important;
+            padding-left: 4px !important;
+            padding-right: 4px !important;
+          }
+          .dashboard-four-card-grid .dashboard-extra-inline > * {
+            height: 104px !important;
+            min-height: 104px !important;
+            max-height: 104px !important;
+          }
+        }
+
+      `}
+      </style>
 
       <div className="dashboard-container">
         {/* Compact mobile brand bar */}
@@ -3874,6 +4203,8 @@ const handleContinueRegularSchedule = async () => {
           </div>
         </section>
 
+        <div className="dashboard-four-card-grid">
+
         {/* Wallet & Billing */}
         <section className="dashboard-section wallet-billing-section">
           <div className="wallet-billing-grid">
@@ -3923,37 +4254,9 @@ const handleContinueRegularSchedule = async () => {
             </article>
           </div>
         </section>
+        
 
-        {/* Subscriptions */}
-        <section className="dashboard-section">
-          <div className="dashboard-section-header">
-            <div>
-              <div className="dashboard-eyebrow">Your daily routine</div>
-              <h2 className="dashboard-section-title">My Subscriptions</h2>
-              <p className="dashboard-section-copy">
-                Manage your milk delivery plans
-              </p>
-            </div>
-
-            <div className="dashboard-scroll-buttons">
-              <button
-                className="dashboard-circle-btn"
-                onClick={() => scrollSubscriptions("left")}
-                aria-label="Previous subscription"
-              >
-                <ChevronLeft size={15} />
-              </button>
-              <button
-                className="dashboard-circle-btn"
-                onClick={() => scrollSubscriptions("right")}
-                aria-label="Next subscription"
-              >
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          </div>
-
-          <div className="dashboard-subscription-tools-row">
+        <div className="dashboard-subscription-tools-row">
             <section className="dashboard-extra dashboard-extra-inline">
               <ExtraMilkCard navigate={navigate} />
             </section>
@@ -3983,6 +4286,7 @@ const handleContinueRegularSchedule = async () => {
               <ChevronRight size={21} className="dashboard-override-action-chevron" />
             </button>
           </div>
+        </div>
 
           {showDeliveryOverrideModal && selectedOverrideSubscription && (
             <div
@@ -4053,6 +4357,36 @@ const handleContinueRegularSchedule = async () => {
               </section>
             </div>
           )}
+        {/* Subscriptions */}
+        <section className="dashboard-section">
+          <div className="dashboard-section-header">
+            <div>
+              <div className="dashboard-eyebrow">Your daily routine</div>
+              <h2 className="dashboard-section-title">My Subscriptions</h2>
+              <p className="dashboard-section-copy">
+                Manage your milk delivery plans
+              </p>
+            </div>
+
+            <div className="dashboard-scroll-buttons">
+              <button
+                className="dashboard-circle-btn"
+                onClick={() => scrollSubscriptions("left")}
+                aria-label="Previous subscription"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <button
+                className="dashboard-circle-btn"
+                onClick={() => scrollSubscriptions("right")}
+                aria-label="Next subscription"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+
+          
 
           {activeSubscriptions.length === 0 ? (
             <div className="empty-card">
