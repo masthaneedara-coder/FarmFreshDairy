@@ -4079,7 +4079,370 @@ const handleContinueRegularSchedule = async () => {
           }
         }
 
+
+        /* FINAL RESPONSIVE FIX: four dashboard tiles stay readable on every screen. */
+        .dashboard-four-card-grid {
+          display: grid !important;
+          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+          gap: 14px !important;
+          align-items: stretch !important;
+          width: 100% !important;
+          min-width: 0 !important;
+        }
+
+        /* Let the four actual cards participate directly in the shared grid. */
+        .dashboard-four-card-grid > .wallet-billing-section,
+        .dashboard-four-card-grid .wallet-billing-grid,
+        .dashboard-four-card-grid > .dashboard-subscription-tools-row {
+          display: contents !important;
+        }
+
+        .dashboard-four-card-grid .wallet-card,
+        .dashboard-four-card-grid .dashboard-extra-inline,
+        .dashboard-four-card-grid .dashboard-override-action-card {
+          width: 100% !important;
+          min-width: 0 !important;
+          height: auto !important;
+          min-height: 220px !important;
+          max-height: none !important;
+          box-sizing: border-box !important;
+          overflow: hidden !important;
+        }
+
+        .dashboard-four-card-grid .dashboard-extra-inline {
+          display: flex !important;
+          align-items: stretch !important;
+          padding: 0 !important;
+        }
+
+        .dashboard-four-card-grid .dashboard-extra-inline > * {
+          width: 100% !important;
+          height: auto !important;
+          min-height: 220px !important;
+          max-height: none !important;
+          zoom: 1 !important;
+          transform: none !important;
+          box-sizing: border-box !important;
+        }
+
+        .dashboard-four-card-grid .dashboard-override-action-card {
+          display: flex !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          gap: 12px !important;
+          padding: 20px !important;
+          text-align: left !important;
+        }
+
+        .dashboard-four-card-grid .dashboard-override-action-copy {
+          min-width: 0 !important;
+        }
+
+        .dashboard-four-card-grid .dashboard-override-action-copy strong,
+        .dashboard-four-card-grid .dashboard-override-action-copy span {
+          overflow-wrap: anywhere !important;
+        }
+
+        @media (max-width: 900px) {
+          .dashboard-four-card-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 12px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card,
+          .dashboard-four-card-grid .dashboard-extra-inline,
+          .dashboard-four-card-grid .dashboard-override-action-card,
+          .dashboard-four-card-grid .dashboard-extra-inline > * {
+            min-height: 190px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card {
+            padding: 16px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head {
+            flex-direction: row !important;
+            align-items: center !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head span {
+            font-size: 11px !important;
+            gap: 6px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head b {
+            display: inline-flex !important;
+            font-size: 7px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > small {
+            margin-top: 15px !important;
+            font-size: 8px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > strong {
+            font-size: clamp(21px, 4vw, 28px) !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > p {
+            display: block !important;
+            min-height: 34px !important;
+            font-size: 8px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > button {
+            width: auto !important;
+            min-height: 34px !important;
+            padding: 0 10px !important;
+            font-size: 8px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-card {
+            flex-direction: row !important;
+            justify-content: flex-start !important;
+            align-items: center !important;
+            padding: 15px !important;
+            text-align: left !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy {
+            align-items: flex-start !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy small {
+            font-size: 7px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy strong {
+            font-size: 12px !important;
+            line-height: 1.25 !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy span {
+            display: block !important;
+            font-size: 9px !important;
+            line-height: 1.35 !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-chevron {
+            position: static !important;
+            flex: 0 0 auto !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .dashboard-four-card-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card,
+          .dashboard-four-card-grid .dashboard-extra-inline,
+          .dashboard-four-card-grid .dashboard-override-action-card,
+          .dashboard-four-card-grid .dashboard-extra-inline > * {
+            min-height: 180px !important;
+            border-radius: 16px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card {
+            padding: 12px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head span {
+            font-size: 10px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head span svg {
+            width: 23px !important;
+            height: 23px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head b {
+            padding: 4px 6px !important;
+            font-size: 6px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > small {
+            font-size: 7px !important;
+            letter-spacing: .06em !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > strong {
+            font-size: clamp(19px, 6vw, 24px) !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > p {
+            min-height: 38px !important;
+            font-size: 7px !important;
+            line-height: 1.35 !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card > button {
+            width: 100% !important;
+            justify-content: center !important;
+            gap: 4px !important;
+            font-size: 7px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-card {
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: flex-start !important;
+            gap: 8px !important;
+            padding: 12px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-icon {
+            width: 34px !important;
+            height: 34px !important;
+            min-width: 34px !important;
+            flex-basis: 34px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-icon svg {
+            width: 18px !important;
+            height: 18px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy {
+            gap: 4px !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy small {
+            font-size: 6px !important;
+            letter-spacing: .06em !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy strong {
+            font-size: 10px !important;
+            line-height: 1.25 !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-copy span {
+            font-size: 7px !important;
+            line-height: 1.3 !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-chevron {
+            position: absolute !important;
+            top: 9px !important;
+            right: 9px !important;
+            width: 14px !important;
+            height: 14px !important;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .dashboard-four-card-grid { gap: 8px !important; }
+          .dashboard-four-card-grid .wallet-card,
+          .dashboard-four-card-grid .dashboard-extra-inline,
+          .dashboard-four-card-grid .dashboard-override-action-card,
+          .dashboard-four-card-grid .dashboard-extra-inline > * {
+            min-height: 170px !important;
+          }
+        }
+
+        /* MOBILE: keep Wallet, Billing, Extra Milk and Delivery Preference
+           in one horizontal row. Swipe sideways to view each full-size card. */
+        @media (max-width: 600px) {
+          .dashboard-four-card-grid {
+            display: grid !important;
+            grid-template-columns: none !important;
+            grid-auto-flow: column !important;
+            grid-auto-columns: minmax(225px, 78vw) !important;
+            gap: 10px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            padding: 2px 2px 12px !important;
+            scroll-snap-type: x mandatory !important;
+            -webkit-overflow-scrolling: touch !important;
+            scrollbar-width: thin !important;
+          }
+
+          /* Make the two wrapper rows transparent to the four-card grid. */
+          .dashboard-four-card-grid > .wallet-billing-section,
+          .dashboard-four-card-grid .wallet-billing-grid,
+          .dashboard-four-card-grid > .dashboard-subscription-tools-row {
+            display: contents !important;
+          }
+
+          .dashboard-four-card-grid > .wallet-card,
+          .dashboard-four-card-grid .wallet-card,
+          .dashboard-four-card-grid .dashboard-extra-inline,
+          .dashboard-four-card-grid .dashboard-override-action-card {
+            width: 100% !important;
+            min-width: 0 !important;
+            height: 190px !important;
+            min-height: 190px !important;
+            max-height: 190px !important;
+            box-sizing: border-box !important;
+            scroll-snap-align: start !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card {
+            padding: 15px !important;
+            border-radius: 18px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
+          }
+
+          .dashboard-four-card-grid .wallet-card-head span { font-size: 13px !important; gap: 7px !important; }
+          .dashboard-four-card-grid .wallet-card-head span svg { width: 17px !important; height: 17px !important; }
+          .dashboard-four-card-grid .wallet-card-head b { display: inline-flex !important; padding: 5px 8px !important; font-size: 8px !important; }
+          .dashboard-four-card-grid .wallet-card > small { margin-top: 18px !important; font-size: 9px !important; line-height: 1.3 !important; }
+          .dashboard-four-card-grid .wallet-card > strong { margin-top: 5px !important; font-size: 27px !important; line-height: 1.1 !important; }
+          .dashboard-four-card-grid .wallet-card > p { display: block !important; min-height: 28px !important; margin: 7px 0 10px !important; font-size: 9px !important; line-height: 1.4 !important; }
+          .dashboard-four-card-grid .wallet-card > button { display: inline-flex !important; width: auto !important; min-height: 32px !important; margin-top: 0 !important; padding: 0 10px !important; gap: 5px !important; border-radius: 9px !important; font-size: 9px !important; }
+          .dashboard-four-card-grid .wallet-card > button svg { width: 12px !important; height: 12px !important; }
+
+          .dashboard-four-card-grid .dashboard-extra-inline {
+            display: flex !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            border-radius: 18px !important;
+          }
+          .dashboard-four-card-grid .dashboard-extra-inline > * {
+            width: 100% !important;
+            height: 190px !important;
+            min-height: 190px !important;
+            max-height: 190px !important;
+            padding: 15px !important;
+            zoom: 1 !important;
+            transform: none !important;
+            box-sizing: border-box !important;
+          }
+
+          .dashboard-four-card-grid .dashboard-override-action-card {
+            position: relative !important;
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 12px !important;
+            padding: 15px !important;
+            border-radius: 18px !important;
+            text-align: left !important;
+          }
+          .dashboard-four-card-grid .dashboard-override-action-icon { width: 48px !important; height: 48px !important; min-width: 48px !important; flex: 0 0 48px !important; }
+          .dashboard-four-card-grid .dashboard-override-action-icon svg { width: 23px !important; height: 23px !important; }
+          .dashboard-four-card-grid .dashboard-override-action-copy { display: flex !important; flex-direction: column !important; align-items: flex-start !important; gap: 5px !important; min-width: 0 !important; }
+          .dashboard-four-card-grid .dashboard-override-action-copy small { font-size: 9px !important; line-height: 1.25 !important; letter-spacing: .08em !important; }
+          .dashboard-four-card-grid .dashboard-override-action-copy strong { font-size: 16px !important; line-height: 1.2 !important; overflow-wrap: normal !important; }
+          .dashboard-four-card-grid .dashboard-override-action-copy span { display: block !important; font-size: 10px !important; line-height: 1.35 !important; }
+          .dashboard-four-card-grid .dashboard-override-action-chevron { position: static !important; width: 18px !important; height: 18px !important; flex: 0 0 18px !important; }
+        }
+
       `}
+
       </style>
 
       <div className="dashboard-container">
@@ -4204,7 +4567,36 @@ const handleContinueRegularSchedule = async () => {
         </section>
 
         <div className="dashboard-four-card-grid">
+<div className="dashboard-subscription-tools-row">
+            <section className="dashboard-extra dashboard-extra-inline">
+              <ExtraMilkCard navigate={navigate} />
+            </section>
 
+            <button
+              type="button"
+              className="dashboard-override-action-card"
+              onClick={() => {
+                if (selectedOverrideSubscription) setShowDeliveryOverrideModal(true);
+              }}
+              disabled={!selectedOverrideSubscription}
+              aria-haspopup="dialog"
+              aria-expanded={showDeliveryOverrideModal}
+            >
+              <span className="dashboard-override-action-icon">
+                <CalendarDays size={25} />
+              </span>
+              <span className="dashboard-override-action-copy">
+                <small>DELIVERY PREFERENCE</small>
+                <strong>Change milk for a specific date</strong>
+                <span>
+                  {selectedOverrideSubscription
+                    ? "Choose a date, milk size and quantity"
+                    : "Start an active subscription to use this option"}
+                </span>
+              </span>
+              <ChevronRight size={21} className="dashboard-override-action-chevron" />
+            </button>
+          </div>
         {/* Wallet & Billing */}
         <section className="dashboard-section wallet-billing-section">
           <div className="wallet-billing-grid">
@@ -4256,36 +4648,7 @@ const handleContinueRegularSchedule = async () => {
         </section>
         
 
-        <div className="dashboard-subscription-tools-row">
-            <section className="dashboard-extra dashboard-extra-inline">
-              <ExtraMilkCard navigate={navigate} />
-            </section>
-
-            <button
-              type="button"
-              className="dashboard-override-action-card"
-              onClick={() => {
-                if (selectedOverrideSubscription) setShowDeliveryOverrideModal(true);
-              }}
-              disabled={!selectedOverrideSubscription}
-              aria-haspopup="dialog"
-              aria-expanded={showDeliveryOverrideModal}
-            >
-              <span className="dashboard-override-action-icon">
-                <CalendarDays size={25} />
-              </span>
-              <span className="dashboard-override-action-copy">
-                <small>DELIVERY PREFERENCE</small>
-                <strong>Change milk for a specific date</strong>
-                <span>
-                  {selectedOverrideSubscription
-                    ? "Choose a date, milk size and quantity"
-                    : "Start an active subscription to use this option"}
-                </span>
-              </span>
-              <ChevronRight size={21} className="dashboard-override-action-chevron" />
-            </button>
-          </div>
+        
         </div>
 
           {showDeliveryOverrideModal && selectedOverrideSubscription && (
