@@ -171,3 +171,99 @@ export const processWhatsAppPauseRequest = async ({ whatsappPhone, message }) =>
     return { success: false, message: "Sorry, we could not create your subscription link right now. Please try again later." };
   }
 };
+
+/* ==========================================
+   FARM FRESH DAIRY - DELIVERY STATUS TEMPLATE
+========================================== */
+
+export const sendDeliveryStatusTemplate = async ({
+  recipientPhone,
+  customerName,
+  deliveryId,
+  deliveryDate,
+  deliveryStatus,
+}) => {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+
+  if (!phoneNumberId || !accessToken) {
+    throw new Error("WhatsApp API environment variables are missing");
+  }
+
+  const phone = normalizeIndianPhone(recipientPhone);
+
+  if (!phone) {
+    throw new Error("Invalid customer WhatsApp number");
+  }
+
+  const requiredValues = {
+    customerName,
+    deliveryId,
+    deliveryDate,
+    deliveryStatus,
+  };
+
+  for (const [key, value] of Object.entries(requiredValues)) {
+    if (value === undefined || value === null || String(value).trim() === "") {
+      throw new Error(`Missing WhatsApp template parameter: ${key}`);
+    }
+  }
+
+  const templateName = "delivery_status_update_utility";
+
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: phone,
+    type: "template",
+    template: {
+      name: templateName,
+      language: {
+        code: "en",
+      },
+      components: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: String(customerName) },
+            { type: "text", text: String(deliveryId) },
+            { type: "text", text: String(deliveryDate) },
+            { type: "text", text: String(deliveryStatus) },
+          ],
+        },
+      ],
+    },
+  };
+
+  const response = await fetch(
+    `https://graph.facebook.com/v23.0/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    console.error("WhatsApp template error:", result?.error);
+
+    throw new Error(
+      result?.error?.message ||
+      "Failed to send delivery status template"
+    );
+  }
+
+  console.log("Delivery WhatsApp template accepted:", {
+    deliveryId,
+    messageId: result?.messages?.[0]?.id,
+    recipient: phone,
+  });
+
+  return result;
+};
+

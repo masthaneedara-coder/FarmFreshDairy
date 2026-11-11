@@ -1,112 +1,29 @@
 import { supabaseAdmin } from "../config/supabase.js";
-import { normalizeIndianPhone } from "../utils/phone.js";
+import { sendDeliveryStatusTemplate } from "./whatsapp.service.js";
 
-const CUSTOMER_VISIBLE_STATUSES = new Set([
-  "Out for Delivery",
-  "Delivered",
-  "Skipped",
-  "Missed",
-  "Failed",
-  "Cancelled",
-]);
+function formatTemplateDate(value) {
+  if (!value) return "Not specified";
 
-function formatDeliveryDate(value) {
-  if (!value) return "today";
+  const raw = String(value);
+  const match = raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);
 
-  const match = String(value).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return String(value);
-
-  const [, year, month, day] = match;
-  return `${day}/${month}/${year}`;
-}
-
-async function sendDeliveryStatusTemplate({
-  recipientPhone,
-  customerName,
-  deliveryNumber,
-  deliveryDate,
-  status,
-}) {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const templateName = process.env.WHATSAPP_DELIVERY_STATUS_TEMPLATE_NAME;
-  const languageCode = process.env.WHATSAPP_DELIVERY_STATUS_TEMPLATE_LANGUAGE || "en";
-  const apiVersion = process.env.WHATSAPP_API_VERSION || "v23.0";
-
-  if (!phoneNumberId || !accessToken) {
-    throw new Error("WhatsApp Cloud API credentials are not configured.");
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`;
   }
 
-  if (!templateName) {
-    throw new Error("WHATSAPP_DELIVERY_STATUS_TEMPLATE_NAME is not configured.");
-  }
-
-  const phone = normalizeIndianPhone(recipientPhone);
-  if (!phone) throw new Error("Customer WhatsApp number is invalid.");
-
-  // Utility template body parameters: {{1}} name, {{2}} delivery number,
-  // {{3}} delivery date, {{4}} delivery status. No catalogue button is sent.
-  const response = await fetch(
-    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: phone,
-        type: "template",
-        template: {
-          name: templateName,
-          language: { code: languageCode },
-          components: [
-            {
-              type: "body",
-              parameters: [
-                { type: "text", text: String(customerName || "Customer") },
-                { type: "text", text: String(deliveryNumber || "N/A") },
-                { type: "text", text: formatDeliveryDate(deliveryDate) },
-                { type: "text", text: String(status) },
-              ],
-            },
-          ],
-        },
-      }),
-    }
-  );
-
-  const responseText = await response.text();
-  let result;
-  try {
-    result = responseText ? JSON.parse(responseText) : {};
-  } catch {
-    result = { raw: responseText };
-  }
-
-  if (!response.ok) {
-    const providerMessage =
-      result?.error?.message || `WhatsApp API request failed (${response.status}).`;
-
-    console.error("WhatsApp delivery template send failed:", {
-      status: response.status,
-      code: result?.error?.code,
-      subcode: result?.error?.error_subcode,
-      message: providerMessage,
-    });
-
-    throw new Error(providerMessage);
-  }
-
-  return result;
+  return raw;
 }
 
 /**
- * Sends a WhatsApp notification only after a real status transition,
- * only for customer-visible statuses, and only when the customer has
- * explicitly opted in. Call this after the delivery row is saved.
+ * Sends the approved Meta Utility template:
+ * delivery_status_update_utility
+ *
+ * {{1}} customer name
+ * {{2}} delivery number
+ * {{3}} delivery date
+ * {{4}} delivery status
+ *
+ * Requires the whatsapp_delivery_notification_logs table migration.
  */
 export async function notifyCustomerDeliveryStatusChange({
   customerId,
@@ -115,33 +32,8 @@ export async function notifyCustomerDeliveryStatusChange({
   deliveryDate,
   status,
 }) {
-  if (process.env.WHATSAPP_DELIVERY_NOTIFICATIONS_ENABLED !== "true") {
-    return { sent: false, reason: "feature_disabled" };
-  }
-
-  if (!CUSTOMER_VISIBLE_STATUSES.has(status)) {
-    return { sent: false, reason: "status_not_customer_visible" };
-  }
-
-  if (!customerId || !deliveryId) {
-    return { sent: false, reason: "missing_delivery_customer_reference" };
-  }
-
-  const { data: preference, error: preferenceError } = await supabaseAdmin
-    .from("whatsapp_notification_preferences")
-    .select("delivery_updates_enabled, consented_at, revoked_at")
-    .eq("customer_id", customerId)
-    .maybeSingle();
-
-  if (preferenceError) throw preferenceError;
-
-  if (
-    !preference ||
-    preference.delivery_updates_enabled !== true ||
-    !preference.consented_at ||
-    preference.revoked_at
-  ) {
-    return { sent: false, reason: "customer_not_opted_in" };
+  if (!customerId || !deliveryId || !status) {
+    return { sent: false, reason: "Missing customer, delivery, or status data" };
   }
 
   const { data: customer, error: customerError } = await supabaseAdmin
@@ -150,21 +42,101 @@ export async function notifyCustomerDeliveryStatusChange({
     .eq("id", customerId)
     .maybeSingle();
 
-  if (customerError) throw customerError;
-  if (!customer?.phone) {
-    return { sent: false, reason: "customer_phone_missing" };
+  if (customerError) {
+    console.error("WhatsApp customer lookup failed:", customerError.message);
+    return { sent: false, reason: "Customer lookup failed" };
   }
 
-  const providerResponse = await sendDeliveryStatusTemplate({
-    recipientPhone: customer.phone,
-    customerName: customer.full_name,
-    deliveryNumber: deliveryNumber || String(deliveryId).slice(0, 8),
-    deliveryDate,
-    status,
-  });
+  if (!customer?.phone) {
+    return { sent: false, reason: "Customer has no phone number" };
+  }
 
-  return {
-    sent: true,
-    messageId: providerResponse?.messages?.[0]?.id || null,
+  const logPayload = {
+    delivery_id: String(deliveryId),
+    customer_id: String(customerId),
+    status: String(status),
+    recipient_phone: String(customer.phone),
+    send_status: "pending",
+    updated_at: new Date().toISOString(),
   };
+
+  // Unique(delivery_id, status) prevents duplicate sends from repeated requests.
+  const { data: claimedLog, error: claimError } = await supabaseAdmin
+    .from("whatsapp_delivery_notification_logs")
+    .insert(logPayload)
+    .select("id")
+    .single();
+
+  if (claimError) {
+    if (claimError.code === "23505") {
+      const { data: existingLog, error: existingError } = await supabaseAdmin
+        .from("whatsapp_delivery_notification_logs")
+        .select("id, send_status, message_id")
+        .eq("delivery_id", String(deliveryId))
+        .eq("status", String(status))
+        .maybeSingle();
+
+      if (existingError) {
+        console.error("WhatsApp notification log lookup failed:", existingError.message);
+        return { sent: false, reason: "Notification log lookup failed" };
+      }
+
+      return {
+        sent: false,
+        duplicate: true,
+        reason: `Notification already recorded (${existingLog?.send_status || "unknown"})`,
+        messageId: existingLog?.message_id || null,
+      };
+    }
+
+    console.error("WhatsApp notification log insert failed:", claimError.message);
+    return { sent: false, reason: "Could not create notification log" };
+  }
+
+  try {
+    const result = await sendDeliveryStatusTemplate({
+      recipientPhone: customer.phone,
+      customerName: customer.full_name || "Customer",
+      deliveryId: deliveryNumber || String(deliveryId),
+      deliveryDate: formatTemplateDate(deliveryDate),
+      deliveryStatus: String(status),
+    });
+
+    const messageId = result?.messages?.[0]?.id || null;
+
+    const { error: updateError } = await supabaseAdmin
+      .from("whatsapp_delivery_notification_logs")
+      .update({
+        send_status: "sent",
+        message_id: messageId,
+        sent_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        error_message: null,
+      })
+      .eq("id", claimedLog.id);
+
+    if (updateError) {
+      // Meta may already have accepted the message. Do not retry automatically
+      // because that could send a duplicate.
+      console.error("WhatsApp log success update failed:", updateError.message);
+    }
+
+    return { sent: true, messageId };
+  } catch (sendError) {
+    const { error: logError } = await supabaseAdmin
+      .from("whatsapp_delivery_notification_logs")
+      .update({
+        send_status: "failed",
+        error_message: String(sendError?.message || sendError).slice(0, 1000),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", claimedLog.id);
+
+    if (logError) {
+      console.error("WhatsApp failure log update failed:", logError.message);
+    }
+
+    console.error("WhatsApp template send failed:", sendError?.message || sendError);
+    return { sent: false, reason: sendError?.message || "WhatsApp send failed" };
+  }
 }

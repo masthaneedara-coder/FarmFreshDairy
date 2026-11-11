@@ -70,16 +70,36 @@ export async function assignDeliveryBoyService(
   deliveryId,
   deliveryBoyId
 ) {
-  return await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("subscription_deliveries")
     .update({
       delivery_boy_id: deliveryBoyId,
-  status: "Assigned",
-  assigned_at: new Date().toISOString(),
+      status: "Assigned",
+      assigned_at: new Date().toISOString(),
     })
     .eq("id", deliveryId)
-    .select()
+    .select("id, delivery_number, delivery_date, customer_id, status")
     .single();
+
+  if (error) return { data: null, error };
+
+  // WhatsApp is sent only after the assignment is saved.
+  try {
+    await notifyCustomerDeliveryStatusChange({
+      customerId: data.customer_id,
+      deliveryId: data.id,
+      deliveryNumber: data.delivery_number,
+      deliveryDate: data.delivery_date,
+      status: data.status,
+    });
+  } catch (notificationError) {
+    console.error(
+      "WhatsApp notification after delivery assignment failed:",
+      notificationError?.message || notificationError
+    );
+  }
+
+  return { data, error: null };
 }
 export async function updateDeliveryStatusService(
   deliveryId,
@@ -1221,6 +1241,8 @@ export async function assignSubscriptionDeliveryService(
       .from("subscription_deliveries")
       .select(`
         id,
+        delivery_number,
+        delivery_date,
         status,
         customer_id,
         subscription_id,
@@ -1238,6 +1260,7 @@ export async function assignSubscriptionDeliveryService(
 
   if (deliveryError) throw deliveryError;
 
+  const previousStatus = String(delivery.status || "").trim();
   const paymentMethod = String(
     delivery.subscriptions?.payment_method || ""
   ).trim().toLowerCase();
@@ -1279,7 +1302,6 @@ export async function assignSubscriptionDeliveryService(
       requiredAmount <= 0 ||
       balance < requiredAmount
     ) {
-      // Pause the subscription; do not assign the delivery.
       const { error: pauseError } = await supabaseAdmin
         .from("subscriptions")
         .update({
@@ -1304,12 +1326,30 @@ export async function assignSubscriptionDeliveryService(
       delivery_boy_id: deliveryBoyId,
       status: "Assigned",
       assigned_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq("id", id)
-    .select()
+    .select("id, delivery_number, delivery_date, customer_id, status, delivery_boy_id")
     .single();
 
   if (error) throw error;
+
+  if (previousStatus !== "Assigned") {
+    try {
+      await notifyCustomerDeliveryStatusChange({
+        customerId: data.customer_id,
+        deliveryId: data.id,
+        deliveryNumber: data.delivery_number,
+        deliveryDate: data.delivery_date,
+        status: data.status,
+      });
+    } catch (notificationError) {
+      console.error(
+        "WhatsApp notification after subscription assignment failed:",
+        notificationError?.message || notificationError
+      );
+    }
+  }
 
   return data;
 }
@@ -1372,21 +1412,31 @@ export async function bulkAssignSubscriptionDeliveriesService(
   deliveryIds,
   deliveryBoyId
 ) {
+  const { data: beforeRows, error: beforeError } = await supabaseAdmin
+    .from("subscription_deliveries")
+    .select("id, status")
+    .in("id", deliveryIds);
 
-  const {
-    data,
-    error,
-  } = await supabaseAdmin
+  if (beforeError) throw beforeError;
+
+  const previousStatusById = new Map(
+    (beforeRows || []).map((row) => [String(row.id), row.status])
+  );
+
+  const { data, error } = await supabaseAdmin
     .from("subscription_deliveries")
     .update({
       delivery_boy_id: deliveryBoyId,
       status: "Assigned",
+      assigned_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
     .in("id", deliveryIds)
     .select(`
       id,
       delivery_number,
+      delivery_date,
+      customer_id,
       delivery_boy_id,
       status,
       customers(
@@ -1401,12 +1451,33 @@ export async function bulkAssignSubscriptionDeliveriesService(
       )
     `);
 
-  if (error) {
-    throw error;
+  if (error) throw error;
+
+  // Notify each customer only when that delivery newly changes to Assigned.
+  for (const delivery of data || []) {
+    const previousStatus = previousStatusById.get(String(delivery.id));
+
+    if (String(previousStatus || "").trim() === "Assigned") continue;
+
+    try {
+      await notifyCustomerDeliveryStatusChange({
+        customerId: delivery.customer_id,
+        deliveryId: delivery.id,
+        deliveryNumber: delivery.delivery_number,
+        deliveryDate: delivery.delivery_date,
+        status: delivery.status,
+      });
+    } catch (notificationError) {
+      console.error(
+        `WhatsApp notification failed for bulk-assigned delivery ${delivery.id}:`,
+        notificationError?.message || notificationError
+      );
+    }
   }
 
   return data;
 }
+
 /* ==========================================================
    AUTO EXPIRE SUBSCRIPTIONS
    ========================================================== */
