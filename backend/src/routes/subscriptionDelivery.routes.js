@@ -13,6 +13,7 @@ import {
   getSubscriptionDeliveryOverrides,
   saveSubscriptionDeliveryOverrides,
   deleteSubscriptionDeliveryOverride,
+  getAllSubscriptionDeliveryOverrides
 } from "../controllers/subscriptionDelivery.controller.js";
 
 const router = express.Router();
@@ -50,7 +51,16 @@ router.delete(
   deleteSubscriptionDeliveryOverride
 );
 
-// Generic delivery routes
+
+// ==========================================
+// ADMIN: GET ALL CUSTOMER DELIVERY OVERRIDES
+// ==========================================
+router.get(
+  "/overrides",
+  getAllSubscriptionDeliveryOverrides
+);
+
+// Keep this generic route AFTER /overrides
 router.get("/:id", getDeliveryById);
 
 router.put("/bulk-assign", bulkAssignSubscriptionDeliveries);
