@@ -1895,3 +1895,59 @@ export async function getPreviousUnconfirmedDeliveriesService() {
     .order("delivery_date", { ascending: false })
     .order("created_at", { ascending: false });
 }
+
+
+// ==========================================================
+// ADMIN: GET ALL CUSTOMER DELIVERY OVERRIDES
+// ==========================================================
+export async function getAllSubscriptionDeliveryOverridesService() {
+  const { data: overrides, error: overrideError } = await supabaseAdmin
+    .from("subscription_delivery_overrides")
+    .select("id, subscription_id, product_id, delivery_date, size, quantity, status, created_at, updated_at")
+    .order("delivery_date", { ascending: true });
+
+  if (overrideError) throw overrideError;
+  if (!overrides?.length) return [];
+
+  const subscriptionIds = [...new Set(overrides.map((row) => row.subscription_id).filter(Boolean))];
+  const productIds = [...new Set(overrides.map((row) => row.product_id).filter(Boolean))];
+
+  const [subscriptionsResult, productsResult] = await Promise.all([
+    supabaseAdmin
+      .from("subscriptions")
+      .select("id, customer_id, status, start_date, end_date, customers(id, full_name, phone)")
+      .in("id", subscriptionIds),
+    supabaseAdmin
+      .from("products")
+      .select("id, name")
+      .in("id", productIds),
+  ]);
+
+  if (subscriptionsResult.error) throw subscriptionsResult.error;
+  if (productsResult.error) throw productsResult.error;
+
+  const subscriptionsById = new Map(
+    (subscriptionsResult.data || []).map((row) => [String(row.id), row])
+  );
+  const productsById = new Map(
+    (productsResult.data || []).map((row) => [String(row.id), row])
+  );
+
+  return overrides.map((row) => {
+    const subscription = subscriptionsById.get(String(row.subscription_id));
+    return {
+      ...row,
+      customer_id: subscription?.customer_id || null,
+      customers: subscription?.customers || null,
+      subscription: subscription
+        ? {
+            id: subscription.id,
+            status: subscription.status,
+            start_date: subscription.start_date,
+            end_date: subscription.end_date,
+          }
+        : null,
+      products: productsById.get(String(row.product_id)) || null,
+    };
+  });
+}

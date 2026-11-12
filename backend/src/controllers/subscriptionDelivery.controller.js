@@ -1,6 +1,7 @@
 import {
   generateTodayDeliveriesService,
   getTodayDeliveriesService,
+  getPreviousUnconfirmedDeliveriesService,
   getDeliveryByIdService,
   assignDeliveryBoyService,
   updateDeliveryStatusService,
@@ -9,10 +10,10 @@ import {
   getCustomerDeliverySummaryService,
   bulkAssignSubscriptionDeliveriesService,
   // Delivery size overrides
+  getAllSubscriptionDeliveryOverridesService,
   getSubscriptionDeliveryOverridesService,
   saveSubscriptionDeliveryOverridesService,
   deleteSubscriptionDeliveryOverrideService,
-  getPreviousUnconfirmedDeliveriesService
 } from "../services/subscriptionDelivery.service.js";
 import { supabaseAdmin } from "../config/supabase.js";
 
@@ -32,6 +33,28 @@ export async function getTodayDeliveries(req, res) {
     res.status(500).json({
       success: false,
       message: err.message,
+    });
+  }
+}
+
+export async function getPreviousPendingDeliveries(req, res) {
+  try {
+    const { data, error } =
+      await getPreviousUnconfirmedDeliveriesService();
+
+    if (error) throw error;
+
+    return res.json({
+      success: true,
+      deliveries: data || [],
+      count: data?.length || 0,
+    });
+  } catch (err) {
+    console.error("Get Previous Pending Deliveries Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err?.message || "Failed to load previous pending deliveries",
     });
   }
 }
@@ -392,6 +415,26 @@ export async function updateSubscriptionDeliveryStatus(req, res) {
   }
 }
 // ==========================================================
+// ADMIN: GET ALL SUBSCRIPTION DELIVERY OVERRIDES
+// ==========================================================
+export async function getAllSubscriptionDeliveryOverrides(req, res) {
+  try {
+    const overrides = await getAllSubscriptionDeliveryOverridesService();
+    return res.json({
+      success: true,
+      overrides: overrides || [],
+      count: overrides?.length || 0,
+    });
+  } catch (err) {
+    console.error("Get All Subscription Delivery Overrides Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err?.message || "Failed to load delivery overrides",
+    });
+  }
+}
+
+// ==========================================================
 // GET SUBSCRIPTION DELIVERY OVERRIDES
 // ==========================================================
 
@@ -556,29 +599,6 @@ export async function deleteSubscriptionDeliveryOverride(
       message:
         err?.message ||
         "Failed to delete delivery override",
-    });
-  }
-}
-// Get previous days' unconfirmed deliveries
-export async function getPreviousPendingDeliveries(req, res) {
-  try {
-    const { data, error } =
-      await getPreviousUnconfirmedDeliveriesService();
-
-    if (error) throw error;
-
-    return res.json({
-      success: true,
-      deliveries: data || [],
-      count: data?.length || 0,
-    });
-  } catch (err) {
-    console.error("Get Previous Pending Deliveries Error:", err);
-
-    return res.status(500).json({
-      success: false,
-      message:
-        err?.message || "Failed to load previous pending deliveries",
     });
   }
 }
