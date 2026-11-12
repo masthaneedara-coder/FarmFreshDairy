@@ -8,6 +8,8 @@ import {
   bulkAssignSubscriptionDeliveries,
   getAutoAssignSetting,
   setAutoAssignSetting,
+  getAllSubscriptionDeliveryOverrides,
+  deleteSubscriptionDeliveryOverride,
 } from "../services/subscriptionDeliveryService";
 
 import { getDeliveryBoys } from "../services/deliveryBoyService";
@@ -19,6 +21,10 @@ export default function AdminSubscriptionDeliveries() {
   const [deliveries, setDeliveries] = useState([]);
   const [activeTab, setActiveTab] = useState("today");
   const [previousDeliveries, setPreviousDeliveries] = useState([]);
+  const [deliveryOverrides, setDeliveryOverrides] = useState([]);
+  const [overridesLoading, setOverridesLoading] = useState(false);
+  const [overridesError, setOverridesError] = useState("");
+  const [deletingOverrideKey, setDeletingOverrideKey] = useState("");
   const [previousLoading, setPreviousLoading] = useState(false);
   const [previousError, setPreviousError] = useState("");
   const [updatingPreviousId, setUpdatingPreviousId] = useState(null);
@@ -163,6 +169,37 @@ async function handleAutoAssignToggle() {
       alert(err.message || "Failed to update previous delivery.");
     } finally {
       setUpdatingPreviousId(null);
+    }
+  }
+
+  async function loadDeliveryOverrides() {
+    try {
+      setOverridesLoading(true);
+      setOverridesError("");
+      const data = await getAllSubscriptionDeliveryOverrides();
+      setDeliveryOverrides(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Unable to load delivery overrides:", err);
+      setOverridesError(err.message || "Unable to load delivery overrides.");
+    } finally {
+      setOverridesLoading(false);
+    }
+  }
+
+  async function handleDeleteOverride(override) {
+    const customerName = override.customers?.full_name || "this customer";
+    const productName = override.products?.name || "this product";
+    if (!window.confirm(`Delete the ${productName} delivery override for ${customerName} on ${formatDate(override.delivery_date)}?`)) return;
+    const key = `${override.subscription_id}:${override.delivery_date}:${override.product_id}`;
+    try {
+      setDeletingOverrideKey(key);
+      await deleteSubscriptionDeliveryOverride(override.subscription_id, override.delivery_date, override.product_id);
+      await loadDeliveryOverrides();
+    } catch (err) {
+      console.error("Delete delivery override failed:", err);
+      alert(err.message || "Unable to delete delivery override.");
+    } finally {
+      setDeletingOverrideKey("");
     }
   }
 
@@ -765,12 +802,12 @@ async function handleRestoreToday(delivery) {
                   Farm Fresh Dairy
                 </p>
                 <h1 className="truncate text-xl font-black sm:text-3xl">
-                  {activeTab === "today" ? "Today's Deliveries" : "Previous Days – Pending Updates"}
+                  {activeTab === "today" ? "Today's Deliveries" : activeTab === "previous" ? "Previous Days – Pending Updates" : "Delivery Overrides"}
                 </h1>
                 <p className="mt-0.5 text-xs text-emerald-50/85 sm:text-sm">
                   {activeTab === "today"
                     ? "Manage, assign and update milk deliveries"
-                    : "Review deliveries that were not confirmed by the delivery boy"}
+                    : activeTab === "previous" ? "Review deliveries that were not confirmed by the delivery boy" : "Manage customer-specific delivery size and quantity changes"}
                 </p>
               </div>
             </div>
@@ -802,14 +839,13 @@ async function handleRestoreToday(delivery) {
                     {loading ? "⏳ Generating..." : "⚡ Generate Today's Deliveries"}
                   </button>
                 </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={loadPreviousDeliveries}
-                  disabled={previousLoading}
-                  className="rounded-2xl border border-white/30 bg-white/10 px-5 py-3.5 font-black text-white transition hover:bg-white/20 disabled:opacity-60"
-                >
+              ) : activeTab === "previous" ? (
+                <button type="button" onClick={loadPreviousDeliveries} disabled={previousLoading} className="rounded-2xl border border-white/30 bg-white/10 px-5 py-3.5 font-black text-white transition hover:bg-white/20 disabled:opacity-60">
                   {previousLoading ? "⏳ Refreshing..." : "↻ Refresh Previous Days"}
+                </button>
+              ) : (
+                <button type="button" onClick={loadDeliveryOverrides} disabled={overridesLoading} className="rounded-2xl border border-white/30 bg-white/10 px-5 py-3.5 font-black text-white transition hover:bg-white/20 disabled:opacity-60">
+                  {overridesLoading ? "⏳ Refreshing..." : "↻ Refresh Overrides"}
                 </button>
               )}
             </div>
@@ -822,17 +858,23 @@ async function handleRestoreToday(delivery) {
               <HeaderStat label="Assigned" value={stats.assigned} icon="🔵" />
               <HeaderStat label="Delivered" value={stats.delivered} icon="✅" />
             </div>
-          ) : (
+          ) : activeTab === "previous" ? (
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <HeaderStat label="Needs Review" value={previousDeliveries.length} icon="⏰" />
               <HeaderStat label="Assigned" value={previousAssignedCount} icon="🔵" />
               <HeaderStat label="Out for Delivery" value={previousOutForDeliveryCount} icon="🚚" />
             </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <HeaderStat label="Total Overrides" value={deliveryOverrides.length} icon="🛠️" />
+              <HeaderStat label="Scheduled" value={deliveryOverrides.filter(x => x.status === "Scheduled").length} icon="📅" />
+              <HeaderStat label="Customers" value={new Set(deliveryOverrides.map(x => x.customer_id).filter(Boolean)).size} icon="👥" />
+            </div>
           )}
         </header>
 
         {/* TODAY / PREVIOUS DAYS TABS */}
-        <nav className="ff-enter mt-3 grid grid-cols-2 gap-2 rounded-2xl border border-emerald-100 bg-white p-2 shadow-sm sm:mt-4">
+        <nav className="ff-enter mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-emerald-100 bg-white p-2 shadow-sm sm:mt-4">
           <button
             type="button"
             onClick={() => setActiveTab("today")}
@@ -863,6 +905,10 @@ async function handleRestoreToday(delivery) {
               {previousDeliveries.length}
             </span>
           </button>
+          <button type="button" onClick={() => { setActiveTab("overrides"); loadDeliveryOverrides(); }} className={`min-h-12 rounded-xl px-2 text-xs font-black transition sm:text-sm ${activeTab === "overrides" ? "bg-emerald-700 text-white shadow" : "text-slate-600 hover:bg-emerald-50"}`}>
+            🛠️ Delivery Overrides
+            <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] ${activeTab === "overrides" ? "bg-white/20" : "bg-emerald-100 text-emerald-800"}`}>{deliveryOverrides.length}</span>
+          </button>
         </nav>
 
         {/* MOBILE-FRIENDLY FILTER */}
@@ -876,7 +922,7 @@ async function handleRestoreToday(delivery) {
                 className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-semibold outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
                 placeholder={activeTab === "today"
                   ? "Search customer, phone, area or delivery no."
-                  : "Search previous deliveries, customer or delivery boy"}
+                  : activeTab === "previous" ? "Search previous deliveries, customer or delivery boy" : "Search customer, phone or product"}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -904,7 +950,7 @@ async function handleRestoreToday(delivery) {
               <span className="text-[11px] font-bold text-slate-400">
                 {activeTab === "today"
                   ? `${filtered.length} result${filtered.length === 1 ? "" : "s"}`
-                  : `${filteredPreviousDeliveries.length} previous result${filteredPreviousDeliveries.length === 1 ? "" : "s"}`}
+                  : activeTab === "previous" ? `${filteredPreviousDeliveries.length} previous result${filteredPreviousDeliveries.length === 1 ? "" : "s"}` : `${deliveryOverrides.filter(o => `${o.customers?.full_name || ""} ${o.customers?.phone || ""} ${o.products?.name || ""}`.toLowerCase().includes(search.trim().toLowerCase())).length} override result(s)`}
               </span>
               <button
                 type="button"
@@ -1476,6 +1522,30 @@ async function handleRestoreToday(delivery) {
                 </div>
               </div>
             ))}
+          </section>
+        )}
+
+        {activeTab === "overrides" && (
+          <section className="ff-enter mt-4 space-y-4">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <h2 className="font-black text-blue-950">Customer delivery overrides</h2>
+              <p className="mt-1 text-xs font-semibold text-blue-800">These records change the size or quantity used when a future scheduled delivery is generated. Deleting an override restores the customer's normal subscription item settings for that date.</p>
+            </div>
+            {overridesLoading && <div className="rounded-2xl border bg-white p-6 text-center text-sm font-bold text-slate-500">Loading delivery overrides...</div>}
+            {!overridesLoading && overridesError && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{overridesError}<button type="button" onClick={loadDeliveryOverrides} className="ml-3 underline">Retry</button></div>}
+            {!overridesLoading && !overridesError && (() => {
+              const keyword = search.trim().toLowerCase();
+              const rows = deliveryOverrides.filter(o => `${o.customers?.full_name || ""} ${o.customers?.phone || ""} ${o.products?.name || ""} ${o.status || ""} ${o.delivery_date || ""}`.toLowerCase().includes(keyword));
+              if (!rows.length) return <div className="rounded-[26px] border border-slate-200 bg-white px-5 py-12 text-center shadow-sm"><div className="text-4xl">🛠️</div><h3 className="mt-3 text-lg font-black text-slate-800">No delivery overrides found</h3><p className="mt-1 text-sm text-slate-500">Overrides created for customer subscriptions will appear here.</p></div>;
+              return <div className="grid gap-3 lg:grid-cols-2">{rows.map(o => {
+                const key = `${o.subscription_id}:${o.delivery_date}:${o.product_id}`;
+                return <article key={o.id || key} className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-base font-black text-slate-900">{o.customers?.full_name || "Customer"}</p><p className="mt-0.5 text-xs font-semibold text-slate-500">{o.customers?.phone || "Phone not available"}</p></div><span className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-black ${o.status === "Scheduled" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{o.status || "Unknown"}</span></div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"><InfoTile icon="🥛" label="Product" value={o.products?.name || "-"} /><InfoTile icon="📅" label="Delivery date" value={formatDate(o.delivery_date)} /><InfoTile icon="📦" label="Override size" value={o.size || "-"} /><InfoTile icon="🔢" label="Quantity" value={String(o.quantity ?? "-")} /></div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-[10px] font-semibold text-slate-400">Subscription: {String(o.subscription_id || "-").slice(0, 8)}…</p><button type="button" onClick={() => handleDeleteOverride(o)} disabled={deletingOverrideKey === key} className="min-h-10 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-black text-red-700 transition hover:bg-red-100 disabled:opacity-50">{deletingOverrideKey === key ? "Deleting..." : "Delete override"}</button></div>
+                </article>;
+              })}</div>;
+            })()}
           </section>
         )}
       </div>
