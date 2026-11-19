@@ -61,26 +61,33 @@ export function logoutCustomer() {
 // ADMIN
 // ============================================
 
-export function setAdminLogin(admin) {
-  // Clear other roles
+
+
+export function setAdminLogin(admin, token) {
   localStorage.removeItem(CUSTOMER_KEY);
   localStorage.removeItem(DELIVERY_KEY);
-
-  // Clear old redirect
   localStorage.removeItem(REDIRECT_KEY);
 
-  // Save admin
   localStorage.setItem(
     ADMIN_KEY,
     JSON.stringify(admin)
   );
+
+  localStorage.setItem("adminToken", token);
 }
+
 export function getAdmin() {
   try {
-    return JSON.parse(localStorage.getItem(ADMIN_KEY) || "null");
+    return JSON.parse(
+      localStorage.getItem(ADMIN_KEY) || "null"
+    );
   } catch {
     return null;
   }
+}
+
+export function getAdminToken() {
+  return localStorage.getItem("adminToken") || null;
 }
 
 export function getAdminId() {
@@ -92,12 +99,20 @@ export function getAdminName() {
 }
 
 export function isAdminLoggedIn() {
-  return !!getAdmin();
+  return !!getAdmin() && !!getAdminToken();
 }
 
 export function logoutAdmin() {
   localStorage.removeItem(ADMIN_KEY);
+  localStorage.removeItem("adminToken");
 }
+
+
+// 
+
+// export function logoutAdmin() {
+//   localStorage.removeItem(ADMIN_KEY);
+// }
 
 // ============================================
 // DELIVERY

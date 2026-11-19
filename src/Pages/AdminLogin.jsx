@@ -1,45 +1,56 @@
+
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { setAdminLogin } from "../config/auth";
+import { adminLogin } from "../services/adminService";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
 
-  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-const handleAdminLogin = async () => {
-  if (!mobile || !password) {
-    alert("Please enter Mobile Number and Password");
-    return;
-  }
+  const handleAdminLogin = async () => {
+    if (!email.trim() || !password) {
+      alert("Please enter your email and password.");
+      return;
+    }
 
-  setLoading(true);
+    setLoading(true);
 
-  try {
-    const admin = await adminLogin(mobile, password);
+    try {
+      const response = await adminLogin(email.trim(), password);
 
-    setAdminLogin({
-      id: admin.id,
-      name: admin.full_name,
-      email: admin.email,
-      phone: admin.phone,
-      role: admin.role,
-    });
+      if (!response?.admin || !response?.token) {
+        throw new Error("Admin login token was not received.");
+      }
 
-    navigate("/admin");
-  } catch (error) {
-    console.error(error);
-    alert(error.message || "Invalid admin credentials");
-  } finally {
-    setLoading(false);
-  }
-};
+      setAdminLogin(
+        {
+          id: response.admin.id,
+          full_name: response.admin.full_name,
+          name: response.admin.full_name,
+          email: response.admin.email,
+          phone: response.admin.phone,
+          role: response.admin.role,
+        },
+        response.token
+      );
+
+      navigate("/admin");
+    } catch (error) {
+      console.error("Admin login error:", error);
+      alert(error.message || "Invalid admin credentials.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-fuchsia-50 px-3 sm:px-4 md:px-6 py-6 flex items-center justify-center">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-5 sm:p-6 md:p-8 border border-purple-100">
+
         <div className="text-center mb-8">
           <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-purple-600 to-fuchsia-500 text-white flex items-center justify-center text-4xl shadow-xl">
             👨‍💼
@@ -57,13 +68,15 @@ const handleAdminLogin = async () => {
         <div className="space-y-4">
           <div>
             <label className="block text-left text-sm font-semibold text-gray-700 mb-2">
-              Mobile Number
+              Admin Email
             </label>
+
             <input
-              type="text"
-              placeholder="Enter admin mobile"
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
+              type="email"
+              placeholder="Enter admin email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
               className="w-full border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:border-purple-500"
             />
           </div>
@@ -72,11 +85,16 @@ const handleAdminLogin = async () => {
             <label className="block text-left text-sm font-semibold text-gray-700 mb-2">
               Password
             </label>
+
             <input
               type="password"
               placeholder="Enter admin password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAdminLogin();
+              }}
               className="w-full border border-gray-200 rounded-2xl px-4 py-3 outline-none focus:border-purple-500"
             />
           </div>
@@ -96,8 +114,6 @@ const handleAdminLogin = async () => {
             ← Back to Home
           </Link>
         </div>
-
-       
       </div>
     </div>
   );
