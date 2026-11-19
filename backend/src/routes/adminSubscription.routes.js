@@ -1,15 +1,20 @@
+
 import express from "express";
+
 import {
   getAllSubscriptions,
   updateSubscriptionStatus,
-  sendExpiryReminders
+  sendExpiryReminders,
 } from "../controllers/adminSubscription.controller.js";
 
 const router = express.Router();
 
+// Existing subscription APIs
 router.get("/", getAllSubscriptions);
+
 router.put("/:id/status", updateSubscriptionStatus);
-// One-click bulk WhatsApp expiry reminders
+
+// Existing bulk expiry reminder API
 router.post("/send-expiry-reminders", sendExpiryReminders);
 
 export default router;

@@ -3,38 +3,64 @@ import {
   getAutoAssignSettingService,
   setAutoAssignSettingService,
 } from "../services/deliveryAssignment.service.js";
+import { createAdminToken } from "../utils/adminToken.js";
+
 
 export const loginAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const { data: admin, error } = await loginAdminService(email);
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required.",
+      });
+    }
+
+    const { data: admin, error } =
+      await loginAdminService(email);
 
     if (error || !admin) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password",
+        message: "Invalid email or password.",
       });
     }
 
-    // Temporary plain-text password check
+    // Keep the current password check temporarily.
+    // Password hashing should be migrated separately.
     if (admin.password_hash !== password) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password",
+        message: "Invalid email or password.",
       });
     }
 
     if (!admin.is_active) {
       return res.status(403).json({
         success: false,
-        message: "Admin account is inactive",
+        message: "Admin account is inactive.",
       });
     }
+
+   const allowedRoles = ["admin", "super_admin"];
+
+if (!allowedRoles.includes(String(admin.role).toLowerCase())) {
+  return res.status(403).json({
+    success: false,
+    message: "This account is not authorized as an admin.",
+  });
+}
+
+    const token = createAdminToken(admin);
 
     return res.status(200).json({
       success: true,
       message: "Admin Login Successful",
+      token,
+      expiresIn: Number(
+        process.env.ADMIN_TOKEN_EXPIRY_SECONDS || 28800
+      ),
       admin: {
         id: admin.id,
         full_name: admin.full_name,
@@ -43,14 +69,16 @@ export const loginAdmin = async (req, res) => {
         role: admin.role,
       },
     });
-
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: err.message,
-    });
+  console.error("Admin login error:", err);
+
+  return res.status(500).json({
+    success: false,
+    message: err.message || "Admin login failed.",
+  });
   }
 };
+
 export async function getAutoAssignSettingController(
   req,
   res
