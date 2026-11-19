@@ -638,6 +638,7 @@ export async function getRenewalLinkDetails(
 
     const product =
       item?.products;
+      
 
     const customer =
       subscription.customers;
@@ -647,6 +648,7 @@ export async function getRenewalLinkDetails(
 
       subscription: {
         id: subscription.id,
+        customer_id: subscription.customer_id,
 
         customerName:
           customer?.full_name || "Customer",
