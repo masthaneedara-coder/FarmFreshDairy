@@ -31,27 +31,34 @@ export default function RenewSubscription() {
   const [error, setError] = useState("");
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
 const [paymentMethod, setPaymentMethod] = useState("COD");
-const [showPriceAlert, setShowPriceAlert] = useState(false);
 const [priceAlertDismissed, setPriceAlertDismissed] = useState(false);
 
+const [today, setToday] = useState(() =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date())
+);
+
 useEffect(() => {
-  const checkAnnouncementDate = () => {
-    const today = new Intl.DateTimeFormat("en-CA", {
+  const timer = setInterval(() => {
+    const indiaToday = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Kolkata",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
     }).format(new Date());
 
-    setShowPriceAlert(today < "2027-01-01");
-  };
-
-  checkAnnouncementDate();
-
-  const timer = setInterval(checkAnnouncementDate, 60000);
+    setToday(indiaToday);
+  }, 60000);
 
   return () => clearInterval(timer);
 }, []);
+
+const showPriceAlert =
+  today < "2027-01-01" && !priceAlertDismissed;
 
   useEffect(() => {
     loadSubscription();
@@ -225,6 +232,7 @@ async function handleConfirmRenewal() {
   ========================================================== */
 
   if (loading) {
+   
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-green-50 px-4 flex items-center justify-center">
 
@@ -437,7 +445,18 @@ async function handleConfirmRenewal() {
   /* ==========================================================
      MAIN PAGE
   ========================================================== */
+console.log("PRICE ANNOUNCEMENT CHECK:", {
+  today: new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date()),
 
+  showPriceAlert,
+  priceAlertDismissed,
+  subscriptionLoaded: !!subscription,
+});
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-green-50 px-3 py-5 sm:px-5 sm:py-8">
 
