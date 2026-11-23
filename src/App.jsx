@@ -60,7 +60,7 @@ import Notifications from "./Pages/Notifications";
 import NotificationSettings from "./Pages/NotificationSettings";
 import RenewSubscription from "./Pages/RenewSubscription";
 import WhatsAppPauseManagement from "./Pages/WhatsAppPauseManagement";
-import PriceAnnouncement from "./components/PriceAnnouncement";
+import PriceAnnouncement from "./Components/PriceAnnouncement";
 
 import { isCustomerLoggedIn } from "./config/auth";
 
