@@ -60,10 +60,18 @@ import Notifications from "./Pages/Notifications";
 import NotificationSettings from "./Pages/NotificationSettings";
 import RenewSubscription from "./Pages/RenewSubscription";
 import WhatsAppPauseManagement from "./Pages/WhatsAppPauseManagement";
+import PriceAnnouncement from "./components/PriceAnnouncement";
 
+import { isCustomerLoggedIn } from "./config/auth";
 
 export default function App() {
   const location = useLocation();
+  const isCustomer = isCustomerLoggedIn();
+
+const showPriceAnnouncement =
+  isCustomer &&
+  (location.pathname === "/" ||
+   location.pathname === "/dashboard");
     useEffect(() => {
     initializeFCM();
   }, []);
@@ -82,6 +90,9 @@ export default function App() {
 
     </div>
       {!hideNavbar && <Navbar />}
+      {showPriceAnnouncement && (
+  <PriceAnnouncement isLoggedIn={isCustomer} />
+)}
       <div className={hideNavbar ? "pt-8" : "pt-[140px]"}>
 
       <Routes>

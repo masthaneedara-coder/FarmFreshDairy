@@ -11,6 +11,7 @@ import {
   User,
   MapPin,
   Sparkles,
+  BellRing,
 } from "lucide-react";
 
 import {
@@ -30,6 +31,27 @@ export default function RenewSubscription() {
   const [error, setError] = useState("");
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
 const [paymentMethod, setPaymentMethod] = useState("COD");
+const [showPriceAlert, setShowPriceAlert] = useState(false);
+const [priceAlertDismissed, setPriceAlertDismissed] = useState(false);
+
+useEffect(() => {
+  const checkAnnouncementDate = () => {
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+    setShowPriceAlert(today < "2027-01-01");
+  };
+
+  checkAnnouncementDate();
+
+  const timer = setInterval(checkAnnouncementDate, 60000);
+
+  return () => clearInterval(timer);
+}, []);
 
   useEffect(() => {
     loadSubscription();
@@ -420,6 +442,88 @@ async function handleConfirmRenewal() {
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-green-50 px-3 py-5 sm:px-5 sm:py-8">
 
       <div className="mx-auto w-full max-w-lg">
+
+{/* PRICE REVISION ALERT */}
+{showPriceAlert && !priceAlertDismissed && (
+  <div className="price-renewal-alert mb-5 overflow-hidden rounded-2xl border-2 border-orange-400 bg-white shadow-xl">
+
+    {/* Animated alert header */}
+    <div className="flex items-center justify-between bg-gradient-to-r from-red-600 via-orange-500 to-red-600 px-4 py-3">
+
+      <div className="flex items-center gap-2">
+        <BellRing
+          size={22}
+          className="price-alert-bell text-white"
+        />
+
+        <span className="text-xs font-black tracking-wide text-white sm:text-sm">
+          IMPORTANT PRICE ALERT
+        </span>
+      </div>
+
+      <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-red-600 price-alert-new">
+        NEW
+      </span>
+    </div>
+
+    <div className="p-4 sm:p-5">
+
+      <div className="flex items-start justify-between gap-2">
+        <h2 className="text-lg font-black text-slate-900 sm:text-xl">
+          Milk Price Revision Notice!
+        </h2>
+
+        <button
+          type="button"
+          onClick={() => setPriceAlertDismissed(true)}
+          aria-label="Close price announcement"
+          className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-gray-600"
+        >
+          ✕
+        </button>
+      </div>
+
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        Dear Customer, our revised milk prices will be effective
+        from <strong className="text-red-600">1 January 2027.</strong>
+      </p>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+
+        <div className="price-alert-card rounded-xl border border-green-200 bg-green-50 p-3 text-center">
+          <p className="text-3xl font-black text-green-700">
+            ₹100
+          </p>
+          <p className="text-sm font-bold text-slate-800">
+            1 Litre
+          </p>
+        </div>
+
+        <div className="price-alert-card rounded-xl border border-green-200 bg-green-50 p-3 text-center">
+          <p className="text-3xl font-black text-green-700">
+            ₹50
+          </p>
+          <p className="text-sm font-bold text-slate-800">
+            500 ml
+          </p>
+        </div>
+
+      </div>
+
+      <div className="mt-3 rounded-lg bg-orange-50 p-3">
+        <p className="text-xs font-bold leading-5 text-orange-800">
+          Please note the revised prices before completing your subscription renewal.
+        </p>
+      </div>
+
+      <p className="mt-3 text-xs text-slate-500">
+        Farm Fresh Dairy – Thank you for your continued support.
+      </p>
+
+    </div>
+  </div>
+)}
+
 
         {/* ==================================================
             LOGO HEADER
@@ -933,6 +1037,52 @@ async function handleConfirmRenewal() {
         .animate-slideUp {
           animation: slideUp .45s ease-out;
         }
+          @keyframes renewalAlertGlow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(249,115,22,.2);
+    border-color: #fb923c;
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(239,68,68,.4);
+    border-color: #ef4444;
+  }
+}
+
+@keyframes renewalBellShake {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-15deg); }
+  40% { transform: rotate(15deg); }
+  60% { transform: rotate(-10deg); }
+  80% { transform: rotate(10deg); }
+}
+
+@keyframes renewalPricePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+
+.price-renewal-alert {
+  animation: renewalAlertGlow 2s ease-in-out infinite;
+}
+
+.price-alert-bell {
+  animation: renewalBellShake 1.5s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+.price-alert-new,
+.price-alert-card {
+  animation: renewalPricePulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .price-renewal-alert,
+  .price-alert-bell,
+  .price-alert-new,
+  .price-alert-card {
+    animation: none !important;
+  }
+}
 
       `}</style>
 
