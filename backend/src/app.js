@@ -38,7 +38,7 @@ import whatsappRoutes from "./routes/whatsapp.routes.js";
 import deliveryCronRoutes from "./routes/deliveryCron.routes.js";
 import subscriptionManagementRoutes from "./routes/subscriptionManagement.routes.js";
 
-
+import announcementRoutes from "./routes/announcement.routes.js";
 
 dotenv.config();
 
@@ -198,7 +198,7 @@ app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/cron/delivery", deliveryCronRoutes);
 app.use("/api/subscription-management", subscriptionManagementRoutes);
 
-
+app.use("/api/announcements", announcementRoutes);
 // WhatsApp
 
 //startDeliveryGeneratorJob();
