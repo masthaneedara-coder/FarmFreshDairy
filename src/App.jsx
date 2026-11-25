@@ -61,8 +61,10 @@ import NotificationSettings from "./Pages/NotificationSettings";
 import RenewSubscription from "./Pages/RenewSubscription";
 import WhatsAppPauseManagement from "./Pages/WhatsAppPauseManagement";
 import PriceAnnouncement from "./Components/PriceAnnouncement";
+import AdminAnnouncements from "./Pages/AdminAnnouncements";
 
 import { isCustomerLoggedIn } from "./config/auth";
+import DynamicAnnouncements from "./Components/DynamicAnnouncements";
 
 export default function App() {
   const location = useLocation();
@@ -90,8 +92,16 @@ const showPriceAnnouncement =
 
     </div>
       {!hideNavbar && <Navbar />}
-      {showPriceAnnouncement && (
-  <PriceAnnouncement isLoggedIn={isCustomer} />
+      {location.pathname === "/" && (
+  <DynamicAnnouncements placement="home" />
+)}
+
+{location.pathname === "/dashboard" && (
+  <DynamicAnnouncements placement="dashboard" />
+)}
+
+{location.pathname.startsWith("/renew/") && (
+  <DynamicAnnouncements placement="renewal" />
 )}
       <div className={hideNavbar ? "pt-8" : "pt-[140px]"}>
 
@@ -357,6 +367,14 @@ const showPriceAnnouncement =
 <Route
   path="/manage-subscription/:token"
   element={<WhatsAppPauseManagement />}
+/>
+<Route
+  path="/admin/announcements"
+  element={
+    <AdminRoute>
+      <AdminAnnouncements />
+    </AdminRoute>
+  }
 />
 
       </Routes>

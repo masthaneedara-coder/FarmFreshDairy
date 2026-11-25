@@ -37,6 +37,7 @@ import {
 import PauseSubscriptionModal from "../Components/subscription/PauseSubscriptionModal";
 import { useAuthSession } from "../context/AuthSessionContext";
 import logo from "../assets/logo.png";
+import DynamicAnnouncements from "../Components/DynamicAnnouncements";
 
 const LOGO_SRC = logo;
 
@@ -950,7 +951,10 @@ const handleContinueRegularSchedule = async () => {
     dashboard?.customer?.full_name || customer?.name || "Customer";
 
   return (
+    
     <div className="customer-dashboard">
+      <DynamicAnnouncements placement="renewal" />
+      {/* <DynamicAnnouncements placement="dashboard" /> */}
       {refreshing && (
         <div
           aria-live="polite"
@@ -4477,6 +4481,7 @@ const handleContinueRegularSchedule = async () => {
                   <span className="dashboard-hero-badge-dot" />
                   Customer dashboard
                 </div>
+                
 
                 {/* <h1 className="dashboard-hero-title">
                   Welcome back, <span>{customerName}</span> 👋
@@ -4564,6 +4569,7 @@ const handleContinueRegularSchedule = async () => {
               }
             />
           </div>
+          
         </section>
 
         <div className="dashboard-four-card-grid">
@@ -5540,11 +5546,13 @@ const handleContinueRegularSchedule = async () => {
         open={showPauseModal}
         subscription={selectedSubscription}
         loading={loading}
+        
         onClose={() => {
           setShowPauseModal(false);
           setSelectedSubscription(null);
         }}
         onConfirm={handlePauseConfirm}
+        
       />
       {showResumeDeliveryModal && resumeOption && (
   <div className="resume-delivery-overlay">

@@ -1,5 +1,5 @@
 
-const API_URL = "https://farmfreshdairy.onrender.com/api";
+export const API_URL = "https://farmfreshdairy.onrender.com/api";
 //const API_URL = "http://localhost:5000/api";
 /* ---------------------------------------
    COMMON HELPERS

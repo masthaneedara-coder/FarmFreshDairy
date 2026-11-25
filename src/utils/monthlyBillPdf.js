@@ -3,8 +3,9 @@ import autoTable from "jspdf-autotable";
 import logo from "../assets/logo.png";
 
 export async function generateMonthlyBillPDF(
-  details,
-  action = "download"
+   details,
+  action = "download",
+  printWindow = null
 ) {
   const doc = new jsPDF("p", "mm", "a4");
 
@@ -1120,40 +1121,71 @@ export async function generateMonthlyBillPDF(
   const fileName =
     `Monthly_Bill_${safeCustomerName}_${bill.month}_${bill.year}.pdf`;
 
+  
+
+
   // =====================================================
-  // DOWNLOAD
+  // FILE OUTPUT: DOWNLOAD, SHARE AND PRINT
   // =====================================================
 
+  const pdfBlob = doc.output("blob");
+
+  // DOWNLOAD
   if (action === "download") {
     doc.save(fileName);
     return;
   }
 
-  // =====================================================
-  // PRINT
-  // =====================================================
+  // SHARE PDF
+  if (action === "share") {
+    const pdfFile = new File(
+      [pdfBlob],
+      fileName,
+      { type: "application/pdf" }
+    );
 
-  if (action === "print") {
-
-    const blob =
-      doc.output("blob");
-
-    const url =
-      URL.createObjectURL(blob);
-
-    const printWindow =
-      window.open(url);
-
-    if (printWindow) {
-
-      printWindow.onload = () => {
-
-        printWindow.focus();
-
-        printWindow.print();
-
-      };
-
+    if (
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files: [pdfFile] })
+    ) {
+      await navigator.share({
+        files: [pdfFile],
+        title: "Farm Fresh Dairy Monthly Bill",
+        text: "Please find your monthly bill attached."
+      });
+      return;
     }
+
+    // Fallback for browsers without file sharing.
+    doc.save(fileName);
+    alert(
+      "PDF downloaded. You can now share it from your Downloads folder."
+    );
+    return;
+  }
+
+  // PRINT
+    if (action === "print") {
+    const url = URL.createObjectURL(pdfBlob);
+
+    if (printWindow && !printWindow.closed) {
+      printWindow.location.href = url;
+      printWindow.focus();
+
+      setTimeout(() => {
+        try {
+          printWindow.print();
+        } catch (error) {
+          console.error("Print failed:", error);
+        }
+      }, 1200);
+    } else {
+      window.open(url, "_blank");
+    }
+
+    return;
   }
 }
+
+ // Final closing brace of generateMonthlyBillPDF

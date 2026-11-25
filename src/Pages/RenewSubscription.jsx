@@ -20,6 +20,7 @@ import {
   createRenewalPaymentOrder,
   verifyRenewalPayment,
 } from "../config/api";
+import DynamicAnnouncements from "../components/DynamicAnnouncements";
 
 export default function RenewSubscription() {
   const { token } = useParams();
@@ -461,6 +462,7 @@ console.log("PRICE ANNOUNCEMENT CHECK:", {
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-green-50 px-3 py-5 sm:px-5 sm:py-8">
 
       <div className="mx-auto w-full max-w-lg">
+        <DynamicAnnouncements placement="renewal" />
 
 {/* PRICE REVISION ALERT */}
 {showPriceAlert && !priceAlertDismissed && (

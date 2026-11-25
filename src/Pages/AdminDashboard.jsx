@@ -15,6 +15,7 @@ const actions = [
   { icon: "🧾", title: "Monthly report", path: "/admin/monthly-report", tone: "pink" },
   { icon: "🥛", title: "Extra milk", path: "/admin/extra-milk", tone: "lime" },
   { icon: "💳", title: "Billing", path: "/admin/billing", tone: "indigo" },
+  { icon: "📣", title: "Announcements", path: "/admin/announcements", tone: "rose",},
 ];
 
 const toneClasses = {

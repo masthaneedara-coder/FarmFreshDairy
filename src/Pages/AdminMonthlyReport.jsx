@@ -401,15 +401,37 @@ async function handleShareInvoice(customer) {
   }
 }
 
+
 async function handlePrintInvoice(customer) {
+  // Open a blank window immediately during the button click.
+  // This helps prevent mobile popup blockers.
+  const printWindow = window.open("about:blank", "_blank");
+
   try {
+    if (printWindow) {
+      printWindow.document.write(
+        "<p style='font-family:Arial;padding:25px'>Preparing your invoice PDF...</p>"
+      );
+      printWindow.document.close();
+    }
+
     const data = await getCombinedInvoice(customer);
-    await generateMonthlyBillPDF(data, "print");
+
+    await generateMonthlyBillPDF(
+      data,
+      "print",
+      printWindow
+    );
   } catch (err) {
+    if (printWindow && !printWindow.closed) {
+      printWindow.close();
+    }
+
     console.error("Combined print error:", err);
     alert(err.message || "Failed to print combined invoice.");
   }
 }
+
 
 async function handleWhatsappInvoice(customer) {
   try {
