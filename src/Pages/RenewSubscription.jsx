@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import DynamicAnnouncements from "../components/DynamicAnnouncements.jsx";
+import DynamicAnnouncements from "../Components/DynamicAnnouncements.jsx";
 import {
   CheckCircle2,
   CalendarDays,
